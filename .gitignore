@@ -1,0 +1,8 @@
+.env
+.env.synology
+__pycache__/
+*.pyc
+prywatne/
+.venv/
+data/
+*.tar.gz

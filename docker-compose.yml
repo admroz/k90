@@ -1,0 +1,44 @@
+networks:
+  kadencja90:
+
+services:
+
+  signal:
+    image: bbernhard/signal-cli-rest-api:latest
+    container_name: kadencja90-signal
+    environment:
+      - MODE=json-rpc
+      - SIGNAL_CLI_EXTRA_ARGS=${SIGNAL_CLI_EXTRA_ARGS:-}
+    volumes:
+      - ${DATA_PATH:-./data}/signal:/home/.local/share/signal-cli
+    ports:
+      - "8088:8080"
+    networks:
+      - kadencja90
+    restart: unless-stopped
+
+  agent:
+    image: ${AGENT_IMAGE:-kadencja90-agent}
+    build: .
+    container_name: kadencja90-agent
+    environment:
+      - AGENT_MODEL=${AGENT_MODEL:-claude-haiku-4-5-20251001}
+      - SUMMARY_MODEL=${SUMMARY_MODEL:-claude-sonnet-4-6}
+      - SUMMARY_MAX_AGE_DAYS=${SUMMARY_MAX_AGE_DAYS:-7}
+      - HISTORY_MESSAGES=${HISTORY_MESSAGES:-10}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - DB_PATH=/data/k90.db
+      - SIGNAL_CLI_REST_API_URL=http://signal:8080
+      - SIGNAL_PHONE_NUMBER=${SIGNAL_PHONE_NUMBER}
+      - SIGNAL_ALLOWED_SENDER=${SIGNAL_ALLOWED_SENDER}
+      - GARMIN_EMAIL=${GARMIN_EMAIL}
+      - GARMIN_PASSWORD=${GARMIN_PASSWORD}
+      - DATA_DIR=/data
+    volumes:
+      - ${DATA_PATH:-./data}:/data
+    depends_on:
+      - signal
+    networks:
+      - kadencja90
+    restart: unless-stopped

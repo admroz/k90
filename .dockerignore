@@ -1,0 +1,13 @@
+.env
+.venv/
+.garmin_tokens/
+*.db
+*.csv
+*.html
+*.json
+prywatne/
+__pycache__/
+*.pyc
+README.md
+AGENTS.md
+DEPLOY.md
