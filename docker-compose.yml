@@ -18,8 +18,7 @@ services:
     restart: unless-stopped
 
   agent:
-    image: ${AGENT_IMAGE:-kadencja90-agent}
-    build: .
+    image: ${AGENT_IMAGE:-ghcr.io/admroz/k90:latest}
     container_name: kadencja90-agent
     environment:
       - AGENT_MODEL=${AGENT_MODEL:-claude-haiku-4-5-20251001}
