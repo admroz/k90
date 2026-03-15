@@ -2,41 +2,41 @@
 # Synchronizacja danych między lokalnym środowiskiem a Synology.
 #
 # Użycie:
-#   ./syno-sync.sh push   — zatrzymaj agenta na syno, wyślij dane + config
-#   ./syno-sync.sh pull   — pobierz dane z syno (np. przed lokalnymi testami)
+#   ./syno-sync.sh push   — wyślij dane + config na Synology
+#   ./syno-sync.sh pull   — pobierz dane z Synology (przed lokalnymi testami)
 
 set -e
-source .env
+SYNOLOGY_HOST=$(grep '^SYNOLOGY_HOST=' .env | cut -d= -f2)
+SYNOLOGY_USER=$(grep '^SYNOLOGY_USER=' .env | cut -d= -f2)
+SYNOLOGY_PATH=$(grep '^SYNOLOGY_PATH=' .env | cut -d= -f2)
 
 HOST="${SYNOLOGY_USER}@${SYNOLOGY_HOST}"
 REMOTE="${SYNOLOGY_PATH}"
 
 case "$1" in
   push)
-    echo "==> [PUSH] Sending data/ to ${HOST}:${REMOTE}/data/"
-    rsync -avz --progress --exclude='signal/' ./data/ "${HOST}:${REMOTE}/data/"
-
-    echo ""
     if [ ! -f .env.synology ]; then
-      echo "WARN: .env.synology not found — skipping .env upload."
-      echo "      Create .env.synology with Synology-specific settings."
-    else
-      echo "==> Copying .env.synology as .env to ${HOST}:${REMOTE}/.env"
-      scp .env.synology "${HOST}:${REMOTE}/.env"
+      echo "WARN: .env.synology not found — aborting."
+      exit 1
     fi
 
-    echo ""
-    echo "==> Copying docker-compose.yml to ${HOST}:${REMOTE}/docker-compose.yml"
-    scp docker-compose.yml "${HOST}:${REMOTE}/docker-compose.yml"
+    echo "==> [PUSH] data/"
+    rsync -avz --progress ./data/ "${HOST}:${REMOTE}/data/"
+
+    echo "==> [PUSH] docker-compose.yml"
+    rsync -avz docker-compose.yml "${HOST}:${REMOTE}/"
+
+    echo "==> [PUSH] .env"
+    rsync -avz .env.synology "${HOST}:${REMOTE}/.env"
 
     echo ""
     echo "Done. Start agent on Synology:"
-    echo "  ssh ${HOST} 'cd ${REMOTE} && docker compose up -d'"
+    echo "  ssh -p 2222 ${HOST} 'cd ${REMOTE} && docker compose up -d'"
     ;;
 
   pull)
-    echo "==> [PULL] Fetching data/ from ${HOST}:${REMOTE}/data/"
-    rsync -avz --progress --exclude='signal/' "${HOST}:${REMOTE}/data/" ./data/
+    echo "==> [PULL] data/"
+    rsync -avz --progress "${HOST}:${REMOTE}/data/" ./data/
     echo ""
     echo "Done. You can now start the agent locally."
     ;;
