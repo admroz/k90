@@ -1,11 +1,11 @@
 networks:
-  kadencja90:
+  k90:
 
 services:
 
   signal:
     image: bbernhard/signal-cli-rest-api:latest
-    container_name: kadencja90-signal
+    container_name: k90-signal
     environment:
       - MODE=json-rpc
       - SIGNAL_CLI_EXTRA_ARGS=${SIGNAL_CLI_EXTRA_ARGS:-}
@@ -14,12 +14,12 @@ services:
     ports:
       - "8088:8080"
     networks:
-      - kadencja90
+      - k90
     restart: unless-stopped
 
   agent:
-    image: ${AGENT_IMAGE:-ghcr.io/admroz/k90:latest}
-    container_name: kadencja90-agent
+    image: ${AGENT_IMAGE:-admroz/k90:latest}
+    container_name: k90-agent
     environment:
       - AGENT_MODEL=${AGENT_MODEL:-claude-haiku-4-5-20251001}
       - SUMMARY_MODEL=${SUMMARY_MODEL:-claude-sonnet-4-6}
@@ -39,5 +39,5 @@ services:
     depends_on:
       - signal
     networks:
-      - kadencja90
+      - k90
     restart: unless-stopped
