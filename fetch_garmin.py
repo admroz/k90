@@ -1,20 +1,15 @@
 #!/usr/bin/env python3
 """
-Garmin Connect data fetcher — projekt k90
-Pobiera: wagę, ciśnienie krwi, aktywności fizyczne, sen, tętno spoczynkowe, stres, oddech
-Scala waga_garmin.csv + vitalia_waga.json → waga.csv
+Garmin Connect data fetcher — projekt k90.
 
-Instalacja:
-    pip install garminconnect python-dotenv
-
-Użycie:
-    python fetch_garmin.py          # aktualizacja od ostatniego wpisu
-    python fetch_garmin.py --full   # pełne pobranie od 2022-01-01
+Domyślny tryb pracy synchronizuje dane bezpośrednio do SQLite.
+CSV nie są już częścią standardowego flow synchronizacji.
 """
 
-import csv
-import json
+from __future__ import annotations
+
 import os
+import sqlite3
 import sys
 import time
 from datetime import date, datetime, timedelta
@@ -30,56 +25,77 @@ try:
 except ImportError:
     sys.exit("Brak garminconnect. Uruchom: pip install garminconnect")
 
-
-# ── Konfiguracja ──────────────────────────────────────────────────────────────
+from migrate_csv_to_sqlite import create_schema
 
 load_dotenv()
 
-EMAIL      = os.getenv("GARMIN_EMAIL")
-PASSWORD   = os.getenv("GARMIN_PASSWORD")
-END_DATE   = os.getenv("GARMIN_END_DATE", str(date.today()))
-DATA_DIR   = Path(os.getenv("DATA_DIR", Path(__file__).parent / "data"))
+EMAIL = os.getenv("GARMIN_EMAIL")
+PASSWORD = os.getenv("GARMIN_PASSWORD")
+END_DATE = os.getenv("GARMIN_END_DATE", str(date.today()))
+DATA_DIR = Path(os.getenv("DATA_DIR", Path(__file__).parent / "data"))
+DB_PATH = Path(os.getenv("DB_PATH", DATA_DIR / "k90.db"))
 TOKENSTORE = DATA_DIR / ".garmin_tokens"
-
-OUT_WAGA        = DATA_DIR / "waga_garmin.csv"
-OUT_CISNIENIE   = DATA_DIR / "cisnienie.csv"
-OUT_AKTYWNOSCI  = DATA_DIR / "aktywnosci.csv"
-OUT_WAGA_FINAL  = DATA_DIR / "waga.csv"
-OUT_SEN         = DATA_DIR / "sen.csv"
-OUT_METRYKI     = DATA_DIR / "metryki_dzienne.csv"
-OUT_HRV         = DATA_DIR / "hrv.csv"
-OUT_BATERIA     = DATA_DIR / "body_battery.csv"
-VITALIA_JSON    = DATA_DIR / "vitalia_waga.json"
-HEIGHT_M        = 1.86
-FULL_START      = "2022-01-01"
+HEIGHT_M = 1.86
+FULL_START = "2022-01-01"
 
 
-# ── Wyznacz datę startu (tryb przyrostowy) ────────────────────────────────────
 
-def last_date_in_csv(filepath: Path, date_col: str = "data") -> str | None:
-    """Zwraca ostatnią datę z istniejącego CSV lub None."""
-    if not filepath.exists():
-        return None
-    last = None
-    with open(filepath, encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            d = row.get(date_col, "")
-            if d and (last is None or d > last):
-                last = d
-    return last
+def ensure_agent_tables(conn: sqlite3.Connection) -> None:
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS conversations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS patient_summary (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            content TEXT NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            trigger TEXT
+        );
+        CREATE TABLE IF NOT EXISTS usage_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            model TEXT,
+            prompt_tokens INTEGER,
+            completion_tokens INTEGER
+        );
+    """)
+TABLE_CONFIG = {
+    "waga": {
+        "key_cols": ["data"],
+        "columns": ["data", "waga_kg", "bmi", "zrodlo"],
+    },
+    "cisnienie": {
+        "key_cols": ["data", "czas"],
+        "columns": ["data", "czas", "skurczowe", "rozkurczowe", "puls", "kategoria", "zrodlo", "uwagi"],
+    },
+    "aktywnosci": {
+        "key_cols": ["data", "czas"],
+        "columns": [
+            "data", "czas", "typ", "nazwa", "czas_trwania_min", "dystans_km", "kalorie", "sr_tetno", "max_tetno", "kroki"
+        ],
+    },
+    "sen": {
+        "key_cols": ["data"],
+        "columns": ["data", "total_sleep_min", "deep_min", "light_min", "rem_min", "awake_min", "sleep_score", "spo2_avg", "start_gmt", "end_gmt"],
+    },
+    "metryki_dzienne": {
+        "key_cols": ["data"],
+        "columns": ["data", "rhr", "avg_stres", "max_stres", "avg_oddech", "min_oddech", "max_oddech"],
+    },
+    "hrv": {
+        "key_cols": ["data"],
+        "columns": ["data", "hrv_noc", "hrv_5min_max", "hrv_tyg_avg", "hrv_status", "baseline_low", "baseline_high"],
+    },
+    "body_battery": {
+        "key_cols": ["data"],
+        "columns": ["data", "naladowanie", "zuzycie", "max_bateria", "min_bateria"],
+    },
+}
 
-
-def start_date_for(filepath: Path, fallback: str = FULL_START) -> str:
-    """Data startu = dzień po ostatnim wpisie (lub fallback przy pierwszym uruchomieniu)."""
-    last = last_date_in_csv(filepath)
-    if not last:
-        return fallback
-    # Cofnij się o 7 dni dla bezpieczeństwa (wpisy mogą być dodawane z opóźnieniem)
-    d = datetime.strptime(last, "%Y-%m-%d").date() - timedelta(days=7)
-    return str(d)
-
-
-# ── Autentykacja ──────────────────────────────────────────────────────────────
 
 def get_mfa() -> str:
     return input("Kod MFA (pozostaw puste jeśli brak): ").strip()
@@ -98,8 +114,8 @@ def login() -> garminconnect.Garmin:
             client.login(tokenstore=str(TOKENSTORE))
             print(f"Zalogowano jako: {client.display_name}")
             return client
-        except Exception as e:
-            print(f"Cache tokenów nieważny ({e.__class__.__name__}: {e})")
+        except Exception as exc:
+            print(f"Cache tokenów nieważny ({exc.__class__.__name__}: {exc})")
             print("Loguję ponownie (może wymagać MFA)...")
     else:
         print("Brak tokenów — pierwsze logowanie (może wymagać MFA)...")
@@ -111,102 +127,155 @@ def login() -> garminconnect.Garmin:
     return client
 
 
-# ── Pobieranie danych ─────────────────────────────────────────────────────────
-
 def date_chunks(start: str, end: str, chunk_days: int = 180):
-    s = datetime.strptime(start, "%Y-%m-%d").date()
-    e = datetime.strptime(end,   "%Y-%m-%d").date()
-    while s <= e:
-        yield str(s), str(min(s + timedelta(days=chunk_days - 1), e))
-        s += timedelta(days=chunk_days)
+    start_date = datetime.strptime(start, "%Y-%m-%d").date()
+    end_date = datetime.strptime(end, "%Y-%m-%d").date()
+    while start_date <= end_date:
+        yield str(start_date), str(min(start_date + timedelta(days=chunk_days - 1), end_date))
+        start_date += timedelta(days=chunk_days)
+
+
+def date_range(start: str, end: str):
+    start_date = datetime.strptime(start, "%Y-%m-%d").date()
+    end_date = datetime.strptime(end, "%Y-%m-%d").date()
+    while start_date <= end_date:
+        yield str(start_date)
+        start_date += timedelta(days=1)
+
+
+def _val(data: dict, key: str, divisor: float = 1.0):
+    value = data.get(key)
+    return round(value / divisor, 2) if value is not None else None
+
+
+def _normalize_record(record: dict, columns: list[str]) -> dict:
+    normalized = {}
+    for column in columns:
+        value = record.get(column)
+        if value == "":
+            value = None
+        normalized[column] = value
+    return normalized
+
+
+def _last_date_in_db(conn: sqlite3.Connection, table: str) -> str | None:
+    row = conn.execute(f"SELECT MAX(data) AS max_date FROM {table}").fetchone()
+    return row[0] if row and row[0] else None
+
+
+def _start_date_for_table(conn: sqlite3.Connection, table: str, fallback: str = FULL_START) -> str:
+    last = _last_date_in_db(conn, table)
+    if not last:
+        return fallback
+    buffered = datetime.strptime(last, "%Y-%m-%d").date() - timedelta(days=7)
+    return str(buffered)
+
+
+def _compare_rows(existing: sqlite3.Row, incoming: dict, columns: list[str]) -> bool:
+    return all(existing[column] == incoming[column] for column in columns)
+
+
+def _insert_or_update_many(conn: sqlite3.Connection, table: str, records: list[dict]) -> dict:
+    config = TABLE_CONFIG[table]
+    key_cols = config["key_cols"]
+    columns = config["columns"]
+    stats = {"fetched": len(records), "inserted": 0, "updated": 0, "unchanged": 0}
+    if not records:
+        return stats
+
+    select_sql = f"SELECT {', '.join(columns)} FROM {table} WHERE " + " AND ".join(f"{col} = ?" for col in key_cols)
+    insert_sql = f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({', '.join('?' for _ in columns)})"
+    update_cols = [col for col in columns if col not in key_cols]
+    update_sql = f"UPDATE {table} SET " + ", ".join(f"{col} = ?" for col in update_cols) + " WHERE " + " AND ".join(f"{col} = ?" for col in key_cols)
+
+    for record in records:
+        normalized = _normalize_record(record, columns)
+        key_values = [normalized[col] for col in key_cols]
+        existing = conn.execute(select_sql, key_values).fetchone()
+        if existing is None:
+            conn.execute(insert_sql, [normalized[col] for col in columns])
+            stats["inserted"] += 1
+            continue
+        if _compare_rows(existing, normalized, columns):
+            stats["unchanged"] += 1
+            continue
+        conn.execute(update_sql, [normalized[col] for col in update_cols] + key_values)
+        stats["updated"] += 1
+
+    return stats
 
 
 def fetch_weight(client, start: str, end: str) -> list[dict]:
     records = []
-    for s, e in date_chunks(start, end):
-        print(f"  Waga: {s} → {e}", end="  ")
+    for chunk_start, chunk_end in date_chunks(start, end):
+        print(f"  Waga: {chunk_start} → {chunk_end}", end="  ")
         try:
-            data = client.get_weigh_ins(s, e)
-            n = 0
+            data = client.get_weigh_ins(chunk_start, chunk_end)
+            count = 0
             for day in (data or {}).get("dailyWeightSummaries", []):
-                for m in day.get("allWeightMetrics", []):
-                    w = _val(m, "weight", 1000)
+                for metric in day.get("allWeightMetrics", []):
+                    weight = _val(metric, "weight", 1000)
                     records.append({
-                        "data":           m.get("calendarDate", ""),
-                        "waga_kg":        w,
-                        "bmi":            m.get("bmi") or (round(w / HEIGHT_M**2, 2) if w else None),
-                        "tkanka_tluszcz": m.get("bodyFat"),
-                        "masa_miesni_kg": _val(m, "muscleMass", 1000),
-                        "masa_kostna_kg": _val(m, "boneMass", 1000),
-                        "woda_pct":       m.get("bodyWater"),
-                        "zrodlo":         m.get("sourceType", ""),
+                        "data": metric.get("calendarDate", ""),
+                        "waga_kg": weight,
+                        "bmi": metric.get("bmi") or (round(weight / HEIGHT_M**2, 2) if weight else None),
+                        "zrodlo": metric.get("sourceType", "garmin") or "garmin",
                     })
-                    n += 1
-            print(f"({n} pomiarów)")
+                    count += 1
+            print(f"({count} pomiarów)")
         except Exception as exc:
             print(f"BŁĄD: {exc}")
-    return sorted(records, key=lambda r: r["data"])
+    return sorted(records, key=lambda row: row["data"])
 
 
 def fetch_blood_pressure(client, start: str, end: str) -> list[dict]:
     records = []
-    for s, e in date_chunks(start, end, chunk_days=365):
-        print(f"  Ciśnienie: {s} → {e}", end="  ")
+    for chunk_start, chunk_end in date_chunks(start, end, chunk_days=365):
+        print(f"  Ciśnienie: {chunk_start} → {chunk_end}", end="  ")
         try:
-            data = client.get_blood_pressure(s, e)
+            data = client.get_blood_pressure(chunk_start, chunk_end)
             days = (data or {}).get("measurementSummaries", [])
             for day in days:
-                for m in day.get("measurements", []):
-                    ts = m.get("measurementTimestampLocal", "")
+                for measurement in day.get("measurements", []):
+                    timestamp = measurement.get("measurementTimestampLocal", "")
                     records.append({
-                        "data":        ts[:10] if ts else day.get("startDate", ""),
-                        "czas":        ts[11:19] if ts else "",
-                        "skurczowe":   m.get("systolic"),
-                        "rozkurczowe": m.get("diastolic"),
-                        "puls":        m.get("pulse"),
-                        "kategoria":   m.get("categoryName", ""),
-                        "zrodlo":      m.get("sourceType", ""),
-                        "uwagi":       m.get("notes", ""),
+                        "data": timestamp[:10] if timestamp else day.get("startDate", ""),
+                        "czas": timestamp[11:19] if timestamp else "",
+                        "skurczowe": measurement.get("systolic"),
+                        "rozkurczowe": measurement.get("diastolic"),
+                        "puls": measurement.get("pulse"),
+                        "kategoria": measurement.get("categoryName", ""),
+                        "zrodlo": measurement.get("sourceType", "garmin") or "garmin",
+                        "uwagi": measurement.get("notes", ""),
                     })
             print(f"({len(days)} dni z pomiarami)")
         except Exception as exc:
             print(f"BŁĄD: {exc}")
-    return sorted(records, key=lambda r: (r["data"], r["czas"]))
+    return sorted(records, key=lambda row: (row["data"], row["czas"]))
 
 
 def fetch_activities(client, start: str, end: str) -> list[dict]:
     print(f"  Aktywności: {start} → {end}", end="  ")
     records = []
     try:
-        for a in (client.get_activities_by_date(start, end) or []):
-            ts = a.get("startTimeLocal", "")
+        for activity in client.get_activities_by_date(start, end) or []:
+            timestamp = activity.get("startTimeLocal", "")
             records.append({
-                "data":             ts[:10],
-                "czas":             ts[11:16],
-                "typ":              a.get("activityType", {}).get("typeKey", ""),
-                "nazwa":            a.get("activityName", ""),
-                "czas_trwania_min": round((a.get("duration") or 0) / 60, 1),
-                "dystans_km":       round((a.get("distance") or 0) / 1000, 2),
-                "kalorie":          a.get("calories"),
-                "sr_tetno":         a.get("averageHR"),
-                "max_tetno":        a.get("maxHR"),
-                "kroki":            a.get("steps"),
+                "data": timestamp[:10],
+                "czas": timestamp[11:16],
+                "typ": activity.get("activityType", {}).get("typeKey", ""),
+                "nazwa": activity.get("activityName", ""),
+                "czas_trwania_min": round((activity.get("duration") or 0) / 60, 1),
+                "dystans_km": round((activity.get("distance") or 0) / 1000, 2),
+                "kalorie": activity.get("calories"),
+                "sr_tetno": activity.get("averageHR"),
+                "max_tetno": activity.get("maxHR"),
+                "kroki": activity.get("steps"),
             })
         print(f"({len(records)} aktywności)")
     except Exception as exc:
         print(f"BŁĄD: {exc}")
-    return sorted(records, key=lambda r: (r["data"], r["czas"]))
-
-
-# ── Pobieranie danych dziennych (pętla po dniach) ────────────────────────────
-
-def date_range(start: str, end: str):
-    """Generator dat dzień po dniu od start do end włącznie."""
-    s = datetime.strptime(start, "%Y-%m-%d").date()
-    e = datetime.strptime(end,   "%Y-%m-%d").date()
-    while s <= e:
-        yield str(s)
-        s += timedelta(days=1)
+    return sorted(records, key=lambda row: (row["data"], row["czas"]))
 
 
 def fetch_sleep(client, start: str, end: str) -> list[dict]:
@@ -215,98 +284,95 @@ def fetch_sleep(client, start: str, end: str) -> list[dict]:
     total = len(dates)
     print(f"  Sen: {start} → {end} ({total} dni)")
     ok = 0
-    for i, d in enumerate(dates):
-        if i % 30 == 0:
-            print(f"    sen {d}  ({i+1}/{total})", flush=True)
+    for index, day in enumerate(dates):
+        if index % 30 == 0:
+            print(f"    sen {day} ({index + 1}/{total})", flush=True)
         try:
-            data = client.get_sleep_data(d)
+            data = client.get_sleep_data(day)
             dto = (data or {}).get("dailySleepDTO") or {}
             if not dto:
                 continue
 
             secs = dto.get("sleepTimeSeconds") or 0
-            deep  = dto.get("deepSleepSeconds") or 0
+            deep = dto.get("deepSleepSeconds") or 0
             light = dto.get("lightSleepSeconds") or 0
-            rem   = dto.get("remSleepSeconds") or 0
+            rem = dto.get("remSleepSeconds") or 0
             awake = dto.get("awakeSleepSeconds") or 0
 
             def _ts(key):
-                ms = dto.get(key)
-                if ms:
+                value = dto.get(key)
+                if value:
                     from datetime import timezone
-                    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).strftime("%H:%M")
+
+                    return datetime.fromtimestamp(value / 1000, tz=timezone.utc).strftime("%H:%M")
                 return ""
 
             score_obj = (dto.get("sleepScores") or {}).get("overall") or {}
             records.append({
-                "data":             d,
-                "total_sleep_min":  round(secs / 60, 1) if secs else "",
-                "deep_min":         round(deep  / 60, 1) if deep  else "",
-                "light_min":        round(light / 60, 1) if light else "",
-                "rem_min":          round(rem   / 60, 1) if rem   else "",
-                "awake_min":        round(awake / 60, 1) if awake else "",
-                "sleep_score":      score_obj.get("value", ""),
-                "spo2_avg":         dto.get("averageSpO2Value", ""),
-                "start_gmt":        _ts("sleepStartTimestampGMT"),
-                "end_gmt":          _ts("sleepEndTimestampGMT"),
+                "data": day,
+                "total_sleep_min": round(secs / 60, 1) if secs else None,
+                "deep_min": round(deep / 60, 1) if deep else None,
+                "light_min": round(light / 60, 1) if light else None,
+                "rem_min": round(rem / 60, 1) if rem else None,
+                "awake_min": round(awake / 60, 1) if awake else None,
+                "sleep_score": score_obj.get("value"),
+                "spo2_avg": dto.get("averageSpO2Value"),
+                "start_gmt": _ts("sleepStartTimestampGMT"),
+                "end_gmt": _ts("sleepEndTimestampGMT"),
             })
             ok += 1
         except Exception:
             pass
-        if i % 30 == 29:
+        if index % 30 == 29:
             time.sleep(0.2)
     print(f"  → Sen: {ok}/{total} nocy z danymi")
-    return sorted(records, key=lambda r: r["data"])
+    return sorted(records, key=lambda row: row["data"])
 
 
 def fetch_daily_metrics(client, start: str, end: str) -> list[dict]:
-    """Tętno spoczynkowe + stres + oddech — po jednym wierszu na dzień."""
     records = []
     dates = list(date_range(start, end))
     total = len(dates)
-    print(f"  Metryki dzienne (RHR/stres/oddech): {start} → {end} ({total} dni)")
+    print(f"  Metryki dzienne: {start} → {end} ({total} dni)")
     ok = 0
-    for i, d in enumerate(dates):
-        if i % 30 == 0:
-            print(f"    metryki {d}  ({i+1}/{total})", flush=True)
-        row = {"data": d, "rhr": "", "avg_stres": "", "max_stres": "",
-               "avg_oddech": "", "min_oddech": "", "max_oddech": ""}
+    for index, day in enumerate(dates):
+        if index % 30 == 0:
+            print(f"    metryki {day} ({index + 1}/{total})", flush=True)
+        row = {"data": day, "rhr": None, "avg_stres": None, "max_stres": None, "avg_oddech": None, "min_oddech": None, "max_oddech": None}
         any_data = False
         try:
-            rhr_data = client.get_rhr_day(d)
-            metrics_map = ((rhr_data or {})
-                           .get("allMetrics", {})
-                           .get("metricsMap", {}))
+            rhr_data = client.get_rhr_day(day)
+            metrics_map = ((rhr_data or {}).get("allMetrics", {}).get("metricsMap", {}))
             rhr_list = metrics_map.get("WELLNESS_RESTING_HEART_RATE", [])
             if rhr_list:
-                row["rhr"] = rhr_list[0].get("value", "")
+                row["rhr"] = rhr_list[0].get("value")
                 any_data = True
         except Exception:
             pass
         try:
-            stress = client.get_stress_data(d) or {}
+            stress = client.get_stress_data(day) or {}
             if stress.get("avgStressLevel") is not None:
-                row["avg_stres"] = stress.get("avgStressLevel", "")
-                row["max_stres"] = stress.get("maxStressLevel", "")
+                row["avg_stres"] = stress.get("avgStressLevel")
+                row["max_stres"] = stress.get("maxStressLevel")
                 any_data = True
         except Exception:
             pass
         try:
-            resp = client.get_respiration_data(d) or {}
-            if resp.get("avgWakingRespirationValue") is not None:
-                row["avg_oddech"] = resp.get("avgWakingRespirationValue", "")
-                row["min_oddech"] = resp.get("lowestRespirationValue", "")
-                row["max_oddech"] = resp.get("highestRespirationValue", "")
+            respiration = client.get_respiration_data(day) or {}
+            if respiration.get("avgWakingRespirationValue") is not None:
+                row["avg_oddech"] = respiration.get("avgWakingRespirationValue")
+                row["min_oddech"] = respiration.get("lowestRespirationValue")
+                row["max_oddech"] = respiration.get("highestRespirationValue")
                 any_data = True
         except Exception:
             pass
         if any_data:
             records.append(row)
             ok += 1
-        if i % 30 == 29:
+        if index % 30 == 29:
             time.sleep(0.2)
     print(f"  → Metryki: {ok}/{total} dni z danymi")
-    return sorted(records, key=lambda r: r["data"])
+    return sorted(records, key=lambda row: row["data"])
 
 
 def fetch_hrv(client, start: str, end: str) -> list[dict]:
@@ -315,31 +381,31 @@ def fetch_hrv(client, start: str, end: str) -> list[dict]:
     total = len(dates)
     print(f"  HRV: {start} → {end} ({total} dni)")
     ok = 0
-    for i, d in enumerate(dates):
-        if i % 30 == 0:
-            print(f"    hrv {d}  ({i+1}/{total})", flush=True)
+    for index, day in enumerate(dates):
+        if index % 30 == 0:
+            print(f"    hrv {day} ({index + 1}/{total})", flush=True)
         try:
-            data = client.get_hrv_data(d)
-            s = (data or {}).get("hrvSummary") or {}
-            if not s or s.get("lastNightAvg") is None:
+            data = client.get_hrv_data(day)
+            summary = (data or {}).get("hrvSummary") or {}
+            if not summary or summary.get("lastNightAvg") is None:
                 continue
-            baseline = s.get("baseline") or {}
+            baseline = summary.get("baseline") or {}
             records.append({
-                "data":           d,
-                "hrv_noc":        s.get("lastNightAvg", ""),
-                "hrv_5min_max":   s.get("lastNight5MinHigh", ""),
-                "hrv_tyg_avg":    s.get("weeklyAvg", ""),
-                "hrv_status":     s.get("status", ""),
-                "baseline_low":   baseline.get("balancedLow", ""),
-                "baseline_high":  baseline.get("balancedUpper", ""),
+                "data": day,
+                "hrv_noc": summary.get("lastNightAvg"),
+                "hrv_5min_max": summary.get("lastNight5MinHigh"),
+                "hrv_tyg_avg": summary.get("weeklyAvg"),
+                "hrv_status": summary.get("status"),
+                "baseline_low": baseline.get("balancedLow"),
+                "baseline_high": baseline.get("balancedUpper"),
             })
             ok += 1
         except Exception:
             pass
-        if i % 30 == 29:
+        if index % 30 == 29:
             time.sleep(0.2)
     print(f"  → HRV: {ok}/{total} nocy z danymi")
-    return sorted(records, key=lambda r: r["data"])
+    return sorted(records, key=lambda row: row["data"])
 
 
 def fetch_body_battery(client, start: str, end: str) -> list[dict]:
@@ -348,196 +414,105 @@ def fetch_body_battery(client, start: str, end: str) -> list[dict]:
     total = len(dates)
     print(f"  Body Battery: {start} → {end} ({total} dni)")
     ok = 0
-    for i, d in enumerate(dates):
-        if i % 30 == 0:
-            print(f"    body battery {d}  ({i+1}/{total})", flush=True)
+    for index, day in enumerate(dates):
+        if index % 30 == 0:
+            print(f"    body battery {day} ({index + 1}/{total})", flush=True)
         try:
-            s = client.get_stats(d) or {}
-            charged = s.get("bodyBatteryChargedValue")
+            stats = client.get_stats(day) or {}
+            charged = stats.get("bodyBatteryChargedValue")
             if charged is None:
                 continue
             records.append({
-                "data":        d,
+                "data": day,
                 "naladowanie": charged,
-                "zuzycie":     s.get("bodyBatteryDrainedValue", ""),
-                "max_bateria": s.get("bodyBatteryHighestValue", ""),
-                "min_bateria": s.get("bodyBatteryLowestValue", ""),
+                "zuzycie": stats.get("bodyBatteryDrainedValue"),
+                "max_bateria": stats.get("bodyBatteryHighestValue"),
+                "min_bateria": stats.get("bodyBatteryLowestValue"),
             })
             ok += 1
         except Exception:
             pass
-        if i % 30 == 29:
+        if index % 30 == 29:
             time.sleep(0.2)
     print(f"  → Body Battery: {ok}/{total} dni z danymi")
-    return sorted(records, key=lambda r: r["data"])
+    return sorted(records, key=lambda row: row["data"])
 
 
-# ── Scalanie CSV (tryb przyrostowy) ───────────────────────────────────────────
-
-def merge_csv(existing: Path, new_records: list[dict], key_cols: list[str]) -> list[dict]:
-    """Wczytuje istniejący CSV i dodaje nowe rekordy (bez duplikatów po kluczu)."""
-    existing_rows: dict[tuple, dict] = {}
-    if existing.exists():
-        with open(existing, encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                k = tuple(row[c] for c in key_cols)
-                existing_rows[k] = row
-    for row in new_records:
-        k = tuple(str(row.get(c, "")) for c in key_cols)
-        existing_rows[k] = {str(fk): str(fv) if fv is not None else "" for fk, fv in row.items()}
-    return sorted(existing_rows.values(), key=lambda r: tuple(r[c] for c in key_cols))
-
-
-def save_csv(records: list[dict], filepath: Path, label: str) -> None:
-    if not records:
-        print(f"  Brak nowych danych: {label}")
-        return
-    with open(filepath, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=records[0].keys())
-        writer.writeheader()
-        writer.writerows(records)
-    print(f"  Zapisano {len(records)} rekordów → {filepath}")
-
-
-# ── Budowanie waga.csv (Garmin + Vitalia + punkt 2012) ────────────────────────
-
-def build_waga_csv() -> None:
-    print("\n── Scalanie waga.csv ──")
-
-    # Garmin (źródło główne)
-    garmin: dict[str, dict] = {}
-    if OUT_WAGA.exists():
-        with open(OUT_WAGA, encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                garmin[row["data"]] = {
-                    "data":    row["data"],
-                    "waga_kg": float(row["waga_kg"]),
-                    "bmi":     float(row["bmi"]) if row["bmi"] else None,
-                    "zrodlo":  "garmin",
-                }
-
-    # Vitalia (uzupełnienie starszej historii)
-    vitalia: dict[str, dict] = {}
-    if VITALIA_JSON.exists():
-        with open(VITALIA_JSON, encoding="utf-8") as f:
-            for r in json.load(f):
-                d = r["measurement_date"]
-                w = float(r["current_weight"]) if r.get("current_weight") else None
-                if w and d not in vitalia:
-                    vitalia[d] = {
-                        "data":    d,
-                        "waga_kg": w,
-                        "bmi":     round(w / HEIGHT_M**2, 2),
-                        "zrodlo":  "vitalia",
-                    }
-
-    # Scal: Garmin ma pierwszeństwo
-    merged = {**vitalia, **garmin}
-
-    # Punkt startowy 2012
-    merged.setdefault("2012-07-01", {
-        "data": "2012-07-01", "waga_kg": 109.0,
-        "bmi": round(109.0 / HEIGHT_M**2, 2), "zrodlo": "manual",
-    })
-
-    rows = sorted(merged.values(), key=lambda r: r["data"])
-    save_csv(rows, OUT_WAGA_FINAL, "waga.csv")
-    n_g = sum(1 for r in rows if r["zrodlo"] == "garmin")
-    n_v = sum(1 for r in rows if r["zrodlo"] == "vitalia")
-    print(f"  ({n_g} Garmin + {n_v} Vitalia + 1 manual = {len(rows)} łącznie)")
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _val(d: dict, key: str, divisor: float = 1.0):
-    v = d.get(key)
-    return round(v / divisor, 2) if v is not None else None
-
-
-# ── Main ──────────────────────────────────────────────────────────────────────
-
-def main():
+def sync_garmin_to_db(client=None, full_mode: bool = False, end_date: str | None = None, start_dates: dict[str, str] | None = None) -> dict:
     if not EMAIL or not PASSWORD:
-        sys.exit("Brak kredencjałów — uzupełnij plik .env")
+        return {"error": "Brak kredencjałów — uzupełnij plik .env"}
 
+    target_end = end_date or END_DATE
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    create_schema(conn)
+    ensure_agent_tables(conn)
+    conn.commit()
+
+    starts = start_dates or {
+        "waga": FULL_START if full_mode else _start_date_for_table(conn, "waga"),
+        "cisnienie": FULL_START if full_mode else _start_date_for_table(conn, "cisnienie"),
+        "aktywnosci": FULL_START if full_mode else _start_date_for_table(conn, "aktywnosci"),
+        "sen": FULL_START if full_mode else _start_date_for_table(conn, "sen"),
+        "metryki_dzienne": FULL_START if full_mode else _start_date_for_table(conn, "metryki_dzienne"),
+        "hrv": FULL_START if full_mode else _start_date_for_table(conn, "hrv"),
+        "body_battery": FULL_START if full_mode else _start_date_for_table(conn, "body_battery"),
+    }
+
+    print(f"\n{'=' * 55}")
+    print(f"  Garmin Connect sync → SQLite do {target_end}")
+    print(f"{'=' * 55}\n")
+    print("  Tryb:", "PEŁNY" if full_mode else "PRZYROSTOWY z 7-dniowym buforem")
+
+    own_client = client is None
+    if own_client:
+        client = login()
+
+    dataset_fetchers = [
+        ("waga", fetch_weight),
+        ("cisnienie", fetch_blood_pressure),
+        ("aktywnosci", fetch_activities),
+        ("sen", fetch_sleep),
+        ("metryki_dzienne", fetch_daily_metrics),
+        ("hrv", fetch_hrv),
+        ("body_battery", fetch_body_battery),
+    ]
+
+    results = {"ok": True, "datasets": {}, "end_date": target_end}
+    try:
+        for table, fetcher in dataset_fetchers:
+            print(f"\n── {table} ──")
+            records = fetcher(client, starts[table], target_end)
+            stats = _insert_or_update_many(conn, table, records)
+            conn.commit()
+            results["datasets"][table] = stats
+            print(
+                f"  {table}: pobrane {stats['fetched']}, nowe {stats['inserted']}, "
+                f"zaktualizowane {stats['updated']}, bez zmian {stats['unchanged']}"
+            )
+    except Exception as exc:
+        results = {"error": str(exc)}
+    finally:
+        conn.close()
+
+    return results
+
+
+def main() -> None:
     full_mode = "--full" in sys.argv
+    result = sync_garmin_to_db(full_mode=full_mode)
+    if "error" in result:
+        sys.exit(result["error"])
 
-    # Wyznacz zakresy dat (przyrostowo lub pełne)
-    if full_mode:
-        w_start = bp_start = act_start = sleep_start = daily_start = hrv_start = bat_start = FULL_START
-        print("\n  Tryb: PEŁNE pobranie od", FULL_START)
-    else:
-        w_start      = start_date_for(OUT_WAGA,       FULL_START)
-        bp_start     = start_date_for(OUT_CISNIENIE,  FULL_START)
-        act_start    = start_date_for(OUT_AKTYWNOSCI, FULL_START)
-        sleep_start  = start_date_for(OUT_SEN,        FULL_START)
-        daily_start  = start_date_for(OUT_METRYKI,    FULL_START)
-        hrv_start    = start_date_for(OUT_HRV,        FULL_START)
-        bat_start    = start_date_for(OUT_BATERIA,    FULL_START)
-        print("\n  Tryb: PRZYROSTOWY (od ostatniego wpisu)")
-
-    print(f"\n{'='*55}")
-    print(f"  Garmin Connect fetch — do {END_DATE}")
-    print(f"{'='*55}\n")
-
-    client = login()
-    print()
-
-    # Waga
-    print("── Waga i skład ciała ──")
-    new_weight = fetch_weight(client, w_start, END_DATE)
-    merged_weight = merge_csv(OUT_WAGA, new_weight, ["data"])
-    save_csv(merged_weight, OUT_WAGA, "waga_garmin")
-
-    # Ciśnienie
-    print("\n── Ciśnienie krwi ──")
-    new_bp = fetch_blood_pressure(client, bp_start, END_DATE)
-    merged_bp = merge_csv(OUT_CISNIENIE, new_bp, ["data", "czas"])
-    save_csv(merged_bp, OUT_CISNIENIE, "ciśnienie")
-
-    # Aktywności
-    print("\n── Aktywności fizyczne ──")
-    new_act = fetch_activities(client, act_start, END_DATE)
-    merged_act = merge_csv(OUT_AKTYWNOSCI, new_act, ["data", "czas"])
-    save_csv(merged_act, OUT_AKTYWNOSCI, "aktywności")
-
-    # Sen
-    print("\n── Sen ──")
-    new_sleep = fetch_sleep(client, sleep_start, END_DATE)
-    merged_sleep = merge_csv(OUT_SEN, new_sleep, ["data"])
-    save_csv(merged_sleep, OUT_SEN, "sen")
-
-    # Tętno spoczynkowe / stres / oddech
-    print("\n── Metryki dzienne (RHR, stres, oddech) ──")
-    new_daily = fetch_daily_metrics(client, daily_start, END_DATE)
-    merged_daily = merge_csv(OUT_METRYKI, new_daily, ["data"])
-    save_csv(merged_daily, OUT_METRYKI, "metryki dzienne")
-
-    # HRV
-    print("\n── HRV (zmienność rytmu serca) ──")
-    new_hrv = fetch_hrv(client, hrv_start, END_DATE)
-    merged_hrv = merge_csv(OUT_HRV, new_hrv, ["data"])
-    save_csv(merged_hrv, OUT_HRV, "HRV")
-
-    # Body Battery
-    print("\n── Body Battery ──")
-    new_bat = fetch_body_battery(client, bat_start, END_DATE)
-    merged_bat = merge_csv(OUT_BATERIA, new_bat, ["data"])
-    save_csv(merged_bat, OUT_BATERIA, "body battery")
-
-    # Scal waga.csv
-    build_waga_csv()
-
-    print(f"\n{'='*55}")
+    print(f"\n{'=' * 55}")
     print("  Gotowe!")
-    print(f"  {OUT_WAGA_FINAL} ({len(merged_weight)} wag, w tym historia z Vitalia)")
-    print(f"  {OUT_CISNIENIE} ({len(merged_bp)} pomiarów ciśnienia)")
-    print(f"  {OUT_AKTYWNOSCI} ({len(merged_act)} aktywności)")
-    print(f"  {OUT_SEN} ({len(merged_sleep)} nocy)")
-    print(f"  {OUT_METRYKI} ({len(merged_daily)} dni)")
-    print(f"  {OUT_HRV} ({len(merged_hrv)} nocy)")
-    print(f"  {OUT_BATERIA} ({len(merged_bat)} dni)")
-    print(f"{'='*55}\n")
+    for name, stats in result.get("datasets", {}).items():
+        print(
+            f"  {name}: pobrane {stats['fetched']}, nowe {stats['inserted']}, "
+            f"zaktualizowane {stats['updated']}, bez zmian {stats['unchanged']}"
+        )
+    print(f"{'=' * 55}\n")
 
 
 if __name__ == "__main__":

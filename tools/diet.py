@@ -1,7 +1,7 @@
 """Narzędzia do logowania i pobierania danych o posiłkach."""
 
-from datetime import date, datetime
 from .db import get_conn, rows_to_list
+from .time_utils import date_days_ago, now_local
 
 
 def log_meal(
@@ -27,7 +27,7 @@ def log_meal(
     Returns:
         Słownik z id zapisanego posiłku i potwierdzeniem.
     """
-    now = datetime.now()
+    now = now_local()
     meal_date = date or now.strftime("%Y-%m-%d")
     meal_time = time or now.strftime("%H:%M")
     with get_conn() as conn:
@@ -71,8 +71,8 @@ def get_recent_meals(days: int = 3) -> list[dict]:
         rows = conn.execute(
             """SELECT id, data, czas, opis, kalorie, bialko_g, weglowodany_g, tluszcze_g
                FROM posilki
-               WHERE data >= date('now', ? || ' days')
+               WHERE data >= ?
                ORDER BY data DESC, czas DESC""",
-            (f"-{days}",)
+            (date_days_ago(days),)
         ).fetchall()
     return rows_to_list(rows)

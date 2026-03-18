@@ -4,10 +4,10 @@ Osobisty asystent zdrowotny działający przez Signal. Odpowiada na wiadomości,
 
 ## Stack
 
-- **Agent:** Python + LiteLLM (własna pętla tool-use, ~100 linii)
+- **Agent:** Python + LiteLLM (własna pętla tool-use, domyślnie OpenAI GPT)
 - **Komunikacja:** Signal (signal-cli-rest-api przez WebSocket)
 - **Baza danych:** SQLite (`data/k90.db`) — dane zdrowotne, historia rozmów, podsumowanie pacjenta
-- **Dane Garmin:** `fetch_garmin.py` → CSV → `migrate_csv_to_sqlite.py` → SQLite
+- **Dane Garmin:** `fetch_garmin.py` → bezpośredni sync do SQLite
 - **Deployment:** Docker Compose (Synology DS223 lub lokalnie)
 
 ## Struktura projektu
@@ -19,15 +19,15 @@ k90/
 ├── summary.py                # podsumowanie pacjenta: generowanie i zarządzanie
 ├── system_prompt.py          # ładowanie promptu (data/ override lub repo)
 ├── system_prompt.md          # ogólny prompt bez danych osobowych
-├── fetch_garmin.py           # OAuth + pobieranie danych z Garmin Connect → CSV
-├── migrate_csv_to_sqlite.py  # import wszystkich CSV → SQLite
+├── fetch_garmin.py           # OAuth + pobieranie danych z Garmin Connect → SQLite
+├── migrate_csv_to_sqlite.py  # legacy import wszystkich CSV → SQLite
 ├── tools/
 │   ├── health.py             # 7 narzędzi: BP, waga, sen, HRV, Battery, aktywności, metryki
 │   ├── lab.py                # wyniki badań laboratoryjnych
 │   ├── diet.py               # log_meal, get_recent_meals, delete_meal
-│   ├── garmin.py             # sync_garmin_data (orchestracja fetch + migrate)
+│   ├── garmin.py             # sync_garmin_data (direct-to-db)
 │   ├── patient.py            # read_patient_file, update_patient_file
-│   ├── commands.py           # /status, /debug, /help bez LLM
+│   ├── commands.py           # /status, /debug, /update, /summary, /help bez LLM
 │   └── db.py                 # get_conn(), init_db(), rows_to_list()
 ├── data/                     # gitignored, montowane jako wolumin Docker
 └── Dockerfile                # multi-stage: base (deps) + app (kod)
@@ -49,7 +49,7 @@ Signal → WebSocket → server.py → agent.py → LiteLLM
 
 Każde zapytanie do LLM zawiera:
 1. **System prompt** — rola i zasady (z `system_prompt.md`)
-2. **Podsumowanie pacjenta** — ~500 tokenów kluczowych danych medycznych (z `patient_summary` w SQLite)
+2. **Podsumowanie pacjenta** — krótki rekord faktów medycznych (z `patient_summary` w SQLite)
 3. **Historia rozmów** — ostatnie N par wiadomości (konfigurowalnie przez `HISTORY_MESSAGES`)
 4. **Wiadomość użytkownika** — tekst lub tekst + obraz (Signal attachment)
 
@@ -78,12 +78,14 @@ Każde zapytanie do LLM zawiera:
 | Komenda | Opis |
 |---------|------|
 | `/status` | Szybkie podsumowanie: waga, kalorie z ostatnich dni, ostatnia aktywność |
-| `/debug` | Liczba zapytań, tokeny i orientacyjny koszt |
+| `/debug` | Liczba zapytań, tokeny i stan summary |
+| `/update` | Synchronizacja Garmin bez LLM |
+| `/summary` | Podgląd aktualnego patient summary |
 | `/help` | Lista dostępnych komend |
 
 ## Podsumowanie pacjenta
 
-Singleton w tabeli `patient_summary` (SQLite). Generowane przez `SUMMARY_MODEL` (domyślnie sonnet) na podstawie wszystkich plików `.md` z `data/`.
+Singleton w tabeli `patient_summary` (SQLite). Generowane przez `SUMMARY_MODEL` (domyślnie `gpt-4o`) na podstawie wszystkich plików `.md` z `data/`.
 
 Odświeżane gdy:
 - Startup i podsumowanie starsze niż `SUMMARY_MAX_AGE_DAYS` dni
@@ -106,14 +108,15 @@ Dane agenta (tworzone przez `init_db()`):
 
 | Zmienna | Opis | Domyślnie |
 |---------|------|-----------|
-| `AGENT_MODEL` | Model do konwersacji | `claude-haiku-4-5-20251001` |
-| `SUMMARY_MODEL` | Model do podsumowania pacjenta | `claude-sonnet-4-6` |
+| `AGENT_MODEL` | Model do konwersacji | `gpt-4o` |
+| `SUMMARY_MODEL` | Model do podsumowania pacjenta | `gpt-4o` |
 | `HISTORY_MESSAGES` | Liczba par wiadomości w kontekście | `10` |
 | `SUMMARY_MAX_AGE_DAYS` | Auto-odświeżenie po X dniach | `7` |
 | `DB_PATH` | Ścieżka do bazy SQLite | `/data/k90.db` |
 | `DATA_DIR` | Katalog z plikami pacjenta | `/data` |
 | `SIGNAL_PHONE_NUMBER` | Numer bota Signal | — |
 | `SIGNAL_ALLOWED_SENDER` | Whitelisted numer użytkownika | — |
-| `ANTHROPIC_API_KEY` | Klucz Anthropic | — |
+| `OPENAI_API_KEY` | Klucz OpenAI | — |
+| `ANTHROPIC_API_KEY` | Klucz Anthropic (opcjonalnie) | — |
 | `GEMINI_API_KEY` | Klucz Google Gemini (opcjonalnie) | — |
 | `GARMIN_EMAIL` / `GARMIN_PASSWORD` | Dane logowania Garmin | — |

@@ -45,7 +45,7 @@ docker compose pull agent && docker compose up -d agent
 ## Co nie wymaga rebuildu obrazu
 
 - Zmiana `system_prompt.md` — edytuj `data/system_prompt.md` i `docker compose restart agent`
-- Zmiana modelu (`AGENT_MODEL`, `SUMMARY_MODEL`) — edytuj `.env` i `docker compose up -d agent`
+- Zmiana modelu (`AGENT_MODEL`, `SUMMARY_MODEL`) lub `OPENAI_API_KEY` — edytuj `.env` i `docker compose up -d agent`
 - Zmiana plików pacjenta (`pacjent.md`, `dieta.md` itp.) — edytuj w `data/`, restart opcjonalny
 
 ## Zmienne środowiskowe

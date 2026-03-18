@@ -2,12 +2,12 @@ networks:
   k90:
 
 services:
-
   signal:
     image: bbernhard/signal-cli-rest-api:latest
     container_name: k90-signal
     environment:
       - MODE=json-rpc
+      - TZ=${APP_TIMEZONE:-Europe/Warsaw}
       - SIGNAL_CLI_EXTRA_ARGS=${SIGNAL_CLI_EXTRA_ARGS:-}
     volumes:
       - ${DATA_PATH:-./data}/signal:/home/.local/share/signal-cli
@@ -21,11 +21,15 @@ services:
     image: ${AGENT_IMAGE:-admroz/k90:latest}
     container_name: k90-agent
     environment:
-      - AGENT_MODEL=${AGENT_MODEL:-claude-haiku-4-5-20251001}
-      - SUMMARY_MODEL=${SUMMARY_MODEL:-claude-sonnet-4-6}
+      - AGENT_MODEL=${AGENT_MODEL:-gpt-4o}
+      - SUMMARY_MODEL=${SUMMARY_MODEL:-gpt-4o}
       - SUMMARY_MAX_AGE_DAYS=${SUMMARY_MAX_AGE_DAYS:-7}
+      - SUMMARY_MAX_TOKENS=${SUMMARY_MAX_TOKENS:-600}
       - HISTORY_MESSAGES=${HISTORY_MESSAGES:-10}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - APP_TIMEZONE=${APP_TIMEZONE:-Europe/Warsaw}
+      - TZ=${APP_TIMEZONE:-Europe/Warsaw}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - DB_PATH=/data/k90.db
       - SIGNAL_CLI_REST_API_URL=http://signal:8080

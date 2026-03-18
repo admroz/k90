@@ -18,8 +18,13 @@ def rows_to_list(rows):
 
 
 def init_db():
-    """Tworzy tabele jeśli nie istnieją."""
+    """Tworzy tabele agenta oraz podstawowy schemat danych zdrowotnych jeśli nie istnieją."""
     conn = get_conn()
+    try:
+        from migrate_csv_to_sqlite import create_schema
+        create_schema(conn)
+    except Exception:
+        pass
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS conversations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,6 +45,19 @@ def init_db():
             model TEXT,
             prompt_tokens INTEGER,
             completion_tokens INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS sync_status (
+            source TEXT PRIMARY KEY,
+            last_started_at DATETIME,
+            last_success_at DATETIME,
+            last_success_date TEXT,
+            last_status TEXT,
+            last_error TEXT,
+            last_fetched INTEGER DEFAULT 0,
+            last_inserted INTEGER DEFAULT 0,
+            last_updated INTEGER DEFAULT 0,
+            last_unchanged INTEGER DEFAULT 0,
+            last_summary_refresh_at DATETIME
         );
     """)
     conn.commit()
