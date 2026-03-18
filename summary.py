@@ -11,7 +11,7 @@ from pathlib import Path
 import litellm
 
 from tools.db import get_conn
-from tools.time_utils import now_local
+from tools.time_utils import APP_TIMEZONE, now_local
 
 log = logging.getLogger(__name__)
 
@@ -178,5 +178,7 @@ def maybe_refresh_summary() -> None:
         return
 
     updated = datetime.fromisoformat(row["updated_at"])
+    if updated.tzinfo is None:
+        updated = updated.replace(tzinfo=now_local().tzinfo)
     if now_local() - updated > timedelta(days=SUMMARY_MAX_AGE_DAYS):
         refresh_patient_summary(trigger="startup_aged")
