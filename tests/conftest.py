@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
 import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from migrate_csv_to_sqlite import create_schema
 from tools import db as db_module
