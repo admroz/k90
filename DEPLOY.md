@@ -18,18 +18,17 @@
 rsync -avz ./data/ synology:/volume1/docker/k90/data/
 scp .env synology:/volume1/docker/k90/
 
-# 2. Migracja bazy (jeśli wcześniej używałeś innej nazwy)
-cp data/kadencja90.db data/k90.db
-
-# 3. Na Synology — dostosuj .env:
+# 2. Na Synology — dostosuj .env:
 #   DATA_PATH=/volume1/docker/k90/data
 #   AGENT_IMAGE=ghcr.io/OWNER/k90:latest
 #   SIGNAL_CLI_EXTRA_ARGS=   (pusty lub usuń)
 
-# 4. Uruchom
+# 3. Uruchom
 cd /volume1/docker/k90
 docker compose up -d
 ```
+
+Jeśli masz jeszcze historyczną bazę `kadencja90.db`, zmigruj ją ręcznie poza tym procesem i zachowaj kopię bezpieczeństwa. Aktualna aplikacja używa wyłącznie `k90.db`.
 
 ## Build obrazu
 

@@ -40,11 +40,11 @@ def _save_usage(model: str, prompt_tokens: int, completion_tokens: int) -> None:
 
 
 def load_history(user_id: str) -> list[dict]:
-    """Ładuje ostatnie HISTORY_MESSAGES wiadomości z historii rozmów."""
+    """Ładuje ostatnie HISTORY_MESSAGES par wiadomości z historii rozmów."""
     conn = get_conn()
     rows = conn.execute(
         "SELECT role, content FROM conversations WHERE user_id = ? ORDER BY id DESC LIMIT ?",
-        (user_id, HISTORY_MESSAGES),
+        (user_id, HISTORY_MESSAGES * 2),
     ).fetchall()
     conn.close()
     result = []

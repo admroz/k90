@@ -27,6 +27,7 @@ k90/
 │   ├── diet.py               # log_meal, get_recent_meals, delete_meal
 │   ├── garmin.py             # sync_garmin_data (orchestracja fetch + migrate)
 │   ├── patient.py            # read_patient_file, update_patient_file
+│   ├── commands.py           # /status, /debug, /help bez LLM
 │   └── db.py                 # get_conn(), init_db(), rows_to_list()
 ├── data/                     # gitignored, montowane jako wolumin Docker
 └── Dockerfile                # multi-stage: base (deps) + app (kod)
@@ -49,7 +50,7 @@ Signal → WebSocket → server.py → agent.py → LiteLLM
 Każde zapytanie do LLM zawiera:
 1. **System prompt** — rola i zasady (z `system_prompt.md`)
 2. **Podsumowanie pacjenta** — ~500 tokenów kluczowych danych medycznych (z `patient_summary` w SQLite)
-3. **Historia rozmów** — ostatnie N wiadomości (konfigurowalnie przez `HISTORY_MESSAGES`)
+3. **Historia rozmów** — ostatnie N par wiadomości (konfigurowalnie przez `HISTORY_MESSAGES`)
 4. **Wiadomość użytkownika** — tekst lub tekst + obraz (Signal attachment)
 
 ## Narzędzia agenta (15 total)
@@ -71,6 +72,14 @@ Każde zapytanie do LLM zawiera:
 | `read_patient_file(filename)` | Odczyt pliku .md pacjenta |
 | `update_patient_file(filename, content)` | Zapis pliku .md pacjenta |
 | `refresh_patient_summary()` | Odświeżenie podsumowania pacjenta |
+
+## Komendy slash (bez LLM)
+
+| Komenda | Opis |
+|---------|------|
+| `/status` | Szybkie podsumowanie: waga, kalorie z ostatnich dni, ostatnia aktywność |
+| `/debug` | Liczba zapytań, tokeny i orientacyjny koszt |
+| `/help` | Lista dostępnych komend |
 
 ## Podsumowanie pacjenta
 
@@ -99,7 +108,7 @@ Dane agenta (tworzone przez `init_db()`):
 |---------|------|-----------|
 | `AGENT_MODEL` | Model do konwersacji | `claude-haiku-4-5-20251001` |
 | `SUMMARY_MODEL` | Model do podsumowania pacjenta | `claude-sonnet-4-6` |
-| `HISTORY_MESSAGES` | Liczba wiadomości w kontekście | `10` |
+| `HISTORY_MESSAGES` | Liczba par wiadomości w kontekście | `10` |
 | `SUMMARY_MAX_AGE_DAYS` | Auto-odświeżenie po X dniach | `7` |
 | `DB_PATH` | Ścieżka do bazy SQLite | `/data/k90.db` |
 | `DATA_DIR` | Katalog z plikami pacjenta | `/data` |

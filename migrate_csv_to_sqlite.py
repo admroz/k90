@@ -1,5 +1,5 @@
 """
-Jednorazowy skrypt migracji danych z CSV do SQLite (kadencja90.db).
+Jednorazowy skrypt migracji danych z CSV do SQLite (k90.db).
 Uruchom raz: python migrate_csv_to_sqlite.py
 """
 
@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 
 DATA_DIR = Path(os.getenv("DATA_DIR", Path(__file__).parent / "data"))
-DB_PATH = Path(os.getenv("DB_PATH", DATA_DIR / "kadencja90.db"))
+DB_PATH = Path(os.getenv("DB_PATH", DATA_DIR / "k90.db"))
 
 
 def float_or_none(val):

@@ -11,6 +11,7 @@ Agent AI działający jako osobisty lekarz rodzinny, diabetolog i dietetyk. Komu
 - Przechowuje wyniki badań laboratoryjnych i analizuje trendy
 - Prowadzi pliki medyczne pacjenta (profil, wywiad, dieta, analiza)
 - Generuje i aktualizuje podsumowanie kluczowych danych pacjenta (~500 tokenów)
+- Obsługuje komendy slash bez udziału LLM: `/status`, `/debug`, `/help`
 
 ## Stack
 
@@ -37,6 +38,7 @@ k90/
 │   ├── diet.py               # logowanie posiłków
 │   ├── garmin.py             # sync Garmin (fetch + migrate)
 │   ├── patient.py            # pliki .md pacjenta
+│   ├── commands.py           # komendy slash bez LLM
 │   └── db.py                 # połączenie SQLite + init_db()
 ├── data/                     # dane persystentne — gitignored, wolumin Docker
 │   ├── k90.db                # główna baza danych
@@ -68,13 +70,19 @@ Kluczowe zmienne:
 AGENT_MODEL=claude-haiku-4-5-20251001   # model do konwersacji
 SUMMARY_MODEL=claude-sonnet-4-6         # model do podsumowania pacjenta
 ANTHROPIC_API_KEY=...
-HISTORY_MESSAGES=10                     # ile ostatnich wiadomości w kontekście
+HISTORY_MESSAGES=10                     # ile ostatnich par wiadomości w kontekście
 SUMMARY_MAX_AGE_DAYS=7                  # auto-odświeżenie podsumowania po X dniach
 SIGNAL_PHONE_NUMBER=+48...
 SIGNAL_ALLOWED_SENDER=+48...
 GARMIN_EMAIL=...
 GARMIN_PASSWORD=...
 ```
+
+Komendy slash dostępne przez Signal:
+
+- `/status` — szybkie podsumowanie: waga, kalorie z ostatnich dni, ostatnia aktywność
+- `/debug` — liczba zapytań, tokeny i orientacyjny koszt
+- `/help` — lista dostępnych komend
 
 ## Uruchomienie lokalne
 

@@ -12,6 +12,17 @@ ALLOWED_FILES = {
 FORBIDDEN = {"system_prompt.md"}
 
 
+def _validate_filename(filename: str) -> str | None:
+    if filename in FORBIDDEN:
+        return f"Plik {filename} jest chroniony i nie może być użyty."
+    if "/" in filename or "\\" in filename:
+        return "Nieprawidłowa nazwa pliku."
+    if filename not in ALLOWED_FILES:
+        allowed = ", ".join(sorted(ALLOWED_FILES))
+        return f"Dozwolone pliki: {allowed}."
+    return None
+
+
 def read_patient_file(filename: str) -> dict:
     """Wczytuje plik danych pacjenta (pacjent.md, wywiad.md, analiza.md, dieta.md, tydzien.md).
 
@@ -21,8 +32,9 @@ def read_patient_file(filename: str) -> dict:
     Returns:
         Słownik z kluczem 'content' (treść pliku) lub 'error'.
     """
-    if filename in FORBIDDEN:
-        return {"error": f"Plik {filename} jest chroniony i nie może być odczytany."}
+    error = _validate_filename(filename)
+    if error:
+        return {"error": error}
     path = DATA_DIR / filename
     if not path.exists():
         return {"error": f"Plik {filename} nie istnieje."}
@@ -43,10 +55,9 @@ def update_patient_file(filename: str, content: str) -> dict:
     Returns:
         Słownik z potwierdzeniem lub błędem.
     """
-    if filename in FORBIDDEN:
-        return {"error": f"Plik {filename} jest chroniony i nie może być zmieniony."}
-    if "/" in filename or "\\" in filename:
-        return {"error": "Nieprawidłowa nazwa pliku."}
+    error = _validate_filename(filename)
+    if error:
+        return {"error": error}
     path = DATA_DIR / filename
     path.write_text(content, encoding="utf-8")
     return {"ok": True, "filename": filename}

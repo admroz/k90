@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Garmin Connect data fetcher — projekt kadencja90
+Garmin Connect data fetcher — projekt k90
 Pobiera: wagę, ciśnienie krwi, aktywności fizyczne, sen, tętno spoczynkowe, stres, oddech
 Scala waga_garmin.csv + vitalia_waga.json → waga.csv
 
