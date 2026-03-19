@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import fetch_garmin
 from tools.db import get_conn
 from tools.garmin import get_sync_status, mark_summary_refreshed, should_auto_sync_today, sync_garmin_data, sync_has_changes
 
@@ -51,3 +52,27 @@ def test_sync_garmin_data_updates_status_and_totals(monkeypatch, temp_db):
     mark_summary_refreshed()
     status = get_sync_status()
     assert status["last_summary_refresh_at"] == fixed_now.isoformat()
+
+
+def test_sync_garmin_to_db_uses_fresh_end_date_each_call(monkeypatch, temp_db):
+    monkeypatch.setattr(fetch_garmin, "EMAIL", "user@example.com")
+    monkeypatch.setattr(fetch_garmin, "PASSWORD", "secret")
+    monkeypatch.setattr(fetch_garmin, "_default_end_date", lambda: "2026-03-19")
+    monkeypatch.setattr(fetch_garmin, "login", lambda: object())
+    monkeypatch.setattr(fetch_garmin, "create_schema", lambda conn: None)
+    monkeypatch.setattr(fetch_garmin, "ensure_agent_tables", lambda conn: None)
+
+    for name in (
+        "fetch_weight",
+        "fetch_blood_pressure",
+        "fetch_activities",
+        "fetch_sleep",
+        "fetch_daily_metrics",
+        "fetch_hrv",
+        "fetch_body_battery",
+    ):
+        monkeypatch.setattr(fetch_garmin, name, lambda client, start, end: [])
+
+    result = fetch_garmin.sync_garmin_to_db(end_date=None)
+
+    assert result["end_date"] == "2026-03-19"

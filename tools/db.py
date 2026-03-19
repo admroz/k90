@@ -1,16 +1,30 @@
 """Shared database connection for tools."""
 
-import sqlite3
 import os
+import sqlite3
 from pathlib import Path
 
-_DB_PATH = os.getenv("DB_PATH", str(Path(__file__).parent.parent / "data" / "k90.db"))
+_DEFAULT_DB_PATH = str(Path(__file__).parent.parent / "data" / "k90.db")
+_DB_PATH = os.getenv("DB_PATH", _DEFAULT_DB_PATH)
+
+
+def get_db_path() -> str:
+    return os.getenv("DB_PATH", _DB_PATH)
 
 
 def get_conn():
-    conn = sqlite3.connect(_DB_PATH)
+    conn = sqlite3.connect(get_db_path(), timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 5000")
     return conn
+
+
+def checkpoint_wal(conn: sqlite3.Connection, mode: str = "TRUNCATE") -> None:
+    """Flush WAL pages into the main database file when WAL mode is enabled."""
+    try:
+        conn.execute(f"PRAGMA wal_checkpoint({mode})")
+    except sqlite3.DatabaseError:
+        pass
 
 
 def rows_to_list(rows):

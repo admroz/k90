@@ -1,6 +1,6 @@
 """Narzędzia do logowania i pobierania danych o posiłkach."""
 
-from .db import get_conn, rows_to_list
+from .db import checkpoint_wal, get_conn, rows_to_list
 from .time_utils import date_days_ago, now_local
 
 
@@ -38,6 +38,7 @@ def log_meal(
         )
         meal_id = cur.lastrowid
         conn.commit()
+        checkpoint_wal(conn)
     return {"id": meal_id, "status": "zapisano", "data": meal_date, "czas": meal_time}
 
 
@@ -53,6 +54,7 @@ def delete_meal(meal_id: int) -> dict:
     with get_conn() as conn:
         cur = conn.execute("DELETE FROM posilki WHERE id = ?", (meal_id,))
         conn.commit()
+        checkpoint_wal(conn)
     if cur.rowcount:
         return {"status": "usunięto", "id": meal_id}
     return {"status": "nie znaleziono", "id": meal_id}

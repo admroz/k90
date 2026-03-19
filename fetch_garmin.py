@@ -14,6 +14,7 @@ import sys
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 try:
     from dotenv import load_dotenv
@@ -31,7 +32,8 @@ load_dotenv()
 
 EMAIL = os.getenv("GARMIN_EMAIL")
 PASSWORD = os.getenv("GARMIN_PASSWORD")
-END_DATE = os.getenv("GARMIN_END_DATE", str(date.today()))
+APP_TIMEZONE = os.getenv("APP_TIMEZONE", "Europe/Warsaw")
+GARMIN_END_DATE = os.getenv("GARMIN_END_DATE")
 DATA_DIR = Path(os.getenv("DATA_DIR", Path(__file__).parent / "data"))
 DB_PATH = Path(os.getenv("DB_PATH", DATA_DIR / "k90.db"))
 TOKENSTORE = DATA_DIR / ".garmin_tokens"
@@ -141,6 +143,12 @@ def date_range(start: str, end: str):
     while start_date <= end_date:
         yield str(start_date)
         start_date += timedelta(days=1)
+
+
+def _default_end_date() -> str:
+    if GARMIN_END_DATE:
+        return GARMIN_END_DATE
+    return datetime.now(ZoneInfo(APP_TIMEZONE)).date().isoformat()
 
 
 def _val(data: dict, key: str, divisor: float = 1.0):
@@ -442,10 +450,11 @@ def sync_garmin_to_db(client=None, full_mode: bool = False, end_date: str | None
     if not EMAIL or not PASSWORD:
         return {"error": "Brak kredencjałów — uzupełnij plik .env"}
 
-    target_end = end_date or END_DATE
+    target_end = end_date or _default_end_date()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
     create_schema(conn)
     ensure_agent_tables(conn)
     conn.commit()
@@ -494,6 +503,10 @@ def sync_garmin_to_db(client=None, full_mode: bool = False, end_date: str | None
     except Exception as exc:
         results = {"error": str(exc)}
     finally:
+        try:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except sqlite3.DatabaseError:
+            pass
         conn.close()
 
     return results
