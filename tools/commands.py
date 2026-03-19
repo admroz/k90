@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from summary import load_patient_summary, refresh_patient_summary
-from .db import get_conn
+from .db import create_db_backup, get_conn
 from .garmin import (
     get_sync_status as get_garmin_sync_status,
     mark_summary_refreshed as mark_garmin_summary_refreshed,
@@ -31,7 +31,23 @@ def handle_command(text: str) -> str | None:
         return _update()
     if cmd == "/summary":
         return _summary()
+    if cmd == "/backup":
+        return _backup()
     return None
+
+
+def _format_size(size_bytes: int) -> str:
+    units = ["B", "KB", "MB", "GB"]
+    value = float(size_bytes)
+    unit = units[0]
+    for candidate in units:
+        unit = candidate
+        if value < 1024 or candidate == units[-1]:
+            break
+        value /= 1024
+    if unit == "B":
+        return f"{int(value)} {unit}"
+    return f"{value:.1f} {unit}"
 
 
 def _status() -> str:
@@ -196,6 +212,23 @@ def _summary() -> str:
     return summary
 
 
+def _backup() -> str:
+    try:
+        backup = create_db_backup()
+    except Exception as exc:
+        return f"/backup: błąd tworzenia backupu — {exc}"
+
+    lines = ["/backup: snapshot zapisany"]
+    lines.append(f"Plik: {backup['filename']}")
+    lines.append(f"Katalog: {backup['backup_dir']}")
+    lines.append(f"Czas: {backup['created_at']} ({backup['timezone']})")
+    lines.append(f"Rozmiar: {_format_size(int(backup['size_bytes']))}")
+    lines.append(f"Retencja: {backup['retention_days']} dni")
+    if backup['deleted_old']:
+        lines.append(f"Usuniete stare backupy: {backup['deleted_old']}")
+    return "\n".join(lines)
+
+
 def _help() -> str:
     return (
         "Dostepne komendy:\n"
@@ -203,5 +236,6 @@ def _help() -> str:
         "/debug — statystyki uzycia i status syncu\n"
         "/update — synchronizacja Garmin i Libre bez LLM\n"
         "/summary — pokazuje aktualne patient summary\n"
+        "/backup — tworzy snapshot SQLite do katalogu backupow\n"
         "/help — ta wiadomosc"
     )

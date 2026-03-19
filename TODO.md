@@ -4,34 +4,14 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
 
 ## Now
 
-- [ ] Ustawić i zweryfikować poprawną strefę czasową w całej aplikacji.
-  Cel: jedna spójna data/godzina w Signal, SQLite, sync Garmin i odpowiedziach agenta.
-  Do sprawdzenia: `APP_TIMEZONE`, istniejące rekordy w bazie i czy potrzebny jest jednorazowy fix danych.
+- [ ] Zaplanować przeniesienie trwałych danych z plików `.md` do SQLite.
+  Dotyczy to zwłaszcza danych pacjenta i notatek, które dziś są rozproszone między bazą i plikami.
+  Warunek: migracja bez utraty danych i bez pogorszenia edytowalności danych.
 
-- [ ] Poprawić kontekst krótkoterminowy agenta przy rozmowie o jedzeniu i zdrowiu.
-  Problem: agent po zgłoszeniu obiadu nie pamięta dobrze śniadania ani bieżących danych z ostatnich dni.
-  Kierunek: dołączać do promptu skróty z ostatnich 3-5 dni: posiłki, aktywności, waga, ciśnienie, sen.
-
-- [ ] Dodać bezpieczny wgląd w bazę na produkcji.
-  Minimum: `bash` i `sqlite3` w kontenerze lub równoważna ścieżka diagnostyczna.
-  Cel: szybkie sprawdzenie `posilki`, `waga`, `sync_status`, `patient_summary` bez ręcznego kopiowania plików.
-
-- [ ] Dodać alternatywny kanał komunikacji przez Telegram.
-  Etap 1: Telegram równolegle do Signal.
-  Etap 2: ocena czy Signal można uprościć albo całkiem wyłączyć.
-  Powód: Signal działa, ale kontener jest ciężki i wymaga numeru telefonu; bot Telegram może uprościć deployment.
+- [ ] Dodać komendy i procedury operacyjne do diagnozy produkcji.
+  Przykłady: podgląd ostatnich posiłków, ostatniego syncu Garmin, rozmiaru i integralności bazy.
 
 ## Next
-
-- [ ] Włączyć FreeStyle Libre 2 do modelu danych i syncu aplikacji.
-  PoC potwierdził działający automat przez LibreLinkUp dla konta `PL`.
-  Dostępne dziś dane:
-  - `graphData` jako historia co ok. 15 minut,
-  - `glucoseMeasurement` jako najświeższy bieżący odczyt.
-  Zakres v1:
-  - osobna tabela SQLite dla glukozy,
-  - importer/sync z LibreLinkUp,
-  - podstawowy odczyt historii i korelacja z posiłkami.
 
 - [ ] Zbudować prosty frontend do podglądu danych live, dostępny tylko z sieci domowej.
   Zakres początkowy: dashboard zdrowotny, lista posiłków, podstawowe operacje na posiłkach.
@@ -41,38 +21,24 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
   Kierunek: coś w rodzaju `phpMyAdmin` dla SQLite, ale bez wystawiania do Internetu i tylko z sieci domowej.
   To może być osobny kontener administracyjny albo lekki widok w nowym frontendzie.
 
-- [ ] Doprecyzować strategię backupów i snapshotów SQLite.
-  Wymagania:
-  - backup ma być bezpieczny dla SQLite w trybie WAL,
-  - musi być jasne jak odtworzyć backup,
-  - musi działać na Synology i lokalnie.
-  Preferowany kierunek:
-  - snapshot logiczny przez `sqlite3 /data/k90.db ".backup ..."`,
-  - opcjonalnie archiwizacja całego `data/` jako drugi poziom backupu,
-  - retencja 30 dni,
-  - możliwość codziennego rsync na laptopa.
-
 - [ ] Rozszerzyć observability.
   Dodać lepsze logi z głównej pętli agenta, wywołań narzędzi, błędów i liczników syncu.
   Osobno ocenić czy logi warto trzymać w SQLite z retencją i późniejszym podglądem przez frontend.
+
+- [ ] Dodać runtime'owe przełączniki funkcji i modeli zapisywane w SQLite, a nie tylko w `.env`.
+  Przykłady: włączenie/wyłączenie Libre, auto-synców, wybranych kanałów i przełączenie modelu bez przebudowy kontenera.
+  Preferowany kierunek: proste komendy administracyjne + tabela ustawień/feature flags w bazie.
 
 - [ ] Uporządkować przejście na OpenAI API / Codex w pracy nad projektem i w samym agencie.
   Wyjaśnić decyzję architektoniczną: co zostaje w LiteLLM, a co przechodzi na bezpośrednie API OpenAI.
 
 ## Data Model
 
-- [ ] Zaplanować przeniesienie trwałych danych z plików `.md` do SQLite.
-  Dotyczy to zwłaszcza danych pacjenta i notatek, które dziś są rozproszone między bazą i plikami.
-  Warunek: migracja bez utraty danych i bez pogorszenia edytowalności danych.
-
 - [ ] Przy migracji danych do bazy rozpocząć sensowną rozmowę o embeddings.
   Pytania do rozstrzygnięcia:
   - co embeddingować: pliki pacjenta, historię rozmów, podsumowania, dokumenty,
   - czy embeddings mają wspierać retrieval do promptu czy tylko wyszukiwanie,
   - gdzie je trzymać: SQLite czy osobny store.
-
-- [ ] Dodać komendy i procedury operacyjne do diagnozy produkcji.
-  Przykłady: podgląd ostatnich posiłków, ostatniego syncu Garmin, rozmiaru i integralności bazy.
 
 ## Frontend
 
@@ -89,6 +55,15 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
   To jest niski priorytet; najpierw podgląd i operacje administracyjne.
 
 ## Later
+
+- [ ] Dodać bezpieczny wgląd w bazę na produkcji.
+  Minimum: `bash` i `sqlite3` w kontenerze lub równoważna ścieżka diagnostyczna.
+  Cel: szybkie sprawdzenie `posilki`, `waga`, `sync_status`, `patient_summary` bez ręcznego kopiowania plików.
+
+- [ ] Dodać alternatywny kanał komunikacji przez Telegram.
+  Etap 1: Telegram równolegle do Signal.
+  Etap 2: ocena czy Signal można uprościć albo całkiem wyłączyć.
+  Powód: Signal działa, ale kontener jest ciężki i wymaga numeru telefonu; bot Telegram może uprościć deployment.
 
 - [ ] Obsługa PDF przez Signal lub docelowo także przez inne kanały.
   Trzeba sprawdzić jak `signal-cli-rest-api` zwraca PDF i jak przekazać go do modelu.
@@ -117,6 +92,9 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
   - nie wypełnia luk z downtime kontenera,
   - nie powinno zastępować bazowej historii z `graphData`.
 
+- [ ] Zautomatyzować cykliczne backupy SQLite przez cron lub zewnętrzny scheduler.
+  Założenie: używać tej samej ścieżki backupu co komenda `/backup`, a nie osobnej implementacji.
+
 ## Operational Notes
 
 - Baza produkcyjna to SQLite i część zapisów może przechodzić przez WAL.
@@ -138,6 +116,19 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
 
 ### 2026-03-19
 
+- [x] Dodany ręczny backup SQLite przez komendę `/backup`.
+  Zakres:
+  - snapshot zapisuje się do katalogu `backups/`,
+  - nazwa pliku używa czasu `Europe/Warsaw`,
+  - działa retencja backupów,
+  - mechanizm jest wspólny pod przyszły cron / scheduler.
+
+- [x] Ustawiona i zweryfikowana poprawna strefa czasowa w całej aplikacji.
+  Efekt: jedna spójna data/godzina w Signal, SQLite, sync Garmin i odpowiedziach agenta.
+
+- [x] Poprawiony kontekst krótkoterminowy agenta przy rozmowie o jedzeniu i zdrowiu.
+  Efekt: agent dostaje skrót z ostatnich dni zamiast polegać wyłącznie na gołej historii rozmowy.
+
 - [x] Naprawiony bug synchronizacji Garmin z datą końcową liczoną przy starcie procesu.
   Skutek błędu: agent mógł twierdzić, że zrobił dzisiejszy sync, ale faktycznie pobierał dane tylko do wczoraj.
 
@@ -145,6 +136,12 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
   Cel: zmniejszyć ryzyko oglądania nieaktualnego `k90.db` po skopiowaniu samego pliku bazy.
 
 - [x] Backlog został uporządkowany do jednego pliku `TODO.md`.
+
+- [x] Włączony FreeStyle Libre 2 do modelu danych i syncu aplikacji.
+  Zakres v1:
+  - osobna tabela SQLite dla glukozy,
+  - importer/sync z LibreLinkUp,
+  - podstawowy odczyt historii i korelacja z posiłkami.
 
 - [x] Zrobiony PoC FreeStyle Libre 2 w katalogu `libre/`.
   Wynik:

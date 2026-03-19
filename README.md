@@ -11,7 +11,7 @@ Agent AI działający jako osobisty lekarz rodzinny, diabetolog i dietetyk. Komu
 - Przechowuje wyniki badań laboratoryjnych i analizuje trendy
 - Prowadzi pliki medyczne pacjenta (profil, wywiad, dieta, analiza)
 - Generuje i aktualizuje krótkie patient summary w formie rekordu faktów medycznych
-- Obsługuje komendy slash bez udziału LLM: `/status`, `/debug`, `/update`, `/summary`, `/help`
+- Obsługuje komendy slash bez udziału LLM: `/status`, `/debug`, `/update`, `/summary`, `/backup`, `/help`
 
 ## Stack
 
@@ -85,6 +85,7 @@ Komendy slash dostępne przez Signal:
 - `/debug` — liczba zapytań, tokeny i stan summary
 - `/update` — synchronizacja Garmin bez LLM
 - `/summary` — pokazuje aktualne patient summary
+- `/backup` — tworzy snapshot SQLite w `data/backups/`
 - `/help` — lista dostępnych komend
 
 ## Uruchomienie lokalne
