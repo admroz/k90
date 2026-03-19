@@ -34,12 +34,20 @@ EMAIL = os.getenv("GARMIN_EMAIL")
 PASSWORD = os.getenv("GARMIN_PASSWORD")
 APP_TIMEZONE = os.getenv("APP_TIMEZONE", "Europe/Warsaw")
 GARMIN_END_DATE = os.getenv("GARMIN_END_DATE")
-DATA_DIR = Path(os.getenv("DATA_DIR", Path(__file__).parent / "data"))
-DB_PATH = Path(os.getenv("DB_PATH", DATA_DIR / "k90.db"))
-TOKENSTORE = DATA_DIR / ".garmin_tokens"
 HEIGHT_M = 1.86
 FULL_START = "2022-01-01"
 
+
+def get_data_dir() -> Path:
+    return Path(os.getenv("DATA_DIR", Path(__file__).parent / "data"))
+
+
+def get_db_path() -> Path:
+    return Path(os.getenv("DB_PATH", get_data_dir() / "k90.db"))
+
+
+def get_tokenstore() -> Path:
+    return get_data_dir() / ".garmin_tokens"
 
 
 def ensure_agent_tables(conn: sqlite3.Connection) -> None:
@@ -110,10 +118,11 @@ def login() -> garminconnect.Garmin:
         is_cn=False,
         prompt_mfa=get_mfa,
     )
-    if TOKENSTORE.exists():
+    tokenstore = get_tokenstore()
+    if tokenstore.exists():
         print("Wczytuję tokeny z cache...")
         try:
-            client.login(tokenstore=str(TOKENSTORE))
+            client.login(tokenstore=str(tokenstore))
             print(f"Zalogowano jako: {client.display_name}")
             return client
         except Exception as exc:
@@ -122,9 +131,9 @@ def login() -> garminconnect.Garmin:
     else:
         print("Brak tokenów — pierwsze logowanie (może wymagać MFA)...")
     client.login()
-    TOKENSTORE.mkdir(exist_ok=True)
-    client.garth.dump(str(TOKENSTORE))
-    print(f"Tokeny zapisane w {TOKENSTORE}/")
+    tokenstore.mkdir(exist_ok=True)
+    client.garth.dump(str(tokenstore))
+    print(f"Tokeny zapisane w {tokenstore}/")
     print(f"Zalogowano jako: {client.display_name}")
     return client
 
@@ -451,7 +460,7 @@ def sync_garmin_to_db(client=None, full_mode: bool = False, end_date: str | None
         return {"error": "Brak kredencjałów — uzupełnij plik .env"}
 
     target_end = end_date or _default_end_date()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(get_db_path())
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout = 5000")
