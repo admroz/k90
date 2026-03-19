@@ -23,6 +23,16 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
 
 ## Next
 
+- [ ] Włączyć FreeStyle Libre 2 do modelu danych i syncu aplikacji.
+  PoC potwierdził działający automat przez LibreLinkUp dla konta `PL`.
+  Dostępne dziś dane:
+  - `graphData` jako historia co ok. 15 minut,
+  - `glucoseMeasurement` jako najświeższy bieżący odczyt.
+  Zakres v1:
+  - osobna tabela SQLite dla glukozy,
+  - importer/sync z LibreLinkUp,
+  - podstawowy odczyt historii i korelacja z posiłkami.
+
 - [ ] Zbudować prosty frontend do podglądu danych live, dostępny tylko z sieci domowej.
   Zakres początkowy: dashboard zdrowotny, lista posiłków, podstawowe operacje na posiłkach.
   Inspiracja: dawne `prywatne/dashboard.html` i `prywatne/dieta.html`, ale na żywych danych z bazy.
@@ -100,7 +110,12 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
 
 - [ ] Sprawdzić sens przejścia części promptów/systemu na angielski dla oszczędności tokenów.
 
-- [ ] Rozważyć nowy typ danych: FreeStyle Libre 2.
+- [ ] Rozważyć zagęszczenie danych Libre przez polling `glucoseMeasurement` co 1 minutę.
+  Cel: mieć gęstszy bieżący przebieg niż `graphData` co 15 minut.
+  Ograniczenia:
+  - nie odtwarza historii wstecz,
+  - nie wypełnia luk z downtime kontenera,
+  - nie powinno zastępować bazowej historii z `graphData`.
 
 ## Operational Notes
 
@@ -130,6 +145,14 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
   Cel: zmniejszyć ryzyko oglądania nieaktualnego `k90.db` po skopiowaniu samego pliku bazy.
 
 - [x] Backlog został uporządkowany do jednego pliku `TODO.md`.
+
+- [x] Zrobiony PoC FreeStyle Libre 2 w katalogu `libre/`.
+  Wynik:
+  - automat przez LibreLinkUp działa,
+  - historia jest dostępna przez `graphData` co ok. 15 minut,
+  - najświeższy odczyt jest dostępny osobno jako `glucoseMeasurement`,
+  - biblioteka `libre-linkup-py` wymagała lokalnego obejścia błędu dla kraju `PL`.
+  Notatka: katalog `libre/` jest tymczasowy i może zostać usunięty po przeniesieniu finalnej integracji do głównego kodu.
 
 ### Wcześniej zrobione
 

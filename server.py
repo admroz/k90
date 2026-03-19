@@ -18,6 +18,7 @@ from summary import maybe_refresh_summary, refresh_patient_summary
 from tools.commands import handle_command
 from tools.db import init_db
 from tools.garmin import mark_summary_refreshed, should_auto_sync_today, sync_garmin_data, sync_has_changes
+from tools.libre import should_auto_sync as should_auto_sync_libre, sync_libre_data, sync_has_changes as libre_sync_has_changes
 
 load_dotenv()
 
@@ -67,19 +68,43 @@ def handle_message(envelope: dict) -> None:
 
     sync_warning = ""
     sync_notice = ""
-    if should_auto_sync_today():
+    garmin_due = should_auto_sync_today()
+    libre_due = should_auto_sync_libre()
+    if garmin_due or libre_due:
         send_signal_message(sender, "Aktualizuję dane zdrowotne, odpowiem za chwilę.")
-        sync_result = sync_garmin_data(trigger="auto_daily")
-        if "error" in sync_result:
-            sync_warning = "Uwaga: dzisiejsza synchronizacja danych nie powiodła się; odpowiedź może bazować na starszych danych.\n\n"
-            log.warning("garmin.auto_sync_failed sender=%s error=%s", sender, sync_result["error"])
-        elif sync_has_changes(sync_result):
-            refresh_patient_summary(trigger="auto_daily_sync")
-            mark_summary_refreshed()
-            sync_notice = "Mam nowe dane i uwzględniam je w odpowiedzi.\n\n"
-            log.info("garmin.auto_sync_refreshed sender=%s", sender)
-        else:
-            log.info("garmin.auto_sync_no_changes sender=%s", sender)
+
+        errors = []
+        changed_sources = []
+
+        if garmin_due:
+            garmin_result = sync_garmin_data(trigger="auto_daily")
+            if "error" in garmin_result:
+                errors.append("Garmin")
+                log.warning("garmin.auto_sync_failed sender=%s error=%s", sender, garmin_result["error"])
+            elif sync_has_changes(garmin_result):
+                changed_sources.append("Garmin")
+                mark_summary_refreshed()
+                log.info("garmin.auto_sync_refreshed sender=%s", sender)
+            else:
+                log.info("garmin.auto_sync_no_changes sender=%s", sender)
+
+        if libre_due:
+            libre_result = sync_libre_data(trigger="auto_stale")
+            if "error" in libre_result:
+                errors.append("Libre")
+                log.warning("libre.auto_sync_failed sender=%s error=%s", sender, libre_result["error"])
+            elif libre_sync_has_changes(libre_result):
+                changed_sources.append("Libre")
+                log.info("libre.auto_sync_refreshed sender=%s", sender)
+            else:
+                log.info("libre.auto_sync_no_changes sender=%s", sender)
+
+        if changed_sources:
+            if "Garmin" in changed_sources:
+                refresh_patient_summary(trigger="auto_sync")
+            sync_notice = f"Mam nowe dane ({', '.join(changed_sources)}) i uwzględniam je w odpowiedzi.\n\n"
+        elif errors:
+            sync_warning = f"Uwaga: synchronizacja danych ({', '.join(errors)}) nie powiodła się; odpowiedź może bazować na starszych danych.\n\n"
 
     content_parts = []
     if text:

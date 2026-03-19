@@ -35,6 +35,14 @@ def test_build_operational_context_includes_recent_sections(monkeypatch, temp_db
             "INSERT INTO body_battery (data, max_bateria, min_bateria) VALUES (?, ?, ?)",
             ("2026-03-18", 82, 35),
         )
+        conn.execute(
+            "INSERT INTO glukoza_libre (timestamp, source_kind, factory_timestamp, data, czas, glukoza_mg_dl, trend_arrow, measurement_color, is_high, is_low, typ, zrodlo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("2026-03-18T08:15:00", "latest", "2026-03-18T07:15:00", "2026-03-18", "08:15:00", 107, 3, 1, 0, 0, 0, "librelinkup"),
+        )
+        conn.execute(
+            "INSERT INTO glukoza_libre (timestamp, source_kind, factory_timestamp, data, czas, glukoza_mg_dl, measurement_color, is_high, is_low, typ, zrodlo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("2026-03-18T08:00:00", "graph", "2026-03-18T07:00:00", "2026-03-18", "08:00:00", 103, 1, 0, 0, 0, "librelinkup"),
+        )
         conn.commit()
 
     context, stats = build_operational_context()
@@ -48,6 +56,8 @@ def test_build_operational_context_includes_recent_sections(monkeypatch, temp_db
     assert "Ciśnienie:" in context
     assert "Sen:" in context
     assert "Regeneracja i metryki:" in context
-    assert stats["sections"] == 6
+    assert "Glukoza Libre:" in context
+    assert stats["sections"] == 7
     assert stats["meals"] == 1
     assert stats["activities"] == 1
+    assert stats["glucose"] == 1

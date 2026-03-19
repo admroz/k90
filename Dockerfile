@@ -6,7 +6,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 FROM base AS app
 
-COPY agent.py server.py system_prompt.py system_prompt.md summary.py fetch_garmin.py migrate_csv_to_sqlite.py ./
+COPY agent.py server.py system_prompt.py system_prompt.md summary.py fetch_garmin.py fetch_libre.py migrate_csv_to_sqlite.py ./
 COPY tools/ ./tools/
 
 ENV PYTHONUNBUFFERED=1

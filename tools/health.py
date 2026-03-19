@@ -159,3 +159,18 @@ def get_daily_metrics(days: int = 14) -> list[dict]:
             (date_days_ago(days),)
         ).fetchall()
     return rows_to_list(rows)
+
+
+def get_glucose_readings(days: int = 2) -> list[dict]:
+    """Pobiera odczyty glukozy z Libre z ostatnich N dni."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT timestamp, source_kind, data, czas, glukoza_mg_dl,
+                      trend_arrow, trend_message, measurement_color, is_high, is_low, typ
+               FROM glukoza_libre
+               WHERE data >= ?
+               ORDER BY timestamp DESC,
+                        CASE source_kind WHEN 'latest' THEN 0 ELSE 1 END""",
+            (date_days_ago(days),),
+        ).fetchall()
+    return rows_to_list(rows)

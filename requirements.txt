@@ -4,3 +4,4 @@ python-dotenv>=1.0.0
 garminconnect>=0.2.22
 requests>=2.32.0
 websocket-client>=1.8.0
+libre-linkup-py

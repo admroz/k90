@@ -23,6 +23,7 @@ from tools.commands import handle_command
 from tools.context import build_operational_context
 from tools.db import get_conn, init_db
 from tools.garmin import mark_summary_refreshed, should_auto_sync_today, sync_garmin_data, sync_has_changes
+from tools.libre import should_auto_sync as should_auto_sync_libre, sync_libre_data, sync_has_changes as libre_sync_has_changes
 from tools.time_utils import now_local
 
 load_dotenv()
@@ -217,17 +218,37 @@ def cli() -> None:
             continue
 
         sync_prefix = ""
-        if should_auto_sync_today():
+        garmin_due = should_auto_sync_today()
+        libre_due = should_auto_sync_libre()
+        if garmin_due or libre_due:
             print("\nAgent: Aktualizuję dane zdrowotne, odpowiem za chwilę.\n")
-            sync_result = sync_garmin_data(trigger="auto_daily_cli")
-            if "error" in sync_result:
-                sync_prefix = "Uwaga: dzisiejsza synchronizacja danych nie powiodła się; odpowiedź może bazować na starszych danych.\n\n"
-            elif sync_has_changes(sync_result):
-                from summary import refresh_patient_summary
 
-                refresh_patient_summary(trigger="auto_daily_sync_cli")
-                mark_summary_refreshed()
-                sync_prefix = "Mam nowe dane i uwzględniam je w odpowiedzi.\n\n"
+            errors = []
+            changed_sources = []
+
+            if garmin_due:
+                garmin_result = sync_garmin_data(trigger="auto_daily_cli")
+                if "error" in garmin_result:
+                    errors.append("Garmin")
+                elif sync_has_changes(garmin_result):
+                    changed_sources.append("Garmin")
+                    mark_summary_refreshed()
+
+            if libre_due:
+                libre_result = sync_libre_data(trigger="auto_stale_cli")
+                if "error" in libre_result:
+                    errors.append("Libre")
+                elif libre_sync_has_changes(libre_result):
+                    changed_sources.append("Libre")
+
+            if changed_sources:
+                if "Garmin" in changed_sources:
+                    from summary import refresh_patient_summary
+
+                    refresh_patient_summary(trigger="auto_sync_cli")
+                sync_prefix = f"Mam nowe dane ({', '.join(changed_sources)}) i uwzględniam je w odpowiedzi.\n\n"
+            elif errors:
+                sync_prefix = f"Uwaga: synchronizacja danych ({', '.join(errors)}) nie powiodła się; odpowiedź może bazować na starszych danych.\n\n"
 
         try:
             response, should_refresh = run_agent(user_input, user_id="cli")

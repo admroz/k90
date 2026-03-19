@@ -142,6 +142,26 @@ def create_schema(conn):
             tluszcze_g  REAL,
             zrodlo      TEXT DEFAULT 'manual'
         );
+
+        CREATE TABLE IF NOT EXISTS glukoza_libre (
+            timestamp         TEXT NOT NULL,
+            source_kind       TEXT NOT NULL,
+            factory_timestamp TEXT,
+            data              TEXT NOT NULL,
+            czas              TEXT NOT NULL,
+            glukoza_mg_dl     REAL,
+            trend_arrow       INTEGER,
+            trend_message     TEXT,
+            measurement_color INTEGER,
+            is_high           INTEGER,
+            is_low            INTEGER,
+            typ               INTEGER,
+            zrodlo            TEXT DEFAULT 'librelinkup',
+            PRIMARY KEY (timestamp, source_kind)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_glukoza_libre_data_czas
+            ON glukoza_libre (data, czas);
     """)
     conn.commit()
 

@@ -11,6 +11,7 @@ WEIGHT_DAYS = 7
 BP_DAYS = 7
 SLEEP_DAYS = 3
 RECOVERY_DAYS = 3
+GLUCOSE_DAYS = 1
 
 
 def _fmt_num(value, decimals: int = 1) -> str:
@@ -95,6 +96,25 @@ def build_operational_context() -> tuple[str, dict]:
             (date_days_ago(RECOVERY_DAYS),),
         ).fetchall()
 
+        latest_glucose = conn.execute(
+            """SELECT data, czas, glukoza_mg_dl, trend_arrow, source_kind
+               FROM glukoza_libre
+               ORDER BY timestamp DESC,
+                        CASE source_kind WHEN 'latest' THEN 0 ELSE 1 END
+               LIMIT 1"""
+        ).fetchone()
+
+        glucose_history = conn.execute(
+            """SELECT data, czas, glukoza_mg_dl
+               FROM glukoza_libre
+               WHERE data >= ?
+                 AND glukoza_mg_dl IS NOT NULL
+                 AND source_kind = 'graph'
+               ORDER BY timestamp DESC
+               LIMIT 32""",
+            (date_days_ago(GLUCOSE_DAYS),),
+        ).fetchall()
+
     sections: list[str] = []
     stats = {
         "meals": len(meals),
@@ -103,6 +123,7 @@ def build_operational_context() -> tuple[str, dict]:
         "blood_pressure": len(blood_pressure),
         "sleep": len(sleep),
         "recovery": len(recovery),
+        "glucose": len(glucose_history),
     }
 
     meal_items = []
@@ -187,6 +208,22 @@ def build_operational_context() -> tuple[str, dict]:
     section = _section("Regeneracja i metryki", recovery_items)
     if section:
         sections.append(section)
+
+    if latest_glucose:
+        glucose_items = [
+            f"ostatni {latest_glucose['data']} {latest_glucose['czas']}: {int(round(latest_glucose['glukoza_mg_dl']))} mg/dL"
+        ]
+        if latest_glucose["trend_arrow"] is not None:
+            glucose_items.append(f"trend {latest_glucose['trend_arrow']}")
+        if glucose_history:
+            values = [row["glukoza_mg_dl"] for row in glucose_history if row["glukoza_mg_dl"] is not None]
+            if values:
+                glucose_items.append(
+                    f"zakres {GLUCOSE_DAYS} dni: {int(min(values))}-{int(max(values))} mg/dL, średnia {round(sum(values) / len(values))} mg/dL, pomiary {len(values)}"
+                )
+        section = _section("Glukoza Libre", glucose_items)
+        if section:
+            sections.append(section)
 
     context = "\n".join(section for section in sections if section)
     stats["chars"] = len(context)

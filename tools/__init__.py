@@ -3,11 +3,12 @@
 import json
 from .health import (
     get_blood_pressure, get_weight_trend, get_sleep_stats,
-    get_activities, get_hrv, get_body_battery, get_daily_metrics,
+    get_activities, get_hrv, get_body_battery, get_daily_metrics, get_glucose_readings,
 )
 from .lab import get_lab_results
 from .diet import log_meal, get_recent_meals, delete_meal
 from .garmin import sync_garmin_data
+from .libre import sync_libre_data
 from .patient import read_patient_file, update_patient_file
 
 
@@ -26,11 +27,13 @@ _REGISTRY = {
     "get_hrv": get_hrv,
     "get_body_battery": get_body_battery,
     "get_daily_metrics": get_daily_metrics,
+    "get_glucose_readings": get_glucose_readings,
     "get_lab_results": get_lab_results,
     "log_meal": log_meal,
     "get_recent_meals": get_recent_meals,
     "delete_meal": delete_meal,
     "sync_garmin_data": sync_garmin_data,
+    "sync_libre_data": sync_libre_data,
     "read_patient_file": read_patient_file,
     "update_patient_file": update_patient_file,
     "refresh_patient_summary": _refresh_patient_summary,
@@ -133,6 +136,19 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "get_glucose_readings",
+            "description": "Pobiera odczyty glukozy z FreeStyle Libre z ostatnich N dni.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "description": "Liczba dni wstecz (domyślnie 2)", "default": 2}
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_lab_results",
             "description": "Pobiera wyniki badań laboratoryjnych, opcjonalnie filtrując po kategorii lub nazwie.",
             "parameters": {
@@ -197,6 +213,17 @@ TOOLS = [
         "function": {
             "name": "sync_garmin_data",
             "description": "Pobiera nowe dane z Garmin Connect i aktualizuje bazę danych. Używaj gdy użytkownik prosi o synchronizację lub odświeżenie danych z Garmina.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sync_libre_data",
+            "description": "Pobiera najnowsze dane glukozy z LibreLinkUp i aktualizuje bazę danych. Używaj tylko gdy użytkownik wyraźnie prosi o odświeżenie danych glukozy teraz albo gdy odpowiedź wymaga najświeższego możliwego odczytu; nie używaj rutynowo do zwykłej analizy, bo system robi auto-sync Libre samodzielnie.",
             "parameters": {
                 "type": "object",
                 "properties": {},
