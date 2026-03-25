@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import logging
-import os
-from datetime import datetime, timedelta
 
 from fetch_libre import sync_libre_to_db
 from .db import get_conn
-from .time_utils import now_local
+from .time_utils import now_local, today_local
 
 log = logging.getLogger(__name__)
 SYNC_SOURCE = "libre"
@@ -74,17 +72,9 @@ def get_sync_status() -> dict | None:
     return dict(row) if row else None
 
 
-def _max_age_minutes() -> int:
-    return int(os.getenv("LIBRE_SYNC_MAX_AGE_MINUTES", "15"))
-
-
-def should_auto_sync(max_age_minutes: int | None = None) -> bool:
+def should_auto_sync() -> bool:
     status = get_sync_status()
-    if not status or not status.get("last_success_at"):
-        return True
-    last_success = datetime.fromisoformat(status["last_success_at"])
-    age_limit = max_age_minutes if max_age_minutes is not None else _max_age_minutes()
-    return now_local() - last_success >= timedelta(minutes=age_limit)
+    return not status or status.get("last_success_date") != today_local()
 
 
 def sync_has_changes(result: dict) -> bool:
@@ -111,7 +101,7 @@ def sync_libre_data(trigger: str = "manual") -> dict:
     result["changed"] = (totals["inserted"] + totals["updated"]) > 0
     _set_sync_status(
         last_success_at=now_local().isoformat(),
-        last_success_date=now_local().date().isoformat(),
+        last_success_date=today_local(),
         last_status=f"success:{trigger}",
         last_error=None,
         last_fetched=totals["fetched"],

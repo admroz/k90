@@ -67,8 +67,8 @@ cp .env.example .env
 Kluczowe zmienne:
 
 ```
-AGENT_MODEL=gpt-4o                     # model do konwersacji
-SUMMARY_MODEL=gpt-4o                   # model do patient summary
+AGENT_MODEL=gpt-5.4                    # model do konwersacji
+SUMMARY_MODEL=gpt-5.4                  # model do patient summary
 OPENAI_API_KEY=...
 HISTORY_MESSAGES=10                    # ile ostatnich par wiadomości w kontekście
 SUMMARY_MAX_AGE_DAYS=7                 # auto-odświeżenie podsumowania po X dniach

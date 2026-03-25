@@ -21,8 +21,8 @@ services:
     image: ${AGENT_IMAGE:-admroz/k90:latest}
     container_name: k90-agent
     environment:
-      - AGENT_MODEL=${AGENT_MODEL:-gpt-4o}
-      - SUMMARY_MODEL=${SUMMARY_MODEL:-gpt-4o}
+      - AGENT_MODEL=${AGENT_MODEL:-gpt-5.4}
+      - SUMMARY_MODEL=${SUMMARY_MODEL:-gpt-5.4}
       - SUMMARY_MAX_AGE_DAYS=${SUMMARY_MAX_AGE_DAYS:-7}
       - SUMMARY_MAX_TOKENS=${SUMMARY_MAX_TOKENS:-600}
       - HISTORY_MESSAGES=${HISTORY_MESSAGES:-10}
@@ -41,7 +41,6 @@ services:
       - LIBRE_LINK_UP_PASSWORD=${LIBRE_LINK_UP_PASSWORD:-}
       - LIBRE_LINK_UP_URL=${LIBRE_LINK_UP_URL:-https://api.libreview.io}
       - LIBRE_LINK_UP_VERSION=${LIBRE_LINK_UP_VERSION:-4.16.0}
-      - LIBRE_SYNC_MAX_AGE_MINUTES=${LIBRE_SYNC_MAX_AGE_MINUTES:-15}
       - DATA_DIR=/data
     volumes:
       - ${DATA_PATH:-./data}:/data

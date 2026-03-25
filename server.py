@@ -114,7 +114,9 @@ def handle_message(envelope: dict) -> None:
             "type": "text",
             "text": (
                 "Przeanalizuj załączone zdjęcie. Najpierw oceń, czy to wygląda na posiłek, dokument medyczny czy coś innego. "
-                "Nie zapisuj posiłku, jeśli z obrazu i kontekstu nie wynika jasno, że został zjedzony."
+                "Jeśli to wygląda na posiłek, oszacuj składniki oraz kcal, białko, węglowodany i tłuszcz. "
+                "Nie zapisuj posiłku, jeśli z obrazu i kontekstu nie wynika jasno, że został zjedzony. "
+                "Jeśli jednak zapiszesz posiłek, podaj potem dokładnie id, datę i godzinę zwrócone przez log_meal."
             ),
         })
 

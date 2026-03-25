@@ -164,7 +164,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "log_meal",
-            "description": "Zapisuje informację o spożytym posiłku do bazy danych.",
+            "description": "Zapisuje informację o spożytym posiłku do bazy danych. Po udanym zapisie w odpowiedzi dla użytkownika podaj dokładnie id, datę i godzinę zwrócone przez narzędzie.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -199,7 +199,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "get_recent_meals",
-            "description": "Pobiera ostatnio zalogowane posiłki z ostatnich N dni.",
+            "description": "Pobiera ostatnio zalogowane posiłki z ostatnich N dni. Używaj także wtedy, gdy użytkownik odwołuje się do wcześniejszego posiłku albo konkretnego dnia, np. piątku.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -223,7 +223,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "sync_libre_data",
-            "description": "Pobiera najnowsze dane glukozy z LibreLinkUp i aktualizuje bazę danych. Używaj tylko gdy użytkownik wyraźnie prosi o odświeżenie danych glukozy teraz albo gdy odpowiedź wymaga najświeższego możliwego odczytu; nie używaj rutynowo do zwykłej analizy, bo system robi auto-sync Libre samodzielnie.",
+            "description": "Pobiera najnowsze dane glukozy z LibreLinkUp i aktualizuje bazę danych. Używaj tylko gdy użytkownik wyraźnie prosi o odświeżenie danych glukozy teraz albo gdy odpowiedź wymaga najświeższego możliwego odczytu, np. dla korelacji dzisiejszych posiłków z obecną glukozą. Nie używaj rutynowo do zwykłej analizy, bo system robi auto-sync Libre raz dziennie.",
             "parameters": {
                 "type": "object",
                 "properties": {},

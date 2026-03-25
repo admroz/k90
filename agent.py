@@ -5,7 +5,7 @@ Uruchomienie (CLI):
     python agent.py
 
 Wymagane zmienne środowiskowe (.env):
-    AGENT_MODEL=gpt-4o  # lub inny model obsługiwany przez LiteLLM
+    AGENT_MODEL=gpt-5.4  # lub inny model obsługiwany przez LiteLLM
     OPENAI_API_KEY=...
 """
 
@@ -32,7 +32,7 @@ if not logging.getLogger().handlers:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-MODEL = os.getenv("AGENT_MODEL", "gpt-4o")
+MODEL = os.getenv("AGENT_MODEL", "gpt-5.4")
 HISTORY_MESSAGES = int(os.getenv("HISTORY_MESSAGES", "10"))
 MAX_TOOL_ROUNDS = 10
 

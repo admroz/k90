@@ -16,7 +16,7 @@ from tools.time_utils import APP_TIMEZONE, now_local
 log = logging.getLogger(__name__)
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
-SUMMARY_MODEL = os.getenv("SUMMARY_MODEL", "gpt-4o")
+SUMMARY_MODEL = os.getenv("SUMMARY_MODEL", "gpt-5.4")
 SUMMARY_MAX_AGE_DAYS = int(os.getenv("SUMMARY_MAX_AGE_DAYS", "7"))
 SUMMARY_MAX_TOKENS = int(os.getenv("SUMMARY_MAX_TOKENS", "600"))
 PATIENT_FILES = ["pacjent.md", "wywiad.md", "analiza.md", "dieta.md", "tydzien.md"]

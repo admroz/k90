@@ -5,10 +5,10 @@ from datetime import datetime, timedelta
 from tools.libre import get_sync_status, mark_summary_refreshed, should_auto_sync, sync_has_changes, sync_libre_data
 
 
-def test_should_auto_sync_depends_on_last_success_age(monkeypatch, temp_db):
+def test_should_auto_sync_depends_on_last_success_date(monkeypatch, temp_db):
     fixed_now = datetime(2026, 3, 19, 18, 0, 0)
-    monkeypatch.setenv("LIBRE_SYNC_MAX_AGE_MINUTES", "15")
     monkeypatch.setattr("tools.libre.now_local", lambda: fixed_now)
+    monkeypatch.setattr("tools.libre.today_local", lambda: fixed_now.date().isoformat())
 
     assert should_auto_sync() is True
 
@@ -16,8 +16,8 @@ def test_should_auto_sync_depends_on_last_success_age(monkeypatch, temp_db):
 
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO sync_status (source, last_success_at, last_status) VALUES (?, ?, ?)",
-            ("libre", (fixed_now - timedelta(minutes=10)).isoformat(), "success:auto"),
+            "INSERT INTO sync_status (source, last_success_at, last_success_date, last_status) VALUES (?, ?, ?, ?)",
+            ("libre", (fixed_now - timedelta(minutes=10)).isoformat(), fixed_now.date().isoformat(), "success:auto"),
         )
         conn.commit()
 
@@ -25,8 +25,8 @@ def test_should_auto_sync_depends_on_last_success_age(monkeypatch, temp_db):
 
     with get_conn() as conn:
         conn.execute(
-            "UPDATE sync_status SET last_success_at = ? WHERE source = ?",
-            ((fixed_now - timedelta(minutes=20)).isoformat(), "libre"),
+            "UPDATE sync_status SET last_success_at = ?, last_success_date = ? WHERE source = ?",
+            ((fixed_now - timedelta(days=1)).isoformat(), (fixed_now - timedelta(days=1)).date().isoformat(), "libre"),
         )
         conn.commit()
 

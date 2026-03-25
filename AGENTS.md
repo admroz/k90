@@ -85,7 +85,7 @@ Każde zapytanie do LLM zawiera:
 
 ## Podsumowanie pacjenta
 
-Singleton w tabeli `patient_summary` (SQLite). Generowane przez `SUMMARY_MODEL` (domyślnie `gpt-4o`) na podstawie wszystkich plików `.md` z `data/`.
+Singleton w tabeli `patient_summary` (SQLite). Generowane przez `SUMMARY_MODEL` (domyślnie `gpt-5.4`) na podstawie wszystkich plików `.md` z `data/`.
 
 Odświeżane gdy:
 - Startup i podsumowanie starsze niż `SUMMARY_MAX_AGE_DAYS` dni
@@ -108,8 +108,8 @@ Dane agenta (tworzone przez `init_db()`):
 
 | Zmienna | Opis | Domyślnie |
 |---------|------|-----------|
-| `AGENT_MODEL` | Model do konwersacji | `gpt-4o` |
-| `SUMMARY_MODEL` | Model do podsumowania pacjenta | `gpt-4o` |
+| `AGENT_MODEL` | Model do konwersacji | `gpt-5.4` |
+| `SUMMARY_MODEL` | Model do podsumowania pacjenta | `gpt-5.4` |
 | `HISTORY_MESSAGES` | Liczba par wiadomości w kontekście | `10` |
 | `SUMMARY_MAX_AGE_DAYS` | Auto-odświeżenie po X dniach | `7` |
 | `DB_PATH` | Ścieżka do bazy SQLite | `/data/k90.db` |
