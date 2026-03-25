@@ -53,7 +53,7 @@ Każde zapytanie do LLM zawiera:
 3. **Historia rozmów** — ostatnie N par wiadomości (konfigurowalnie przez `HISTORY_MESSAGES`)
 4. **Wiadomość użytkownika** — tekst lub tekst + obraz (Signal attachment)
 
-## Narzędzia agenta (15 total)
+## Narzędzia agenta (16 total)
 
 | Narzędzie | Opis |
 |-----------|------|
@@ -66,6 +66,7 @@ Każde zapytanie do LLM zawiera:
 | `get_daily_metrics(days)` | RHR, stres, oddech |
 | `get_lab_results(category, test)` | Wyniki badań lab |
 | `log_meal(...)` | Zapis posiłku |
+| `update_meal(...)` | Aktualizacja zapisanego posiłku |
 | `get_recent_meals(days)` | Historia posiłków |
 | `delete_meal(id)` | Usunięcie posiłku |
 | `sync_garmin_data()` | Sync danych Garmin → SQLite |

@@ -6,7 +6,7 @@ from .health import (
     get_activities, get_hrv, get_body_battery, get_daily_metrics, get_glucose_readings,
 )
 from .lab import get_lab_results
-from .diet import log_meal, get_recent_meals, delete_meal
+from .diet import log_meal, update_meal, get_recent_meals, delete_meal
 from .garmin import sync_garmin_data
 from .libre import sync_libre_data
 from .patient import read_patient_file, update_patient_file
@@ -30,6 +30,7 @@ _REGISTRY = {
     "get_glucose_readings": get_glucose_readings,
     "get_lab_results": get_lab_results,
     "log_meal": log_meal,
+    "update_meal": update_meal,
     "get_recent_meals": get_recent_meals,
     "delete_meal": delete_meal,
     "sync_garmin_data": sync_garmin_data,
@@ -169,15 +170,37 @@ TOOLS = [
                 "type": "object",
                 "properties": {
                     "description": {"type": "string", "description": "Opis posiłku (np. owsianka z jagodami i orzechami)"},
-                    "calories": {"type": "number", "description": "Szacowana liczba kalorii"},
-                    "protein_g": {"type": "number", "description": "Białko w gramach"},
-                    "carbs_g": {"type": "number", "description": "Węglowodany w gramach"},
-                    "fat_g": {"type": "number", "description": "Tłuszcze w gramach"},
+                    "calories": {"type": "number", "description": "Szacowana liczba kalorii; wymagane"},
+                    "protein_g": {"type": "number", "description": "Białko w gramach; wymagane"},
+                    "carbs_g": {"type": "number", "description": "Węglowodany w gramach; wymagane"},
+                    "fat_g": {"type": "number", "description": "Tłuszcze w gramach; wymagane"},
                     "notes": {"type": "string", "description": "Dodatkowe uwagi"},
                     "date": {"type": "string", "description": "Data posiłku w formacie YYYY-MM-DD (domyślnie dzisiaj)"},
                     "time": {"type": "string", "description": "Godzina posiłku w formacie HH:MM (domyślnie teraz)"},
                 },
-                "required": ["description"],
+                "required": ["description", "calories", "protein_g", "carbs_g", "fat_g"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_meal",
+            "description": "Aktualizuje istniejący posiłek w bazie danych. Używaj do korekty opisu, kalorii i makroskładników już zapisanego wpisu zamiast usuwać i dodawać go od nowa, jeśli użytkownik poprawia wcześniejszy zapis.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "meal_id": {"type": "integer", "description": "ID posiłku do aktualizacji (z get_recent_meals)"},
+                    "description": {"type": "string", "description": "Poprawiony opis posiłku"},
+                    "calories": {"type": "number", "description": "Poprawiona liczba kalorii; wymagane"},
+                    "protein_g": {"type": "number", "description": "Poprawione białko w gramach; wymagane"},
+                    "carbs_g": {"type": "number", "description": "Poprawione węglowodany w gramach; wymagane"},
+                    "fat_g": {"type": "number", "description": "Poprawione tłuszcze w gramach; wymagane"},
+                    "notes": {"type": "string", "description": "Dodatkowe uwagi"},
+                    "date": {"type": "string", "description": "Data posiłku w formacie YYYY-MM-DD; opcjonalnie"},
+                    "time": {"type": "string", "description": "Godzina posiłku w formacie HH:MM; opcjonalnie"},
+                },
+                "required": ["meal_id", "description", "calories", "protein_g", "carbs_g", "fat_g"],
             },
         },
     },

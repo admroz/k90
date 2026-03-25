@@ -6,10 +6,10 @@ from .time_utils import date_days_ago, now_local
 
 def log_meal(
     description: str,
-    calories: float = None,
-    protein_g: float = None,
-    carbs_g: float = None,
-    fat_g: float = None,
+    calories: float,
+    protein_g: float,
+    carbs_g: float,
+    fat_g: float,
     notes: str = None,
     date: str = None,
     time: str = None,
@@ -18,10 +18,10 @@ def log_meal(
 
     Args:
         description: Opis posiłku (np. 'owsianka z jagodami i orzechami').
-        calories: Szacowana liczba kalorii (opcjonalne).
-        protein_g: Białko w gramach (opcjonalne).
-        carbs_g: Węglowodany w gramach (opcjonalne).
-        fat_g: Tłuszcze w gramach (opcjonalne).
+        calories: Szacowana liczba kalorii.
+        protein_g: Białko w gramach.
+        carbs_g: Węglowodany w gramach.
+        fat_g: Tłuszcze w gramach.
         notes: Dodatkowe uwagi (opcjonalne).
 
     Returns:
@@ -40,6 +40,41 @@ def log_meal(
         conn.commit()
         checkpoint_wal(conn)
     return {"id": meal_id, "status": "zapisano", "data": meal_date, "czas": meal_time}
+
+
+def update_meal(
+    meal_id: int,
+    description: str,
+    calories: float,
+    protein_g: float,
+    carbs_g: float,
+    fat_g: float,
+    notes: str = None,
+    date: str = None,
+    time: str = None,
+) -> dict:
+    """Aktualizuje istniejący wpis posiłku w bazie danych."""
+    with get_conn() as conn:
+        existing = conn.execute(
+            """SELECT id, data, czas
+               FROM posilki
+               WHERE id = ?""",
+            (meal_id,),
+        ).fetchone()
+        if existing is None:
+            return {"status": "nie znaleziono", "id": meal_id}
+
+        meal_date = date or existing["data"]
+        meal_time = time or existing["czas"] or now_local().strftime("%H:%M")
+        conn.execute(
+            """UPDATE posilki
+               SET data = ?, czas = ?, opis = ?, kalorie = ?, bialko_g = ?, weglowodany_g = ?, tluszcze_g = ?
+               WHERE id = ?""",
+            (meal_date, meal_time, description, calories, protein_g, carbs_g, fat_g, meal_id),
+        )
+        conn.commit()
+        checkpoint_wal(conn)
+    return {"id": meal_id, "status": "zaktualizowano", "data": meal_date, "czas": meal_time}
 
 
 def delete_meal(meal_id: int) -> dict:
