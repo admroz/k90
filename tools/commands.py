@@ -12,6 +12,7 @@ from .garmin import (
 )
 from .libre import (
     get_sync_status as get_libre_sync_status,
+    is_enabled as is_libre_enabled,
     sync_libre_data,
     sync_has_changes as libre_sync_has_changes,
 )
@@ -124,10 +125,9 @@ def _debug() -> str:
         "SELECT updated_at, length(content) AS content_len FROM patient_summary WHERE id = 1"
     ).fetchone()
     conn.close()
-    sync_rows = [
-        ("Garmin", get_garmin_sync_status()),
-        ("Libre", get_libre_sync_status()),
-    ]
+    sync_rows = [("Garmin", get_garmin_sync_status())]
+    if is_libre_enabled():
+        sync_rows.append(("Libre", get_libre_sync_status()))
 
     lines = [f"Debug na {now_local().strftime('%d.%m.%Y %H:%M')}", ""]
 
@@ -155,14 +155,18 @@ def _debug() -> str:
         else:
             lines.append(f"Sync {label}: brak historii")
 
+    if not is_libre_enabled():
+        lines.append("Sync Libre: wyłączony przez LIBRE_ENABLED")
+
     return "\n".join(lines)
 
 
 def _update() -> str:
     sources = [
         ("Garmin", sync_garmin_data(trigger="slash_update"), garmin_sync_has_changes, mark_garmin_summary_refreshed),
-        ("Libre", sync_libre_data(trigger="slash_update"), libre_sync_has_changes, None),
     ]
+    if is_libre_enabled():
+        sources.append(("Libre", sync_libre_data(trigger="slash_update"), libre_sync_has_changes, None))
 
     changed_sources = []
     summary_sources = []

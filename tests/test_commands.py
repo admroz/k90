@@ -9,6 +9,7 @@ from tools.db import create_db_backup
 
 
 def test_update_skips_summary_refresh_when_sync_has_no_changes(monkeypatch):
+    monkeypatch.setattr("tools.commands.is_libre_enabled", lambda: True)
     monkeypatch.setattr(
         "tools.commands.sync_garmin_data",
         lambda trigger="slash_update": {
@@ -36,6 +37,7 @@ def test_update_skips_summary_refresh_when_sync_has_no_changes(monkeypatch):
 
 
 def test_update_refreshes_summary_when_sync_has_changes(monkeypatch):
+    monkeypatch.setattr("tools.commands.is_libre_enabled", lambda: True)
     calls = []
     monkeypatch.setattr(
         "tools.commands.sync_garmin_data",

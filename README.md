@@ -1,10 +1,10 @@
 # k90 — Osobisty asystent zdrowotny
 
-Agent AI działający jako osobisty lekarz rodzinny, diabetolog i dietetyk. Komunikuje się przez Signal, ma dostęp do danych z Garmin Connect i bazy danych zdrowotnych, monitoruje trendy i pomaga zarządzać dietą. Używa świeżego kontekstu operacyjnego z ostatnich dni przy każdej rozmowie.
+Agent AI działający jako osobisty lekarz rodzinny, diabetolog i dietetyk. Komunikuje się przez Telegram, ma dostęp do danych z Garmin Connect i bazy danych zdrowotnych, monitoruje trendy i pomaga zarządzać dietą. Używa świeżego kontekstu operacyjnego z ostatnich dni przy każdej rozmowie.
 
 ## Funkcje
 
-- Odpowiada na wiadomości Signal
+- Odpowiada na prywatne wiadomości Telegram
 - Analizuje dane zdrowotne: ciśnienie, waga, sen, HRV, Body Battery, aktywności
 - Pobiera dane z Garmin Connect i synchronizuje je bezpośrednio do SQLite
 - Loguje posiłki, w tym na podstawie zdjęć
@@ -16,7 +16,7 @@ Agent AI działający jako osobisty lekarz rodzinny, diabetolog i dietetyk. Komu
 ## Stack
 
 - **Agent:** Python + LiteLLM (domyślnie OpenAI GPT przez `.env`)
-- **Komunikacja:** Signal (signal-cli-rest-api przez WebSocket)
+- **Komunikacja:** Telegram Bot API przez long polling
 - **Baza danych:** SQLite (historia rozmów, dane zdrowotne, podsumowanie pacjenta)
 - **Dane Garmin:** `fetch_garmin.py` → bezpośredni sync do SQLite
 - **Deployment:** Docker Compose (Synology NAS lub lokalnie)
@@ -26,7 +26,7 @@ Agent AI działający jako osobisty lekarz rodzinny, diabetolog i dietetyk. Komu
 ```
 k90/
 ├── agent.py                  # pętla LiteLLM + historia rozmów z SQLite
-├── server.py                 # Signal WebSocket listener
+├── server.py                 # Telegram long-polling listener
 ├── summary.py                # generowanie podsumowania pacjenta
 ├── system_prompt.py          # ładowanie promptu (data/ override lub repo)
 ├── system_prompt.md          # ogólny prompt systemowy (bez danych osobowych)
@@ -43,7 +43,6 @@ k90/
 ├── data/                     # dane persystentne — gitignored, wolumin Docker
 │   ├── k90.db                # główna baza danych
 │   ├── .garmin_tokens/       # tokeny OAuth Garmin
-│   ├── signal/               # dane konta Signal
 │   ├── pacjent.md            # profil pacjenta
 │   ├── wywiad.md             # wywiad medyczny
 │   ├── analiza.md            # analiza wyników badań
@@ -73,13 +72,15 @@ OPENAI_API_KEY=...
 HISTORY_MESSAGES=10                    # ile ostatnich par wiadomości w kontekście
 SUMMARY_MAX_AGE_DAYS=7                 # auto-odświeżenie podsumowania po X dniach
 SUMMARY_MAX_TOKENS=600                 # limit output dla patient summary
-SIGNAL_PHONE_NUMBER=+48...
-SIGNAL_ALLOWED_SENDER=+48...
+TELEGRAM_BOT_TOKEN=...                # token otrzymany od @BotFather
+TELEGRAM_ALLOWED_USER_ID=...          # numeryczny Telegram user ID właściciela
+CONVERSATION_USER_ID=owner            # stabilny klucz historii rozmowy
 GARMIN_EMAIL=...
 GARMIN_PASSWORD=...
+LIBRE_ENABLED=true                     # false wyłącza pobieranie danych Libre
 ```
 
-Komendy slash dostępne przez Signal:
+Komendy slash dostępne przez Telegram:
 
 - `/status` — szybkie podsumowanie: waga, kalorie z ostatnich dni, ostatnia aktywność
 - `/debug` — liczba zapytań, tokeny i stan summary
@@ -93,7 +94,8 @@ Komendy slash dostępne przez Signal:
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python agent.py   # CLI do testowania
+python server.py  # bot Telegram przez long polling
+# albo: python agent.py  # tekstowy tryb CLI bez Telegrama
 ```
 
 ## Docker
@@ -102,6 +104,18 @@ python agent.py   # CLI do testowania
 docker compose up -d
 docker compose logs -f agent
 ```
+
+### Pierwsze uruchomienie Telegrama
+
+1. Napisz do `@BotFather`, wywołaj `/newbot` i wpisz otrzymany token jako `TELEGRAM_BOT_TOKEN`.
+2. Jeśli nie znasz swojego numerycznego Telegram user ID, uruchom bota bez `TELEGRAM_ALLOWED_USER_ID` i wyślij mu wiadomość. W logu `telegram.reject` pojawi się `user_id`.
+3. Ustaw ten numer jako `TELEGRAM_ALLOWED_USER_ID` i zrestartuj usługę `agent`.
+4. W prywatnej rozmowie z botem sprawdź kolejno `/help` oraz zwykłą wiadomość wymagającą odpowiedzi modelu.
+
+Bot celowo ignoruje grupy oraz wszystkich użytkowników poza skonfigurowanym właścicielem.
+Domyślne `CONVERSATION_USER_ID=owner` rozpoczyna nową historię czatu. Aby kontynuować historię z Signal, ustaw tę zmienną na dotychczasowy `user_id` zapisany w tabeli `conversations`.
+
+Jeśli czujnik Libre nie jest używany, ustaw `LIBRE_ENABLED=false`. Wyłącza to auto-sync, ręczny sync przez `/update` i wywołania syncu przez agenta, ale nie usuwa historycznych pomiarów z SQLite.
 
 ## Deployment na Synology
 

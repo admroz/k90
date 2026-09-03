@@ -6,6 +6,7 @@ from tools.libre import get_sync_status, mark_summary_refreshed, should_auto_syn
 
 
 def test_should_auto_sync_depends_on_last_success_date(monkeypatch, temp_db):
+    monkeypatch.setenv("LIBRE_ENABLED", "true")
     fixed_now = datetime(2026, 3, 19, 18, 0, 0)
     monkeypatch.setattr("tools.libre.now_local", lambda: fixed_now)
     monkeypatch.setattr("tools.libre.today_local", lambda: fixed_now.date().isoformat())
@@ -34,6 +35,7 @@ def test_should_auto_sync_depends_on_last_success_date(monkeypatch, temp_db):
 
 
 def test_sync_libre_data_updates_status_and_totals(monkeypatch, temp_db):
+    monkeypatch.setenv("LIBRE_ENABLED", "true")
     fixed_now = datetime(2026, 3, 19, 18, 30, 0)
     monkeypatch.setattr("tools.libre.now_local", lambda: fixed_now)
     monkeypatch.setattr(
@@ -60,3 +62,32 @@ def test_sync_libre_data_updates_status_and_totals(monkeypatch, temp_db):
     mark_summary_refreshed()
     status = get_sync_status()
     assert status["last_summary_refresh_at"] == fixed_now.isoformat()
+
+
+def test_libre_disabled_skips_auto_and_manual_sync(monkeypatch, temp_db):
+    monkeypatch.setenv("LIBRE_ENABLED", "false")
+    monkeypatch.setattr(
+        "tools.libre.sync_libre_to_db",
+        lambda: (_ for _ in ()).throw(AssertionError("disabled Libre must not fetch")),
+    )
+
+    assert should_auto_sync() is False
+    assert sync_libre_data(trigger="test") == {
+        "ok": True,
+        "disabled": True,
+        "message": "Synchronizacja Libre jest wyłączona.",
+        "datasets": {},
+    }
+
+
+def test_libre_sync_converts_unexpected_exception_to_error(monkeypatch, temp_db):
+    monkeypatch.setenv("LIBRE_ENABLED", "true")
+    monkeypatch.setattr(
+        "tools.libre.sync_libre_to_db",
+        lambda: (_ for _ in ()).throw(RuntimeError("login failed")),
+    )
+
+    result = sync_libre_data(trigger="test")
+
+    assert result == {"error": "RuntimeError: login failed"}
+    assert get_sync_status()["last_status"] == "error:test"

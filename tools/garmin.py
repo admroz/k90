@@ -91,7 +91,13 @@ def sync_garmin_data(trigger: str = "manual") -> dict:
     started_at = now_local().isoformat()
     _set_sync_status(last_started_at=started_at, last_status=f"running:{trigger}", last_error=None)
     log.info("garmin.sync start trigger=%s", trigger)
-    result = sync_garmin_to_db()
+    try:
+        result = sync_garmin_to_db()
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+        _set_sync_status(last_status=f"error:{trigger}", last_error=error)
+        log.exception("garmin.sync trigger=%s error=%s", trigger, error)
+        return {"error": error}
     if "error" in result:
         _set_sync_status(last_status=f"error:{trigger}", last_error=result["error"])
         log.error("garmin.sync trigger=%s error=%s", trigger, result["error"])

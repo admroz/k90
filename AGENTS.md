@@ -1,11 +1,11 @@
 # k90 — architektura projektu
 
-Osobisty asystent zdrowotny działający przez Signal. Odpowiada na wiadomości, pobiera dane z Garmin Connect i zarządza bazą danych zdrowotnych.
+Osobisty asystent zdrowotny działający przez Telegram. Odpowiada na wiadomości, pobiera dane z Garmin Connect i zarządza bazą danych zdrowotnych.
 
 ## Stack
 
 - **Agent:** Python + LiteLLM (własna pętla tool-use, domyślnie OpenAI GPT)
-- **Komunikacja:** Signal (signal-cli-rest-api przez WebSocket)
+- **Komunikacja:** Telegram Bot API przez long polling
 - **Baza danych:** SQLite (`data/k90.db`) — dane zdrowotne, historia rozmów, podsumowanie pacjenta
 - **Dane Garmin:** `fetch_garmin.py` → bezpośredni sync do SQLite
 - **Deployment:** Docker Compose (Synology DS223 lub lokalnie)
@@ -15,7 +15,7 @@ Osobisty asystent zdrowotny działający przez Signal. Odpowiada na wiadomości,
 ```
 k90/
 ├── agent.py                  # pętla LiteLLM + historia rozmów (SQLite)
-├── server.py                 # Signal WebSocket listener + dispatcher
+├── server.py                 # Telegram long-polling listener + dispatcher
 ├── summary.py                # podsumowanie pacjenta: generowanie i zarządzanie
 ├── system_prompt.py          # ładowanie promptu (data/ override lub repo)
 ├── system_prompt.md          # ogólny prompt bez danych osobowych
@@ -36,13 +36,13 @@ k90/
 ## Przepływ wiadomości
 
 ```
-Signal → WebSocket → server.py → agent.py → LiteLLM
+Telegram → long polling → server.py → agent.py → LiteLLM
                                      ↓            ↓
                               SQLite history   tool calls
                                      ↓            ↓
                               save response   tools/
                                      ↓
-                              Signal ← response
+                              Telegram ← response
 ```
 
 ## Zarządzanie kontekstem
@@ -51,7 +51,7 @@ Każde zapytanie do LLM zawiera:
 1. **System prompt** — rola i zasady (z `system_prompt.md`)
 2. **Podsumowanie pacjenta** — krótki rekord faktów medycznych (z `patient_summary` w SQLite)
 3. **Historia rozmów** — ostatnie N par wiadomości (konfigurowalnie przez `HISTORY_MESSAGES`)
-4. **Wiadomość użytkownika** — tekst lub tekst + obraz (Signal attachment)
+4. **Wiadomość użytkownika** — tekst lub tekst + obraz (Telegram photo/document)
 
 ## Narzędzia agenta (16 total)
 
@@ -95,7 +95,7 @@ Odświeżane gdy:
 
 ## Historia rozmów
 
-Tabela `conversations` (SQLite). Każda wiadomość zapisana z `user_id` (numer telefonu z Signal). Do kontekstu trafia ostatnie `HISTORY_MESSAGES` par wiadomości.
+Tabela `conversations` (SQLite). Każda wiadomość jest zapisana ze stabilnym `user_id` ustawianym przez `CONVERSATION_USER_ID`. Do kontekstu trafia ostatnie `HISTORY_MESSAGES` par wiadomości.
 
 ## Schemat SQLite
 
@@ -115,9 +115,11 @@ Dane agenta (tworzone przez `init_db()`):
 | `SUMMARY_MAX_AGE_DAYS` | Auto-odświeżenie po X dniach | `7` |
 | `DB_PATH` | Ścieżka do bazy SQLite | `/data/k90.db` |
 | `DATA_DIR` | Katalog z plikami pacjenta | `/data` |
-| `SIGNAL_PHONE_NUMBER` | Numer bota Signal | — |
-| `SIGNAL_ALLOWED_SENDER` | Whitelisted numer użytkownika | — |
+| `TELEGRAM_BOT_TOKEN` | Token bota z `@BotFather` | — |
+| `TELEGRAM_ALLOWED_USER_ID` | Whitelisted numeryczny Telegram user ID | — |
+| `CONVERSATION_USER_ID` | Stabilny klucz historii rozmowy | `owner` |
 | `OPENAI_API_KEY` | Klucz OpenAI | — |
 | `ANTHROPIC_API_KEY` | Klucz Anthropic (opcjonalnie) | — |
 | `GEMINI_API_KEY` | Klucz Google Gemini (opcjonalnie) | — |
 | `GARMIN_EMAIL` / `GARMIN_PASSWORD` | Dane logowania Garmin | — |
+| `LIBRE_ENABLED` | Włącza pobieranie i synchronizację Libre | `true` |

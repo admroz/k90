@@ -3,13 +3,13 @@
 ## Architektura
 
 - Obraz budowany automatycznie przez GitHub Actions (push do `main`) na natywnym runnerze ARM64
-- Obraz dostępny na GHCR: `ghcr.io/admroz/k90:latest`
+- Obraz publikowany przez GitHub Actions na Docker Hub: `admroz/k90:latest`
 - Dane (`data/` + `.env`) przenoszone raz ręcznie, potem trzymane na Synology
-- Lokalnie: proxy przez `SIGNAL_CLI_EXTRA_ARGS`; na Synology: brak proxy
+- Komunikacja przez Telegram Bot API w trybie long polling; bez publicznego portu i dodatkowego kontenera
 
 ## Wymagania wstępne (jednorazowo)
 
-1. Na Synology: `docker login ghcr.io -u GITHUB_USERNAME -p PAT` (PAT z uprawnieniem `read:packages`)
+1. Publiczny obraz `admroz/k90:latest` nie wymaga logowania do rejestru na Synology.
 
 ## Jednorazowa migracja danych na Synology
 
@@ -20,12 +20,13 @@ scp .env synology:/volume1/docker/k90/
 
 # 2. Na Synology — dostosuj .env:
 #   DATA_PATH=/volume1/docker/k90/data
-#   AGENT_IMAGE=ghcr.io/OWNER/k90:latest
-#   SIGNAL_CLI_EXTRA_ARGS=   (pusty lub usuń)
+#   AGENT_IMAGE=admroz/k90:latest
+#   TELEGRAM_BOT_TOKEN=token_z_BotFather
+#   TELEGRAM_ALLOWED_USER_ID=numeryczny_id_wlasciciela
 
 # 3. Uruchom
 cd /volume1/docker/k90
-docker compose up -d
+docker compose up -d --remove-orphans
 ```
 
 Jeśli masz jeszcze historyczną bazę `kadencja90.db`, zmigruj ją ręcznie poza tym procesem i zachowaj kopię bezpieczeństwa. Aktualna aplikacja używa wyłącznie `k90.db`.
@@ -39,23 +40,26 @@ Możesz też uruchomić ręcznie z zakładki Actions → "Build & Push Docker im
 
 ```bash
 # Push do main wyzwala build — po zakończeniu (~3-5 min) na Synology:
-docker compose pull agent && docker compose up -d agent
+docker compose pull agent && docker compose up -d --remove-orphans
 ```
 
 ## Co nie wymaga rebuildu obrazu
 
 - Zmiana `system_prompt.md` — edytuj `data/system_prompt.md` i `docker compose restart agent`
 - Zmiana modelu (`AGENT_MODEL`, `SUMMARY_MODEL`) lub `OPENAI_API_KEY` — edytuj `.env` i `docker compose up -d agent`
+- Zmiana tokenu lub whitelisty Telegrama — edytuj `.env` i `docker compose up -d agent`
 - Zmiana plików pacjenta (`pacjent.md`, `dieta.md` itp.) — edytuj w `data/`, restart opcjonalny
 
 ## Zmienne środowiskowe
 
 | Zmienna | Lokalnie | Synology |
 |---------|----------|----------|
-| `SIGNAL_CLI_EXTRA_ARGS` | `--http-proxy http://host.docker.internal:9000` | (pusty) |
 | `DATA_PATH` | (domyślnie `./data`) | `/volume1/docker/k90/data` |
-| `AGENT_IMAGE` | `ghcr.io/admroz/k90:latest` | `ghcr.io/admroz/k90:latest` |
+| `AGENT_IMAGE` | `admroz/k90:latest` | `admroz/k90:latest` |
 | `DB_PATH` | (domyślnie `./data/k90.db`) | `/data/k90.db` |
+| `TELEGRAM_BOT_TOKEN` | token z `@BotFather` | token z `@BotFather` |
+| `TELEGRAM_ALLOWED_USER_ID` | ID właściciela | ID właściciela |
+| `LIBRE_ENABLED` | `true` lub `false` | `true` lub `false` |
 
 ## Weryfikacja
 
@@ -63,6 +67,12 @@ docker compose pull agent && docker compose up -d agent
 # Lokalnie
 docker compose up -d
 docker compose logs -f agent
+
+# Oczekiwany wpis po starcie:
+# telegram.connected bot=@nazwa_bota
+
+# Test transportu bez LLM: wyślij /help
+# Test transportu z LLM: wyślij zwykłą wiadomość
 
 # Sprawdź tabele SQLite
 sqlite3 data/k90.db ".tables"

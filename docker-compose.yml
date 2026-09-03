@@ -1,22 +1,4 @@
-networks:
-  k90:
-
 services:
-  signal:
-    image: bbernhard/signal-cli-rest-api:latest
-    container_name: k90-signal
-    environment:
-      - MODE=json-rpc
-      - TZ=${APP_TIMEZONE:-Europe/Warsaw}
-      - SIGNAL_CLI_EXTRA_ARGS=${SIGNAL_CLI_EXTRA_ARGS:-}
-    volumes:
-      - ${DATA_PATH:-./data}/signal:/home/.local/share/signal-cli
-    ports:
-      - "8088:8080"
-    networks:
-      - k90
-    restart: unless-stopped
-
   agent:
     image: ${AGENT_IMAGE:-admroz/k90:latest}
     container_name: k90-agent
@@ -32,20 +14,18 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - DB_PATH=/data/k90.db
-      - SIGNAL_CLI_REST_API_URL=http://signal:8080
-      - SIGNAL_PHONE_NUMBER=${SIGNAL_PHONE_NUMBER}
-      - SIGNAL_ALLOWED_SENDER=${SIGNAL_ALLOWED_SENDER}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_ALLOWED_USER_ID=${TELEGRAM_ALLOWED_USER_ID}
+      - TELEGRAM_POLL_TIMEOUT=${TELEGRAM_POLL_TIMEOUT:-30}
+      - CONVERSATION_USER_ID=${CONVERSATION_USER_ID:-owner}
       - GARMIN_EMAIL=${GARMIN_EMAIL}
       - GARMIN_PASSWORD=${GARMIN_PASSWORD}
       - LIBRE_LINK_UP_USERNAME=${LIBRE_LINK_UP_USERNAME:-}
       - LIBRE_LINK_UP_PASSWORD=${LIBRE_LINK_UP_PASSWORD:-}
       - LIBRE_LINK_UP_URL=${LIBRE_LINK_UP_URL:-https://api.libreview.io}
       - LIBRE_LINK_UP_VERSION=${LIBRE_LINK_UP_VERSION:-4.16.0}
+      - LIBRE_ENABLED=${LIBRE_ENABLED:-true}
       - DATA_DIR=/data
     volumes:
       - ${DATA_PATH:-./data}:/data
-    depends_on:
-      - signal
-    networks:
-      - k90
     restart: unless-stopped

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 from fetch_libre import sync_libre_to_db
 from .db import get_conn
@@ -10,6 +11,11 @@ from .time_utils import now_local, today_local
 
 log = logging.getLogger(__name__)
 SYNC_SOURCE = "libre"
+
+
+def is_enabled() -> bool:
+    """Return whether Libre fetching is enabled through the environment."""
+    return os.getenv("LIBRE_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
 
 
 def _aggregate_stats(result: dict) -> dict:
@@ -73,6 +79,8 @@ def get_sync_status() -> dict | None:
 
 
 def should_auto_sync() -> bool:
+    if not is_enabled():
+        return False
     status = get_sync_status()
     return not status or status.get("last_success_date") != today_local()
 
@@ -87,10 +95,20 @@ def mark_summary_refreshed() -> None:
 
 
 def sync_libre_data(trigger: str = "manual") -> dict:
+    if not is_enabled():
+        log.info("libre.sync skipped trigger=%s reason=disabled", trigger)
+        return {"ok": True, "disabled": True, "message": "Synchronizacja Libre jest wyłączona.", "datasets": {}}
+
     started_at = now_local().isoformat()
     _set_sync_status(last_started_at=started_at, last_status=f"running:{trigger}", last_error=None)
     log.info("libre.sync start trigger=%s", trigger)
-    result = sync_libre_to_db()
+    try:
+        result = sync_libre_to_db()
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+        _set_sync_status(last_status=f"error:{trigger}", last_error=error)
+        log.exception("libre.sync trigger=%s error=%s", trigger, error)
+        return {"error": error}
     if "error" in result:
         _set_sync_status(last_status=f"error:{trigger}", last_error=result["error"])
         log.error("libre.sync trigger=%s error=%s", trigger, result["error"])

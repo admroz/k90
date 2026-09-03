@@ -76,3 +76,15 @@ def test_sync_garmin_to_db_uses_fresh_end_date_each_call(monkeypatch, temp_db):
     result = fetch_garmin.sync_garmin_to_db(end_date=None)
 
     assert result["end_date"] == "2026-03-19"
+
+
+def test_garmin_sync_converts_unexpected_exception_to_error(monkeypatch, temp_db):
+    monkeypatch.setattr(
+        "tools.garmin.sync_garmin_to_db",
+        lambda: (_ for _ in ()).throw(RuntimeError("rate limited")),
+    )
+
+    result = sync_garmin_data(trigger="test")
+
+    assert result == {"error": "RuntimeError: rate limited"}
+    assert get_sync_status()["last_status"] == "error:test"

@@ -60,13 +60,8 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
   Minimum: `bash` i `sqlite3` w kontenerze lub równoważna ścieżka diagnostyczna.
   Cel: szybkie sprawdzenie `posilki`, `waga`, `sync_status`, `patient_summary` bez ręcznego kopiowania plików.
 
-- [ ] Dodać alternatywny kanał komunikacji przez Telegram.
-  Etap 1: Telegram równolegle do Signal.
-  Etap 2: ocena czy Signal można uprościć albo całkiem wyłączyć.
-  Powód: Signal działa, ale kontener jest ciężki i wymaga numeru telefonu; bot Telegram może uprościć deployment.
-
-- [ ] Obsługa PDF przez Signal lub docelowo także przez inne kanały.
-  Trzeba sprawdzić jak `signal-cli-rest-api` zwraca PDF i jak przekazać go do modelu.
+- [ ] Obsługa PDF przez Telegram.
+  Trzeba pobrać dokument przez Bot API i ustalić sposób przekazania go do modelu.
 
 - [ ] Lepsze rozpoznawanie typu załącznika.
   Agent powinien rozróżniać: posiłek, dokument medyczny, inne zdjęcie.
@@ -75,7 +70,7 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
   Notatka historyczna: Haiku mylił ryż brązowy z makaronem; do porównania np. Sonnet.
 
 - [ ] Raporty tygodniowe i miesięczne.
-  Warianty: PDF, wykresy matplotlib, krótkie podsumowania przez Signal lub frontend.
+  Warianty: PDF, wykresy matplotlib, krótkie podsumowania przez Telegram lub frontend.
 
 - [ ] Powiadomienia proaktywne.
   Przykład: poranny skrót z wagą, HRV i planem dnia.
@@ -114,6 +109,18 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
 
 ## Done
 
+### 2026-09-03
+
+- [x] Zastąpiony Signal przez Telegram Bot API z long pollingiem.
+  Efekt: jeden kontener aplikacji, brak osobnego numeru telefonu, webhooka i publicznego portu.
+  Transport obsługuje tekst, komendy slash, zdjęcia, whitelistę właściciela i dzielenie długich odpowiedzi.
+
+- [x] Błąd odświeżania patient summary przy starcie nie blokuje już uruchomienia transportu wiadomości.
+
+- [x] Dodany przełącznik `LIBRE_ENABLED`; wyłącza wszystkie ścieżki pobierania Libre bez usuwania danych historycznych.
+
+- [x] Nieoczekiwany wyjątek synchronizacji Garmin lub Libre nie przerywa już obsługi wiadomości agenta.
+
 ### 2026-03-19
 
 - [x] Dodany ręczny backup SQLite przez komendę `/backup`.
@@ -124,7 +131,7 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
   - mechanizm jest wspólny pod przyszły cron / scheduler.
 
 - [x] Ustawiona i zweryfikowana poprawna strefa czasowa w całej aplikacji.
-  Efekt: jedna spójna data/godzina w Signal, SQLite, sync Garmin i odpowiedziach agenta.
+  Efekt: jedna spójna data/godzina w komunikatorze, SQLite, sync Garmin i odpowiedziach agenta.
 
 - [x] Poprawiony kontekst krótkoterminowy agenta przy rozmowie o jedzeniu i zdrowiu.
   Efekt: agent dostaje skrót z ostatnich dni zamiast polegać wyłącznie na gołej historii rozmowy.
@@ -163,4 +170,4 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
 
 - [x] Agent zapisuje historię rozmów, patient summary i dane zdrowotne w SQLite.
 
-- [x] Agent obsługuje obrazy w Signal i potrafi analizować zdjęcia posiłków.
+- [x] Agent obsługuje obrazy z komunikatora i potrafi analizować zdjęcia posiłków.

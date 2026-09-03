@@ -1,16 +1,15 @@
-"""k90 — serwer agenta (LiteLLM + Signal WebSocket)."""
+"""k90 — Telegram long-polling transport for the health agent."""
 
 from __future__ import annotations
 
 import base64
-import json
 import logging
 import os
 import threading
 import time
+from typing import Any
 
 import requests
-import websocket
 from dotenv import load_dotenv
 
 from agent import run_agent
@@ -25,91 +24,168 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-SIGNAL_API_URL = os.getenv("SIGNAL_CLI_REST_API_URL", "http://signal:8080")
-SIGNAL_BOT_NUMBER = os.getenv("SIGNAL_PHONE_NUMBER", "")
-ALLOWED_SENDER = os.getenv("SIGNAL_ALLOWED_SENDER", "")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_ALLOWED_USER_ID = os.getenv("TELEGRAM_ALLOWED_USER_ID", "")
+CONVERSATION_USER_ID = os.getenv("CONVERSATION_USER_ID", "owner")
+TELEGRAM_POLL_TIMEOUT = int(os.getenv("TELEGRAM_POLL_TIMEOUT", "30"))
+TELEGRAM_MESSAGE_LIMIT = 4096
 
 
-def download_attachment(attachment_id: str) -> tuple[bytes, str]:
-    """Pobiera załącznik z signal-cli-rest-api. Zwraca (bytes, mime_type)."""
-    response = requests.get(f"{SIGNAL_API_URL}/v1/attachments/{attachment_id}", timeout=30)
-    response.raise_for_status()
-    mime_type = response.headers.get("Content-Type", "image/jpeg").split(";")[0]
-    return response.content, mime_type
+class TelegramAPIError(RuntimeError):
+    """Telegram Bot API error safe to log without exposing the bot token."""
 
 
-def handle_message(envelope: dict) -> None:
-    data_message = envelope.get("dataMessage", {})
-    text = (data_message.get("message") or "").strip()
-    attachments = data_message.get("attachments", [])
+class TelegramAPI:
+    def __init__(self, token: str) -> None:
+        self._api_url = f"https://api.telegram.org/bot{token}"
+        self._file_url = f"https://api.telegram.org/file/bot{token}"
+        self._session = requests.Session()
 
-    if not text and not attachments:
-        return
+    def call(self, method: str, *, request_timeout: int = 40, **params: Any) -> Any:
+        try:
+            response = self._session.post(f"{self._api_url}/{method}", json=params, timeout=request_timeout)
+        except requests.RequestException as exc:
+            raise TelegramAPIError(f"{method}: network error ({type(exc).__name__})") from None
 
-    sender_number = envelope.get("sourceNumber")
-    sender_uuid = envelope.get("sourceUuid", "")
+        try:
+            payload = response.json()
+        except ValueError:
+            raise TelegramAPIError(f"{method}: invalid response (HTTP {response.status_code})") from None
 
-    if ALLOWED_SENDER and sender_number != ALLOWED_SENDER:
-        log.warning("signal.reject sender=%s uuid=%s", sender_number, sender_uuid)
-        return
+        if not response.ok or not payload.get("ok"):
+            description = payload.get("description", f"HTTP {response.status_code}")
+            raise TelegramAPIError(f"{method}: {description}")
+        return payload.get("result")
 
-    sender = sender_number or sender_uuid
-    log.info(
-        "signal.message sender=%s text_chars=%d attachments=%d",
-        sender,
-        len(text),
-        len(attachments),
-    )
+    def get_updates(self, offset: int | None) -> list[dict]:
+        params: dict[str, Any] = {"timeout": TELEGRAM_POLL_TIMEOUT, "allowed_updates": ["message"]}
+        if offset is not None:
+            params["offset"] = offset
+        return self.call("getUpdates", request_timeout=TELEGRAM_POLL_TIMEOUT + 10, **params)
 
-    command_response = handle_command(text) if text else None
-    if command_response is not None:
-        send_signal_message(sender, command_response)
-        return
+    def send_text(self, chat_id: int, message: str) -> None:
+        for chunk in split_message(message):
+            self.call("sendMessage", chat_id=chat_id, text=chunk)
+            log.info("telegram.sent chat_id=%s chars=%d", chat_id, len(chunk))
 
+    def download_file(self, file_id: str) -> tuple[bytes, str]:
+        file_info = self.call("getFile", file_id=file_id)
+        file_path = file_info.get("file_path") if isinstance(file_info, dict) else None
+        if not file_path:
+            raise TelegramAPIError("getFile: missing file_path")
+        try:
+            response = self._session.get(f"{self._file_url}/{file_path}", timeout=30)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise TelegramAPIError(f"download file: network error ({type(exc).__name__})") from None
+        mime_type = response.headers.get("Content-Type", "image/jpeg").split(";", 1)[0]
+        return response.content, mime_type
+
+
+def split_message(message: str, limit: int = TELEGRAM_MESSAGE_LIMIT) -> list[str]:
+    """Split a response into Telegram-sized chunks, preferring line boundaries."""
+    if not message:
+        return ["Przepraszam, nie mam odpowiedzi do wysłania."]
+    chunks = []
+    remaining = message
+    while len(remaining) > limit:
+        split_at = remaining.rfind("\n", 0, limit + 1)
+        if split_at < limit // 2:
+            split_at = remaining.rfind(" ", 0, limit + 1)
+        if split_at < limit // 2:
+            split_at = limit
+        chunks.append(remaining[:split_at].rstrip())
+        remaining = remaining[split_at:].lstrip()
+    if remaining:
+        chunks.append(remaining)
+    return chunks
+
+
+def _sync_health_data(api: TelegramAPI, chat_id: int, sender: str) -> tuple[str, str]:
     sync_warning = ""
     sync_notice = ""
     garmin_due = should_auto_sync_today()
     libre_due = should_auto_sync_libre()
-    if garmin_due or libre_due:
-        send_signal_message(sender, "Aktualizuję dane zdrowotne, odpowiem za chwilę.")
+    if not (garmin_due or libre_due):
+        return sync_warning, sync_notice
 
-        errors = []
-        changed_sources = []
+    api.send_text(chat_id, "Aktualizuję dane zdrowotne, odpowiem za chwilę.")
+    errors = []
+    changed_sources = []
 
-        if garmin_due:
-            garmin_result = sync_garmin_data(trigger="auto_daily")
-            if "error" in garmin_result:
-                errors.append("Garmin")
-                log.warning("garmin.auto_sync_failed sender=%s error=%s", sender, garmin_result["error"])
-            elif sync_has_changes(garmin_result):
-                changed_sources.append("Garmin")
-                mark_summary_refreshed()
-                log.info("garmin.auto_sync_refreshed sender=%s", sender)
-            else:
-                log.info("garmin.auto_sync_no_changes sender=%s", sender)
+    if garmin_due:
+        garmin_result = sync_garmin_data(trigger="auto_daily")
+        if "error" in garmin_result:
+            errors.append("Garmin")
+            log.warning("garmin.auto_sync_failed sender=%s error=%s", sender, garmin_result["error"])
+        elif sync_has_changes(garmin_result):
+            changed_sources.append("Garmin")
+            mark_summary_refreshed()
+        else:
+            log.info("garmin.auto_sync_no_changes sender=%s", sender)
 
-        if libre_due:
-            libre_result = sync_libre_data(trigger="auto_stale")
-            if "error" in libre_result:
-                errors.append("Libre")
-                log.warning("libre.auto_sync_failed sender=%s error=%s", sender, libre_result["error"])
-            elif libre_sync_has_changes(libre_result):
-                changed_sources.append("Libre")
-                log.info("libre.auto_sync_refreshed sender=%s", sender)
-            else:
-                log.info("libre.auto_sync_no_changes sender=%s", sender)
+    if libre_due:
+        libre_result = sync_libre_data(trigger="auto_stale")
+        if "error" in libre_result:
+            errors.append("Libre")
+            log.warning("libre.auto_sync_failed sender=%s error=%s", sender, libre_result["error"])
+        elif libre_sync_has_changes(libre_result):
+            changed_sources.append("Libre")
+        else:
+            log.info("libre.auto_sync_no_changes sender=%s", sender)
 
-        if changed_sources:
-            if "Garmin" in changed_sources:
-                refresh_patient_summary(trigger="auto_sync")
-            sync_notice = f"Mam nowe dane ({', '.join(changed_sources)}) i uwzględniam je w odpowiedzi.\n\n"
-        elif errors:
-            sync_warning = f"Uwaga: synchronizacja danych ({', '.join(errors)}) nie powiodła się; odpowiedź może bazować na starszych danych.\n\n"
+    if changed_sources:
+        if "Garmin" in changed_sources:
+            refresh_patient_summary(trigger="auto_sync")
+        sync_notice = f"Mam nowe dane ({', '.join(changed_sources)}) i uwzględniam je w odpowiedzi.\n\n"
+    elif errors:
+        sync_warning = f"Uwaga: synchronizacja danych ({', '.join(errors)}) nie powiodła się; odpowiedź może bazować na starszych danych.\n\n"
+    return sync_warning, sync_notice
+
+
+def _image_from_message(message: dict) -> tuple[str, str] | None:
+    photos = message.get("photo") or []
+    if photos:
+        return photos[-1]["file_id"], "image/jpeg"
+    document = message.get("document") or {}
+    mime_type = document.get("mime_type", "")
+    if document.get("file_id") and mime_type.startswith("image/"):
+        return document["file_id"], mime_type
+    return None
+
+
+def handle_telegram_message(api: TelegramAPI, message: dict) -> None:
+    chat = message.get("chat") or {}
+    sender_data = message.get("from") or {}
+    chat_id = chat.get("id")
+    sender_id = sender_data.get("id")
+    if chat_id is None or sender_id is None:
+        return
+    if chat.get("type") != "private":
+        log.warning("telegram.reject reason=non_private chat_id=%s user_id=%s", chat_id, sender_id)
+        return
+    if str(sender_id) != TELEGRAM_ALLOWED_USER_ID:
+        log.warning("telegram.reject reason=not_allowed chat_id=%s user_id=%s", chat_id, sender_id)
+        return
+
+    text = (message.get("text") or message.get("caption") or "").strip()
+    image = _image_from_message(message)
+    if not text and not image:
+        return
+    log.info("telegram.message chat_id=%s user_id=%s text_chars=%d image=%s", chat_id, sender_id, len(text), bool(image))
+
+    command_response = handle_command(text) if text else None
+    if command_response is not None:
+        api.send_text(chat_id, command_response)
+        return
+
+    sender = CONVERSATION_USER_ID or f"telegram:{sender_id}"
+    sync_warning, sync_notice = _sync_health_data(api, chat_id, sender)
 
     content_parts = []
     if text:
         content_parts.append({"type": "text", "text": text})
-    elif attachments:
+    elif image:
         content_parts.append({
             "type": "text",
             "text": (
@@ -120,30 +196,21 @@ def handle_message(envelope: dict) -> None:
             ),
         })
 
-    image_count = 0
-    for attachment in attachments:
-        content_type = attachment.get("contentType", "")
-        if not content_type.startswith("image/"):
-            log.info("signal.attachment skipped content_type=%s", content_type)
-            continue
-        attachment_id = attachment.get("id")
-        if not attachment_id:
-            continue
+    if image:
+        file_id, declared_mime_type = image
         try:
-            image_bytes, mime_type = download_attachment(attachment_id)
+            image_bytes, downloaded_mime_type = api.download_file(file_id)
+            mime_type = downloaded_mime_type if downloaded_mime_type.startswith("image/") else declared_mime_type
             encoded = base64.b64encode(image_bytes).decode()
-            content_parts.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:{mime_type};base64,{encoded}"},
-            })
-            image_count += 1
-            log.info("signal.attachment image mime=%s bytes=%d", mime_type, len(image_bytes))
+            content_parts.append({"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{encoded}"}})
+            log.info("telegram.image mime=%s bytes=%d", mime_type, len(image_bytes))
         except Exception as exc:
-            log.error("signal.attachment_error id=%s error=%s", attachment_id, exc)
+            log.error("telegram.image_error error=%s", exc)
+            if not text:
+                api.send_text(chat_id, "Nie udało mi się pobrać załączonego obrazu. Spróbuj wysłać go ponownie.")
+                return
 
-    if not content_parts:
-        return
-
+    user_message: str | list[dict]
     if len(content_parts) == 1 and content_parts[0]["type"] == "text":
         user_message = content_parts[0]["text"]
     else:
@@ -160,77 +227,59 @@ def handle_message(envelope: dict) -> None:
         response = sync_warning + response
     elif sync_notice:
         response = sync_notice + response
-
-    send_signal_message(sender, response)
+    api.send_text(chat_id, response)
 
     if should_refresh:
         log.info("summary.async_refresh trigger=tool_call sender=%s", sender)
-        threading.Thread(
-            target=refresh_patient_summary,
-            kwargs={"trigger": "tool_call"},
-            daemon=True,
-        ).start()
-
-    log.info("signal.response sender=%s chars=%d images=%d refresh=%s", sender, len(response), image_count, should_refresh)
+        threading.Thread(target=refresh_patient_summary, kwargs={"trigger": "tool_call"}, daemon=True).start()
+    log.info("telegram.response chat_id=%s chars=%d refresh=%s", chat_id, len(response), should_refresh)
 
 
-def send_signal_message(recipient: str, message: str) -> None:
-    url = f"{SIGNAL_API_URL}/v2/send"
-    payload = {"message": message, "number": SIGNAL_BOT_NUMBER, "recipients": [recipient]}
-    try:
-        response = requests.post(url, json=payload, timeout=30)
-        response.raise_for_status()
-        log.info("signal.sent recipient=%s chars=%d", recipient, len(message))
-    except requests.HTTPError as exc:
-        log.error("signal.send_http_error recipient=%s error=%s body=%s", recipient, exc, exc.response.text)
-    except Exception as exc:
-        log.error("signal.send_error recipient=%s error=%s", recipient, exc)
-
-
-def on_message(ws, raw):
-    try:
-        data = json.loads(raw)
-        envelope = data.get("envelope", {})
-        if "dataMessage" in envelope:
-            threading.Thread(target=handle_message, args=(envelope,), daemon=True).start()
-    except Exception as exc:
-        log.error("signal.parse_error error=%s", exc)
-
-
-def on_error(ws, error):
-    log.error("signal.websocket_error error=%s", error)
-
-
-def on_close(ws, code, msg):
-    log.warning("signal.websocket_closed code=%s msg=%s", code, msg)
-
-
-def on_open(ws):
-    log.info("signal.websocket_connected")
-
-
-def connect_websocket() -> None:
-    ws_url = SIGNAL_API_URL.replace("http://", "ws://").replace("https://", "wss://")
-    ws_url = f"{ws_url}/v1/receive/{SIGNAL_BOT_NUMBER}"
-    log.info("signal.websocket_connect url=%s", ws_url)
+def run_polling(api: TelegramAPI) -> None:
+    offset = None
+    retry_delay = 1
     while True:
         try:
-            ws = websocket.WebSocketApp(
-                ws_url,
-                on_open=on_open,
-                on_message=on_message,
-                on_error=on_error,
-                on_close=on_close,
-            )
-            ws.run_forever(ping_interval=30, ping_timeout=10)
-        except Exception as exc:
-            log.error("signal.websocket_exception error=%s", exc)
-        log.info("signal.websocket_reconnect_in seconds=5")
-        time.sleep(5)
+            updates = api.get_updates(offset)
+            retry_delay = 1
+            for update in updates:
+                update_id = update.get("update_id")
+                try:
+                    message = update.get("message")
+                    if message:
+                        handle_telegram_message(api, message)
+                except Exception as exc:
+                    log.exception("telegram.update_error update_id=%s error=%s", update_id, exc)
+                finally:
+                    if isinstance(update_id, int):
+                        offset = update_id + 1
+        except TelegramAPIError as exc:
+            log.error("telegram.poll_error error=%s retry_in=%s", exc, retry_delay)
+            time.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, 30)
+
+
+def main() -> None:
+    if not TELEGRAM_BOT_TOKEN:
+        raise SystemExit("TELEGRAM_BOT_TOKEN is required")
+    if not TELEGRAM_ALLOWED_USER_ID:
+        log.warning(
+            "telegram.allowed_user_missing; messages will be rejected. "
+            "Send a message to the bot, read user_id from the log, set TELEGRAM_ALLOWED_USER_ID and restart."
+        )
+    init_db()
+    try:
+        maybe_refresh_summary()
+    except Exception as exc:
+        log.exception("summary.startup_refresh_failed error=%s", exc)
+    api = TelegramAPI(TELEGRAM_BOT_TOKEN)
+    bot = api.call("getMe")
+    log.info("telegram.connected bot=@%s", bot.get("username", "unknown"))
+    try:
+        run_polling(api)
+    except KeyboardInterrupt:
+        log.info("telegram.stopped")
 
 
 if __name__ == "__main__":
-    log.info("server.start bot=%s", SIGNAL_BOT_NUMBER)
-    init_db()
-    maybe_refresh_summary()
-    connect_websocket()
+    main()
