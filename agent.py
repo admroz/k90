@@ -39,6 +39,17 @@ MAX_TOOL_ROUNDS = 10
 SUMMARY_REFRESH_TRIGGERS = {"sync_garmin_data", "update_patient_file", "refresh_patient_summary"}
 
 
+def _completion_options(model: str) -> dict:
+    """Return endpoint-compatible options for the configured chat model."""
+    model_name = model.rsplit("/", 1)[-1]
+    if model_name.startswith("gpt-5.6"):
+        # GPT-5.6 function tools with reasoning require the Responses API.
+        # This agent still uses Chat Completions, so preserve tool calling by
+        # explicitly using the non-reasoning mode.
+        return {"reasoning_effort": "none"}
+    return {}
+
+
 def _save_usage(model: str, prompt_tokens: int, completion_tokens: int) -> None:
     conn = get_conn()
     conn.execute(
@@ -123,10 +134,12 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
     messages = [{"role": "system", "content": system}] + history
     messages.append({"role": "user", "content": user_message})
 
+    completion_options = _completion_options(MODEL)
     log.info(
-        "agent.start user=%s model=%s input=%s history_records=%d context_sections=%d context_chars=%d summary_chars=%d",
+        "agent.start user=%s model=%s reasoning_effort=%s input=%s history_records=%d context_sections=%d context_chars=%d summary_chars=%d",
         user_id,
         MODEL,
+        completion_options.get("reasoning_effort", "default"),
         _message_kind(user_message),
         len(history),
         context_stats.get("sections", 0),
@@ -142,6 +155,7 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
             messages=messages,
             tools=TOOLS,
             tool_choice="auto",
+            **completion_options,
         )
         msg = response.choices[0].message
         messages.append(msg.model_dump(exclude_none=True))

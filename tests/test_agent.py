@@ -4,6 +4,15 @@ import agent
 from tools.db import get_conn
 
 
+def test_gpt_5_6_chat_completions_disables_reasoning_for_function_tools():
+    assert agent._completion_options("gpt-5.6") == {"reasoning_effort": "none"}
+    assert agent._completion_options("openai/gpt-5.6-sol") == {"reasoning_effort": "none"}
+
+
+def test_older_models_keep_their_default_completion_options():
+    assert agent._completion_options("gpt-5.4") == {}
+
+
 def test_load_history_limits_message_pairs_and_parses_json(monkeypatch, temp_db):
     monkeypatch.setattr(agent, "HISTORY_MESSAGES", 2)
 

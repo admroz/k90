@@ -32,6 +32,10 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
 - [ ] Uporządkować przejście na OpenAI API / Codex w pracy nad projektem i w samym agencie.
   Wyjaśnić decyzję architektoniczną: co zostaje w LiteLLM, a co przechodzi na bezpośrednie API OpenAI.
 
+- [ ] Przenieść pętlę GPT-5.6 z Chat Completions do Responses API.
+  Cel: function tools z reasoning (`low` lub `medium`) i poprawne przenoszenie reasoning items między rundami.
+  Do czasu migracji rodzina GPT-5.6 działa z `reasoning_effort=none`.
+
 ## Data Model
 
 - [ ] Przy migracji danych do bazy rozpocząć sensowną rozmowę o embeddings.

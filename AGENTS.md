@@ -123,3 +123,5 @@ Dane agenta (tworzone przez `init_db()`):
 | `GEMINI_API_KEY` | Klucz Google Gemini (opcjonalnie) | — |
 | `GARMIN_EMAIL` / `GARMIN_PASSWORD` | Dane logowania Garmin | — |
 | `LIBRE_ENABLED` | Włącza pobieranie i synchronizację Libre | `true` |
+
+Modele GPT-5.6 działają obecnie przez Chat Completions z `reasoning_effort=none`, aby zachować function calling. Włączenie reasoning dla tych modeli wymaga migracji pętli agenta do Responses API.

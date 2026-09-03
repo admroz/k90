@@ -80,6 +80,8 @@ GARMIN_PASSWORD=...
 LIBRE_ENABLED=true                     # false wyłącza pobieranie danych Libre
 ```
 
+Przy `AGENT_MODEL` z rodziny GPT-5.6 agent jawnie używa `reasoning_effort=none`, ponieważ obecna pętla korzysta z Chat Completions i function tools. Reasoning z narzędziami wymaga migracji pętli do Responses API.
+
 Komendy slash dostępne przez Telegram:
 
 - `/status` — szybkie podsumowanie: waga, kalorie z ostatnich dni, ostatnia aktywność
