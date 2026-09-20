@@ -95,6 +95,8 @@ def mark_summary_refreshed() -> None:
 
 
 def sync_libre_data(trigger: str = "manual") -> dict:
+    if os.getenv("K90_SYNC_ENABLED", "true").lower() == "false":
+        return {"error": "Synchronizacja jest wyłączona w lokalnej kopii danych."}
     if not is_enabled():
         log.info("libre.sync skipped trigger=%s reason=disabled", trigger)
         return {"ok": True, "disabled": True, "message": "Synchronizacja Libre jest wyłączona.", "datasets": {}}

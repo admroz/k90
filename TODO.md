@@ -4,6 +4,11 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
 
 ## Now
 
+- [ ] Ocenić lokalną wersję frontendu na branchu `codex/web-frontend`.
+  Implementacja i procedury: `WEB.md`. Dostęp tylko LAN, wspólna rozmowa WWW/Telegram,
+  dashboard, podgląd tabel i dokumentów. Jeden kontener, osobne procesy backendu i Telegrama.
+  Przed wdrożeniem: test obrazu ARM64, ręczna ocena UI i rzeczywisty agent na kopii danych.
+
 - [ ] Zaplanować przeniesienie trwałych danych z plików `.md` do SQLite.
   Dotyczy to zwłaszcza danych pacjenta i notatek, które dziś są rozproszone między bazą i plikami.
   Warunek: migracja bez utraty danych i bez pogorszenia edytowalności danych.
@@ -14,7 +19,8 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
 ## Next
 
 - [ ] Zbudować prosty frontend do podglądu danych live, dostępny tylko z sieci domowej.
-  Zakres początkowy: dashboard zdrowotny, lista posiłków, podstawowe operacje na posiłkach.
+  Pierwsza wersja gotowa do lokalnej weryfikacji: chat, dashboard, lista posiłków,
+  tabele i dokumenty. Formularze edycji posiłków w dalszym etapie.
   Inspiracja: dawne `prywatne/dashboard.html` i `prywatne/dieta.html`, ale na żywych danych z bazy.
 
 - [ ] Dodać bezpieczny live-wgląd w bazę przez osobne narzędzie lub kontener.
@@ -50,13 +56,14 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
   Na start wystarczy dostęp tylko z sieci domowej i proste hasło albo reverse proxy z auth.
 
 - [ ] Udostępnić przez frontend podgląd live danych zdrowotnych i historii posiłków.
-  Priorytet wyżej niż chat przez WWW.
+  Razem z chatem w podstawowym zakresie; trwa lokalna weryfikacja.
 
 - [ ] Dodać możliwość podstawowej edycji posiłków z poziomu frontendowego UI.
   Przykład: lista, szczegóły, usuwanie, korekta opisu i makro.
 
 - [ ] Rozważyć chat z agentem przez frontend.
-  To jest niski priorytet; najpierw podgląd i operacje administracyjne.
+  Ustalony podstawowy zakres: jedna wspólna rozmowa i historia z Telegramem.
+  Implementacja na branchu `codex/web-frontend`; do oceny przed wdrożeniem.
 
 ## Later
 

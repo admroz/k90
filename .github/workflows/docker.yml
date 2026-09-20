@@ -2,7 +2,7 @@ name: Build & Push Docker image
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'codex/**']
   pull_request:
   workflow_dispatch:
 
@@ -22,13 +22,27 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pytest
+          pip install -r requirements-dev.txt
 
       - name: Run tests
         run: pytest -q
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check frontend JavaScript
+        run: |
+          node --check web/app.js
+          node --test tests/web_render.test.mjs
+
+      - name: Build and exercise container without external network
+        run: |
+          docker build -t k90:test .
+          python scripts/smoke_container.py k90:test
+
   build:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-24.04-arm
     permissions:

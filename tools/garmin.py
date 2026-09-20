@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 from fetch_garmin import sync_garmin_to_db
 from .db import get_conn
@@ -88,6 +89,8 @@ def mark_summary_refreshed() -> None:
 
 def sync_garmin_data(trigger: str = "manual") -> dict:
     """Pobiera nowe dane z Garmin Connect i aktualizuje SQLite bez pośrednictwa CSV."""
+    if os.getenv("K90_SYNC_ENABLED", "true").lower() == "false":
+        return {"error": "Synchronizacja jest wyłączona w lokalnej kopii danych."}
     started_at = now_local().isoformat()
     _set_sync_status(last_started_at=started_at, last_status=f"running:{trigger}", last_error=None)
     log.info("garmin.sync start trigger=%s", trigger)

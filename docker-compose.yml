@@ -3,6 +3,9 @@ services:
     image: ${AGENT_IMAGE:-admroz/k90:latest}
     container_name: k90-agent
     environment:
+      - WEB_PASSWORD=${WEB_PASSWORD:?Set WEB_PASSWORD to at least 12 characters}
+      - WEB_COOKIE_SECURE=${WEB_COOKIE_SECURE:-true}
+      - TELEGRAM_ENABLED=${TELEGRAM_ENABLED:-true}
       - AGENT_MODEL=${AGENT_MODEL:-gpt-5.4}
       - SUMMARY_MODEL=${SUMMARY_MODEL:-gpt-5.4}
       - SUMMARY_MAX_AGE_DAYS=${SUMMARY_MAX_AGE_DAYS:-7}
@@ -28,4 +31,6 @@ services:
       - DATA_DIR=/data
     volumes:
       - ${DATA_PATH:-./data}:/data
+    ports:
+      - "${WEB_BIND_IP:-127.0.0.1}:${WEB_PORT:-8000}:8000"
     restart: unless-stopped

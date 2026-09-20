@@ -21,7 +21,7 @@ from system_prompt import SYSTEM_PROMPT
 from tools import TOOLS, execute_tool
 from tools.commands import handle_command
 from tools.context import build_operational_context
-from tools.db import get_conn, init_db
+from tools.db import MESSAGE_CONTEXT, get_conn, init_db
 from tools.garmin import mark_summary_refreshed, should_auto_sync_today, sync_garmin_data, sync_has_changes
 from tools.libre import should_auto_sync as should_auto_sync_libre, sync_libre_data, sync_has_changes as libre_sync_has_changes
 from tools.time_utils import now_local
@@ -88,13 +88,14 @@ def save_history(user_id: str, user_content, assistant_content: str) -> None:
     else:
         user_text = user_content
     conn = get_conn()
+    context = MESSAGE_CONTEXT.get()
     conn.execute(
-        "INSERT INTO conversations (user_id, role, content) VALUES (?, 'user', ?)",
-        (user_id, user_text),
+        "INSERT INTO conversations (user_id, role, content, channel, request_id) VALUES (?, 'user', ?, ?, ?)",
+        (user_id, user_text, context.get("channel"), context.get("request_id")),
     )
     conn.execute(
-        "INSERT INTO conversations (user_id, role, content) VALUES (?, 'assistant', ?)",
-        (user_id, assistant_content),
+        "INSERT INTO conversations (user_id, role, content, channel, request_id) VALUES (?, 'assistant', ?, ?, ?)",
+        (user_id, assistant_content, context.get("channel"), context.get("request_id")),
     )
     conn.commit()
     conn.close()

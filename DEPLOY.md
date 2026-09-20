@@ -5,7 +5,9 @@
 - Obraz budowany automatycznie przez GitHub Actions (push do `main`) na natywnym runnerze ARM64
 - Obraz publikowany przez GitHub Actions na Docker Hub: `admroz/k90:latest`
 - Dane (`data/` + `.env`) przenoszone raz ręcznie, potem trzymane na Synology
-- Komunikacja przez Telegram Bot API w trybie long polling; bez publicznego portu i dodatkowego kontenera
+- Jeden kontener z backendem WWW i adapterem Telegrama, nadzorowanymi osobno przez Supervisor.
+- Frontend tylko w LAN: port HTTP domyślnie na loopback NAS, HTTPS przez reverse proxy.
+- Nowa konfiguracja wymaga `WEB_PASSWORD` (minimum 12 znaków). Przygotowanie i testy: [WEB.md](WEB.md).
 
 ## Wymagania wstępne (jednorazowo)
 

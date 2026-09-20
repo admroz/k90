@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#183f36">
+  <title>k90 · Twoje zdrowie</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" type="module"></script>
+</head>
+<body>
+  <section id="login-view" class="login-layout">
+    <div class="login-art"><span class="brand">k90<span>●</span></span><h1>Małe kroki.<br>Pełniejszy obraz.</h1><p>Twoje dane, rozmowy i obserwacje.<br>W jednym spokojnym miejscu.</p><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div></div>
+    <form id="login-form" class="login-form"><span class="eyebrow">TWÓJ ASYSTENT ZDROWOTNY</span><h2>Dobrze Cię widzieć.</h2><p>Zaloguj się do swojego k90.</p><label for="password">Hasło</label><input id="password" name="password" type="password" autocomplete="current-password" required><button type="submit" class="primary">Wejdź do k90 <span>↗</span></button><p id="login-error" role="alert"></p><small>Prywatna przestrzeń w Twojej sieci domowej.</small></form>
+  </section>
+  <div id="app" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="#dashboard" aria-label="k90 — przegląd">k90<span>●</span></a>
+      <div class="sidebar-caption">TWOJA PRZESTRZEŃ</div>
+      <nav aria-label="Główna nawigacja">
+        <button data-view="dashboard" class="nav-button active"><span>◫</span> Przegląd</button>
+        <button data-view="chat" class="nav-button"><span>◌</span> Rozmowa</button>
+        <button data-view="data" class="nav-button"><span>▤</span> Dane</button>
+        <button data-view="documents" class="nav-button"><span>▧</span> Dokumenty</button>
+      </nav>
+      <div class="sidebar-bottom"><div class="connection"><i></i><span id="transport-status">Przestrzeń prywatna</span></div><button id="logout" class="text-button">Wyloguj się ↗</button></div>
+    </aside>
+    <main>
+      <header class="topbar"><span>ZDROWIE / <span id="breadcrumb">PRZEGLĄD</span></span><span id="today"></span></header>
+      <div id="mode-banner" class="mode-banner" hidden></div>
+      <div id="global-error" role="alert" hidden></div>
+      <section id="dashboard-view" class="view">
+        <div class="page-heading"><div><span class="eyebrow">CODZIENNY PUNKT ODNIESIENIA</span><h1>Twój przegląd zdrowia<span class="accent">.</span></h1><p>Spójrz na trendy. Zauważ, co się zmienia.</p></div><button id="refresh-dashboard" class="secondary">↻ Odśwież widok</button></div>
+        <div class="dashboard-toolbar"><div class="segmented" aria-label="Okres wykresów"><button data-days="7">7 dni</button><button data-days="30" class="selected">30 dni</button><button data-days="90">90 dni</button><button data-days="365">Rok</button></div><span id="date-range"></span></div>
+        <div id="kpis" class="kpi-grid"></div>
+        <div class="section-heading"><h2>Trendy w czasie</h2><span>Pomiary z wybranego okresu</span></div>
+        <div id="charts" class="chart-grid"></div>
+        <div class="bottom-grid"><section class="panel"><div class="panel-heading"><h2>Ostatnie posiłki</h2><button class="text-button" data-open-meals>Wszystkie ↗</button></div><div id="meals"></div></section><section class="panel"><div class="panel-heading"><h2>Aktualność danych</h2><button id="sync-data" class="text-button">Synchronizuj ↻</button></div><div id="sync-status"></div><p class="subtle">Odświeżenie widoku odczytuje bazę. Synchronizacja pobiera nowe dane ze źródeł.</p></section></div>
+      </section>
+      <section id="chat-view" class="view" hidden>
+        <div class="page-heading"><div><span class="eyebrow">WSPÓLNY KONTEKST</span><h1>Porozmawiajmy<span class="accent">.</span></h1><p>Jedna rozmowa — w przeglądarce i na Telegramie.</p></div></div>
+        <div class="chat-shell"><button id="older-messages" class="text-button">Wczytaj wcześniejsze wiadomości ↑</button><div id="messages" class="messages" aria-live="polite"></div><div id="jobs" aria-live="polite"></div><form id="chat-form" class="composer"><label class="sr-only" for="message">Wiadomość do agenta</label><textarea id="message" placeholder="Jak wyglądał mój ostatni tydzień?" rows="2" maxlength="16000"></textarea><div class="composer-actions"><label class="attachment" for="image">＋ Zdjęcie</label><input id="image" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only"><span id="attachment-name"></span><button id="remove-image" type="button" class="text-button" hidden>Usuń</button><button type="submit" class="primary" id="send-message">Wyślij ↗</button></div><p id="chat-error" role="alert"></p></form></div>
+      </section>
+      <section id="data-view" class="view" hidden>
+        <div class="page-heading"><div><span class="eyebrow">BLIŻEJ ŹRÓDŁA</span><h1>Twoje dane<span class="accent">.</span></h1><p>Surowe rekordy z bazy. Podgląd bez edycji.</p></div></div>
+        <form id="table-form" class="data-controls"><label>Tabela<select id="table-select"></select></label><label class="search-label">Szukaj w tabeli<input id="table-search" placeholder="Data, opis, wartość…" maxlength="200"></label><button class="secondary" type="submit">Szukaj</button></form>
+        <div class="table-wrap"><table id="raw-table"></table></div><div class="pagination"><span id="row-count"></span><div><button id="previous-page" class="secondary">← Poprzednia</button><button id="next-page" class="secondary">Następna →</button></div></div><p class="subtle">Kliknij nagłówek, aby zmienić sortowanie. Długie pola tekstowe pokazują pierwsze 4000 znaków.</p>
+      </section>
+      <section id="documents-view" class="view" hidden>
+        <div class="page-heading"><div><span class="eyebrow">PAMIĘĆ I OBSERWACJE</span><h1>Dokumenty<span class="accent">.</span></h1><p>Profil, notatki i podsumowanie, z których korzysta agent.</p></div></div>
+        <div class="document-layout"><nav id="document-list" aria-label="Dokumenty pacjenta"></nav><section class="panel document-panel"><div class="panel-heading"><div><h2 id="document-title"></h2><small id="document-date"></small></div><button id="toggle-raw" class="secondary">Pokaż źródło</button></div><article id="document-content" class="markdown"></article><pre id="document-raw" hidden></pre></section></div>
+      </section>
+      <footer>k90 <span>·</span> Więcej kontekstu. Lepsza rozmowa.</footer>
+    </main>
+  </div>
+</body>
+</html>
