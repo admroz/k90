@@ -6,6 +6,7 @@ import {
   chart,
   formatTimestamp
 } from "./render.mjs";
+import { createRequestId } from "./request.mjs";
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const labels = {
@@ -239,7 +240,7 @@ $("#sync-data").onclick = async () => {
     await api("/api/messages", {
       method: "POST",
       body: JSON.stringify({
-        request_id: `web:${crypto.randomUUID()}`,
+        request_id: createRequestId(),
         text: "/update"
       })
     });
@@ -294,7 +295,7 @@ $("#chat-form").onsubmit = async event => {
   b.disabled = true;
   try {
     pendingSubmission ||= {
-      request_id: `web:${crypto.randomUUID()}`,
+      request_id: createRequestId(),
       text: $("#message").value,
       image: imageData
     };

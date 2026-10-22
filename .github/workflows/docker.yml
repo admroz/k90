@@ -42,7 +42,7 @@ jobs:
       - name: Check frontend JavaScript
         run: |
           node --check web/app.js
-          node --test tests/web_render.test.mjs
+          node --test tests/web_*.test.mjs
 
       - name: Build and exercise container without external network
         run: |

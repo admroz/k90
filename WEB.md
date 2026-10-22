@@ -103,7 +103,7 @@ pozostaje do dalszego ustalenia. Dotychczasowy auto-sync przy rozmowie pozostaje
 ```bash
 .venv/bin/python -m pytest -q
 node --check web/app.js
-node --test tests/web_render.test.mjs
+node --test tests/web_*.test.mjs
 ```
 
 Testy używają tymczasowych baz, fikcyjnych danych i atrap usług. Obejmują m.in.
