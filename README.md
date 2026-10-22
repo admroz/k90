@@ -93,6 +93,21 @@ Komendy slash dostępne przez Telegram:
 
 ## Uruchomienie lokalne
 
+Frontend WWW można uruchomić lokalnie bez Dockera i bez Telegrama:
+
+```bash
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python dev.py
+# Lub na osobnej kopii backupu pobranego z NAS:
+.venv/bin/python dev.py --snapshot data/local-import.20260920
+```
+
+Adres: <http://127.0.0.1:8000>, lokalne hasło: `k90-local-preview`.
+Domyślnie chat jest demonstracyjny; `--live-agent` włącza model z `.env`.
+Szczegóły izolacji danych, architektury i testów: [WEB.md](WEB.md).
+
+Starszy tryb Telegram-only i CLI:
+
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
@@ -108,6 +123,9 @@ docker compose logs -f agent
 ```
 
 ### Pierwsze uruchomienie Telegrama
+
+Nowy obraz uruchamia backend WWW i adapter Telegrama w jednym kontenerze.
+Wymaga także `WEB_PASSWORD` (minimum 12 znaków); szczegóły HTTPS/LAN w [WEB.md](WEB.md).
 
 1. Napisz do `@BotFather`, wywołaj `/newbot` i wpisz otrzymany token jako `TELEGRAM_BOT_TOKEN`.
 2. Jeśli nie znasz swojego numerycznego Telegram user ID, uruchom bota bez `TELEGRAM_ALLOWED_USER_ID` i wyślij mu wiadomość. W logu `telegram.reject` pojawi się `user_id`.

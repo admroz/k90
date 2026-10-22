@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from contextvars import ContextVar
 from datetime import timedelta
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from .time_utils import APP_TIMEZONE, now_local
 _DEFAULT_DB_PATH = str(Path(__file__).parent.parent / "data" / "k90.db")
 _DB_PATH = os.getenv("DB_PATH", _DEFAULT_DB_PATH)
 _DEFAULT_BACKUP_RETENTION_DAYS = 30
+MESSAGE_CONTEXT = ContextVar("message_context", default={})
 
 
 def get_db_path() -> str:
@@ -163,5 +165,9 @@ def init_db():
             last_summary_refresh_at DATETIME
         );
     """)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(conversations)")}
+    for name in ("channel", "request_id"):
+        if name not in columns:
+            conn.execute(f"ALTER TABLE conversations ADD COLUMN {name} TEXT")
     conn.commit()
     conn.close()

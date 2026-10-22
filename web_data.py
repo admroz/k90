@@ -1,0 +1,170 @@
+"""Read-only views with explicit table and document allowlists."""
+
+import json
+from contextlib import closing
+from datetime import timedelta
+
+from tools.db import get_conn, get_data_dir
+from tools.patient import ALLOWED_FILES
+from tools.time_utils import now_local
+
+TABLES = (
+    "waga",
+    "cisnienie",
+    "sen",
+    "hrv",
+    "body_battery",
+    "aktywnosci",
+    "metryki_dzienne",
+    "posilki",
+    "glukoza_libre",
+    "wyniki_lab",
+    "conversations",
+    "patient_summary",
+    "sync_status",
+    "usage_stats",
+)
+
+
+def read_table(table, limit=50, offset=0, sort=None, descending=True, search=""):
+    if table not in TABLES:
+        raise ValueError("Nieznana tabela")
+    with closing(get_conn()) as conn:
+        conn.execute("PRAGMA query_only = ON")
+        columns = [row[1] for row in conn.execute(f'PRAGMA table_info("{table}")')]
+        sort = sort or (
+            "data"
+            if "data" in columns
+            else "timestamp"
+            if "timestamp" in columns
+            else columns[0]
+        )
+        if sort not in columns:
+            raise ValueError("Nieznana kolumna sortowania")
+        clause, params = "", []
+        if search:
+            clause = " WHERE " + " OR ".join(
+                f"CAST(\"{col}\" AS TEXT) LIKE ? ESCAPE '\\'" for col in columns
+            )
+            escaped = (
+                search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            )
+            params = [f"%{escaped}%"] * len(columns)
+        total = conn.execute(
+            f'SELECT COUNT(*) FROM "{table}"{clause}', params
+        ).fetchone()[0]
+        # Bound text sizes in the raw view (legacy conversations can contain base64 images).
+        selection = ", ".join(
+            f'CASE WHEN typeof("{col}") = \'text\' THEN substr("{col}", 1, 4000) ELSE "{col}" END AS "{col}"'
+            for col in columns
+        )
+        rows = conn.execute(
+            f'SELECT {selection} FROM "{table}"{clause} ORDER BY "{sort}" {"DESC" if descending else "ASC"}, rowid LIMIT ? OFFSET ?',
+            [*params, limit, offset],
+        ).fetchall()
+    return {
+        "columns": columns,
+        "rows": [dict(row) for row in rows],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+def document(name):
+    if name == "patient_summary":
+        with closing(get_conn()) as conn:
+            row = conn.execute(
+                "SELECT content, updated_at FROM patient_summary WHERE id = 1"
+            ).fetchone()
+        return {
+            "name": name,
+            "content": row[0] if row else "",
+            "updated_at": row[1] if row else None,
+        }
+    if name not in ALLOWED_FILES:
+        raise ValueError("Nieznany dokument")
+    root = get_data_dir().resolve()
+    path = root / name
+    if path.is_symlink() or path.resolve().parent != root:
+        raise ValueError("Niedozwolona ścieżka dokumentu")
+    return {
+        "name": name,
+        "content": path.read_text() if path.exists() else "",
+        "updated_at": path.stat().st_mtime if path.exists() else None,
+    }
+
+
+def history_content(raw):
+    if isinstance(raw, list):
+        parts = raw
+    else:
+        try:
+            parts = json.loads(raw)
+        except (ValueError, TypeError):
+            return {"text": str(raw or ""), "has_image": False}
+    if not isinstance(parts, list):
+        return {"text": str(raw or ""), "has_image": False}
+    if not all(isinstance(part, dict) for part in parts):
+        return {"text": str(raw), "has_image": False}
+    return {
+        "text": "\n".join(
+            str(part.get("text", "")) for part in parts if part.get("type") == "text"
+        ),
+        "has_image": any(part.get("type") == "image_url" for part in parts),
+    }
+
+
+def dashboard(days):
+    start = (now_local().date() - timedelta(days=days - 1)).isoformat()
+    end = now_local().date().isoformat()
+    with closing(get_conn()) as conn:
+        result = {}
+        for table in (
+            "waga",
+            "cisnienie",
+            "sen",
+            "hrv",
+            "body_battery",
+            "metryki_dzienne",
+            "aktywnosci",
+            "posilki",
+        ):
+            result[table] = [
+                dict(row)
+                for row in conn.execute(
+                    f'SELECT * FROM "{table}" WHERE data BETWEEN ? AND ? ORDER BY data, rowid',
+                    (start, end),
+                )
+            ]
+        result["kalorie"] = [
+            dict(row)
+            for row in conn.execute(
+                "SELECT data, SUM(kalorie) AS kcal, SUM(bialko_g) AS bialko, SUM(weglowodany_g) AS weglowodany, SUM(tluszcze_g) AS tluszcze FROM posilki WHERE data BETWEEN ? AND ? GROUP BY data ORDER BY data",
+                (start, end),
+            )
+        ]
+        # Prefer latest over graph for duplicate timestamps. Hourly aggregates keep long ranges small.
+        result["glukoza"] = [
+            dict(row)
+            for row in conn.execute(
+                """
+            WITH readings AS (
+                SELECT *, ROW_NUMBER() OVER (PARTITION BY timestamp ORDER BY CASE source_kind WHEN 'latest' THEN 0 ELSE 1 END) AS n
+                FROM glukoza_libre WHERE data BETWEEN ? AND ?
+            ) SELECT substr(data || 'T' || czas, 1, 13) || ':00' AS data, AVG(glukoza_mg_dl) AS glukoza
+              FROM readings WHERE n = 1 GROUP BY substr(data || 'T' || czas, 1, 13) ORDER BY data
+        """,
+                (start, end),
+            )
+        ]
+        result["sync"] = [
+            dict(row) for row in conn.execute("SELECT * FROM sync_status")
+        ]
+        result["latest"] = {}
+        for table in ("waga", "sen", "hrv", "cisnienie"):
+            row = conn.execute(
+                f'SELECT * FROM "{table}" ORDER BY data DESC, rowid DESC LIMIT 1'
+            ).fetchone()
+            result["latest"][table] = dict(row) if row else None
+    return {**result, "from": start, "to": end, "days": days}

@@ -5,7 +5,9 @@
 - Obraz `linux/amd64` budowany automatycznie przez GitHub Actions (push do `main`) na natywnym runnerze `ubuntu-24.04`
 - Obraz publikowany przez GitHub Actions na Docker Hub: `admroz/k90:latest`
 - Dane (`data/` + `.env`) przenoszone raz ręcznie, potem trzymane na Lenovo
-- Komunikacja przez Telegram Bot API w trybie long polling; bez publicznego portu i dodatkowego kontenera
+- Jeden kontener z backendem WWW i adapterem Telegrama, nadzorowanymi osobno przez Supervisor.
+- Frontend tylko w LAN: port HTTP domyślnie na loopback serwera, HTTPS przez reverse proxy.
+- Nowa konfiguracja wymaga `WEB_PASSWORD` (minimum 12 znaków). Przygotowanie i testy: [WEB.md](WEB.md).
 
 Konfiguracja ARM64 dla Synology pozostaje zakomentowana w macierzach `test` i `build`
 w `.github/workflows/docker.yml`. Aby ją przywrócić, odkomentuj oba wpisy. ARM otrzyma
@@ -33,6 +35,22 @@ nie aktualizuje działającego kontenera na żadnym serwerze.
 ## Wymagania wstępne (jednorazowo)
 
 1. Publiczny obraz `admroz/k90:latest` nie wymaga logowania do rejestru na Lenovo.
+
+## Frontend w LAN
+
+Mapowanie portu jest już w Compose. Dla bezpośredniego HTTP w zaufanym LAN ustaw
+w `.env` poniższe wartości (adres zastąp adresem Lenovo):
+
+```dotenv
+WEB_BIND_IP=192.168.0.100
+WEB_PORT=8000
+WEB_COOKIE_SECURE=false
+WEB_PASSWORD=tu-ustaw-wlasne-dlugie-haslo
+```
+
+Po `docker compose up -d agent` frontend będzie dostępny pod
+`http://192.168.0.100:8000`. Hasło musi mieć co najmniej 12 znaków.
+Przy dostępie przez HTTPS zostaw `WEB_COOKIE_SECURE=true` i skonfiguruj reverse proxy.
 
 ## Historyczna konfiguracja Synology (ARM64)
 

@@ -1,5 +1,20 @@
 # k90 — architektura projektu
 
+## Frontend WWW
+
+- `webapp.py`, `web_runtime.py`, `web_data.py`: API FastAPI, trwała kolejka wiadomości,
+  jeden worker agenta oraz kontrolowany odczyt danych i dokumentów.
+- `web/`: statyczny frontend bez CDN i bez wymaganego serwera Node.
+- `telegram_adapter.py`: transport Telegrama korzystający z wewnętrznego API backendu.
+- `supervisord.conf`: jeden kontener, niezależne procesy backendu i adaptera.
+- `dev.py --snapshot <katalog>`: lokalna kopia robocza pobranego backupu; Telegram
+  i sync źródeł wyłączone. Domyślnie chat demonstracyjny; `--live-agent` włącza LLM.
+- Pobieranie danych z NAS jest ręczne (istniejący backup + SCP/File Station).
+  Nie uruchamiać na NAS własnych skryptów tworzących snapshot.
+- Procedury, testy i ograniczenia pierwszej wersji: `WEB.md`.
+- `server.py` pozostaje starszym trybem Telegram-only. Nie uruchamiać go razem
+  z nowym adapterem dla tego samego bota.
+
 Osobisty asystent zdrowotny działający przez Telegram. Odpowiada na wiadomości, pobiera dane z Garmin Connect i zarządza bazą danych zdrowotnych.
 
 ## Stack

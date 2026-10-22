@@ -3,8 +3,10 @@
 .garmin_tokens/
 *.db
 *.csv
-*.html
-*.json
+data/
+tests/
+.git/
+.env.*
 prywatne/
 __pycache__/
 *.pyc
