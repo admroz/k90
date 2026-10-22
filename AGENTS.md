@@ -139,4 +139,14 @@ Dane agenta (tworzone przez `init_db()`):
 | `GARMIN_EMAIL` / `GARMIN_PASSWORD` | Dane logowania Garmin | — |
 | `LIBRE_ENABLED` | Włącza pobieranie i synchronizację Libre | `true` |
 
-Modele GPT-5.6 działają obecnie przez Chat Completions z `reasoning_effort=none`, aby zachować function calling. Włączenie reasoning dla tych modeli wymaga migracji pętli agenta do Responses API.
+GPT-6.1 Sol (również `openai/gpt-6.1-sol`) korzysta automatycznie z `responses_api.py`
+i OpenAI Responses API, z reasoning `low` oraz `store=false`. Adapter zachowuje
+wszystkie elementy odpowiedzi pomiędzy wywołaniami narzędzi; w SQLite pozostaje
+dotychczasowy format historii i statystyk użycia. Starsze modele oraz inni dostawcy
+korzystają z LiteLLM / Chat Completions. GPT-5.6 zachowuje `reasoning_effort=none`.
+
+Model rozmowy i podsumowania można wybrać niezależnie. Opcje dla Sol:
+`AGENT_REASONING_EFFORT` (domyślnie `low`), `AGENT_MAX_OUTPUT_TOKENS` (`8192`),
+`SUMMARY_REASONING_EFFORT` (`low`), `SUMMARY_MAX_OUTPUT_TOKENS` (`4096`). Limity
+Responses obejmują reasoning i odpowiedź; `SUMMARY_MAX_TOKENS` pozostaje limitem
+dla podsumowań przez Chat Completions. Wartości domyślne modeli pozostają `gpt-5.4`.
