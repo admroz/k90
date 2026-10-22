@@ -6,7 +6,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 FROM base AS app
 
-COPY agent.py server.py system_prompt.py system_prompt.md summary.py fetch_garmin.py fetch_libre.py migrate_csv_to_sqlite.py ./
+COPY agent.py server.py system_prompt.py system_prompt.md summary.py responses_api.py fetch_garmin.py fetch_libre.py migrate_csv_to_sqlite.py ./
 COPY tools/ ./tools/
 COPY webapp.py web_data.py web_runtime.py telegram_adapter.py container_start.py supervisord.conf ./
 COPY web/ ./web/

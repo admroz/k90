@@ -10,6 +10,8 @@ from pathlib import Path
 
 import litellm
 
+from responses_api import ResponsesConversation, uses_responses
+
 from tools.db import get_conn
 from tools.time_utils import APP_TIMEZONE, now_local
 
@@ -115,14 +117,24 @@ def _fallback_summary(contents: dict[str, str]) -> str:
 def _generate_summary(combined: str) -> tuple[str, str | None, int]:
     last_finish_reason = None
     for attempt, compact in enumerate((False, True), start=1):
-        response = litellm.completion(
-            model=SUMMARY_MODEL,
-            messages=[{"role": "user", "content": _build_summary_prompt(combined, compact=compact)}],
-            max_tokens=SUMMARY_MAX_TOKENS,
-        )
-        choice = response.choices[0]
-        finish_reason = getattr(choice, "finish_reason", None)
-        summary = (choice.message.content or "").strip()
+        messages = [{"role": "user", "content": _build_summary_prompt(combined, compact=compact)}]
+        if uses_responses(SUMMARY_MODEL):
+            turn = ResponsesConversation(
+                SUMMARY_MODEL, messages,
+                reasoning_effort=os.getenv("SUMMARY_REASONING_EFFORT", "low"),
+                max_output_tokens=int(os.getenv("SUMMARY_MAX_OUTPUT_TOKENS", "4096")),
+            ).complete()
+            finish_reason = "stop" if turn.complete else "length"
+            summary = turn.text.strip()
+        else:
+            response = litellm.completion(
+                model=SUMMARY_MODEL,
+                messages=messages,
+                max_tokens=SUMMARY_MAX_TOKENS,
+            )
+            choice = response.choices[0]
+            finish_reason = getattr(choice, "finish_reason", None)
+            summary = (choice.message.content or "").strip()
         log.info(
             "summary.attempt model=%s attempt=%d finish_reason=%s chars=%d",
             SUMMARY_MODEL,

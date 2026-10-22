@@ -17,6 +17,8 @@ import os
 import litellm
 from dotenv import load_dotenv
 
+from responses_api import FunctionCall, ResponsesConversation, uses_responses
+
 from system_prompt import SYSTEM_PROMPT
 from tools import TOOLS, execute_tool
 from tools.commands import handle_command
@@ -140,7 +142,8 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
         "agent.start user=%s model=%s reasoning_effort=%s input=%s history_records=%d context_sections=%d context_chars=%d summary_chars=%d",
         user_id,
         MODEL,
-        completion_options.get("reasoning_effort", "default"),
+        (os.getenv("AGENT_REASONING_EFFORT", "low") if uses_responses(MODEL)
+         else completion_options.get("reasoning_effort", "default")),
         _message_kind(user_message),
         len(history),
         context_stats.get("sections", 0),
@@ -149,29 +152,52 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
     )
 
     should_refresh = False
+    responses = None
+    if uses_responses(MODEL):
+        responses = ResponsesConversation(
+            MODEL, messages, TOOLS,
+            reasoning_effort=os.getenv("AGENT_REASONING_EFFORT", "low"),
+            max_output_tokens=int(os.getenv("AGENT_MAX_OUTPUT_TOKENS", "8192")),
+        )
 
     for round_index in range(1, MAX_TOOL_ROUNDS + 1):
-        response = litellm.completion(
-            model=MODEL,
-            messages=messages,
-            tools=TOOLS,
-            tool_choice="auto",
-            **completion_options,
-        )
-        msg = response.choices[0].message
-        messages.append(msg.model_dump(exclude_none=True))
-        if response.usage:
-            _save_usage(MODEL, response.usage.prompt_tokens, response.usage.completion_tokens)
+        if responses is not None:
+            turn = responses.complete()
+            # A truncated response may contain partial arguments. Never run its tools.
+            if not turn.complete:
+                _save_usage(MODEL, turn.input_tokens, turn.output_tokens)
+                raise RuntimeError("Odpowiedź modelu została przerwana przez limit tokenów; zwiększ AGENT_MAX_OUTPUT_TOKENS.")
+            calls, answer = turn.calls, turn.text
+            prompt_tokens, completion_tokens = turn.input_tokens, turn.output_tokens
+        else:
+            response = litellm.completion(
+                model=MODEL,
+                messages=messages,
+                tools=TOOLS,
+                tool_choice="auto",
+                **completion_options,
+            )
+            msg = response.choices[0].message
+            messages.append(msg.model_dump(exclude_none=True))
+            calls = [FunctionCall(call.id, call.function.name, call.function.arguments)
+                     for call in (msg.tool_calls or [])]
+            answer = msg.content or ""
+            usage = getattr(response, "usage", None)
+            prompt_tokens = usage.prompt_tokens if usage else 0
+            completion_tokens = usage.completion_tokens if usage else 0
+        if prompt_tokens or completion_tokens:
+            _save_usage(MODEL, prompt_tokens, completion_tokens)
             log.info(
                 "agent.usage user=%s round=%d prompt_tokens=%s completion_tokens=%s",
                 user_id,
                 round_index,
-                response.usage.prompt_tokens,
-                response.usage.completion_tokens,
+                prompt_tokens,
+                completion_tokens,
             )
 
-        if not msg.tool_calls:
-            answer = msg.content or ""
+        if not calls:
+            if responses is not None and not answer.strip():
+                raise RuntimeError("Model nie zwrócił tekstu odpowiedzi.")
             save_history(user_id, user_message, answer)
             log.info(
                 "agent.finish user=%s round=%d response_chars=%d refresh=%s",
@@ -182,25 +208,28 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
             )
             return answer, should_refresh
 
-        tool_names = [tool_call.function.name for tool_call in msg.tool_calls]
+        tool_names = [tool_call.name for tool_call in calls]
         log.info("agent.tools user=%s round=%d tool_calls=%s", user_id, round_index, ",".join(tool_names))
 
-        for tool_call in msg.tool_calls:
-            if tool_call.function.name in SUMMARY_REFRESH_TRIGGERS:
+        for tool_call in calls:
+            if tool_call.name in SUMMARY_REFRESH_TRIGGERS:
                 should_refresh = True
-            args = json.loads(tool_call.function.arguments or "{}")
-            result = execute_tool(tool_call.function.name, args)
+            args = json.loads(tool_call.arguments or "{}")
+            result = execute_tool(tool_call.name, args)
             log.info(
                 "agent.tool_result user=%s tool=%s ok=%s",
                 user_id,
-                tool_call.function.name,
+                tool_call.name,
                 "error" not in result,
             )
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call.id,
-                "content": json.dumps(result, ensure_ascii=False, default=str),
-            })
+            if responses is not None:
+                responses.add_tool_result(tool_call.call_id, result)
+            else:
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.call_id,
+                    "content": json.dumps(result, ensure_ascii=False, default=str),
+                })
 
     answer = "Przepraszam, nie mogłem przetworzyć Twojego zapytania."
     save_history(user_id, user_message, answer)

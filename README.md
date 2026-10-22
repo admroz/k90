@@ -80,7 +80,36 @@ GARMIN_PASSWORD=...
 LIBRE_ENABLED=true                     # false wyłącza pobieranie danych Libre
 ```
 
-Przy `AGENT_MODEL` z rodziny GPT-5.6 agent jawnie używa `reasoning_effort=none`, ponieważ obecna pętla korzysta z Chat Completions i function tools. Reasoning z narzędziami wymaga migracji pętli do Responses API.
+GPT-6.1 Sol automatycznie korzysta z Responses API, z obsługą narzędzi i zdjęć.
+Starsze modele oraz pozostali dostawcy zachowują dotychczasową obsługę przez
+LiteLLM / Chat Completions; GPT-5.6 nadal używa `reasoning_effort=none`.
+Model rozmowy i podsumowania wybierasz niezależnie, np.:
+
+```dotenv
+AGENT_MODEL=gpt-6.1-sol
+SUMMARY_MODEL=gpt-5.4
+AGENT_REASONING_EFFORT=low
+AGENT_MAX_OUTPUT_TOKENS=8192
+```
+
+Obsługiwany jest także zapis `openai/gpt-6.1-sol`. Dla Sol dostępne poziomy
+reasoning to `low` (domyślny w k90), `medium`, `high`, `xhigh` i `max`.
+`AGENT_MAX_OUTPUT_TOKENS` obejmuje reasoning i tekst łącznie. Przerwana odpowiedź
+nie wykonuje zawartych w niej wywołań narzędzi ani nie zapisuje częściowej rozmowy.
+Wywołania narzędzi z wcześniejszych, zakończonych rund mogą już być wykonane.
+
+Możesz też ustawić `SUMMARY_MODEL=gpt-6.1-sol`; wtedy obowiązują osobne
+`SUMMARY_REASONING_EFFORT=low` i `SUMMARY_MAX_OUTPUT_TOKENS=4096`. Dotychczasowy
+`SUMMARY_MAX_TOKENS=600` dotyczy podsumowań przez Chat Completions.
+Zmiany modeli wymagają `docker compose up -d agent`; powrót do starszego modelu
+polega na zmianie odpowiedniej zmiennej. Jedna instancja używa jednego modelu
+rozmowy i jednego modelu podsumowania, wspólnie dla WWW i Telegrama.
+
+Historia pozostaje w SQLite. Responses działa z `store=false`; zaszyfrowane
+elementy reasoning są przekazywane pomiędzy wywołaniami narzędzi w ramach jednego
+zapytania i nie są zapisywane do historii. Dostępność modelu zależy od konta API.
+Zasady API: [GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol)
+i [migracja do Responses](https://developers.openai.com/api/docs/guides/migrate-to-responses).
 
 Komendy slash dostępne przez Telegram:
 
