@@ -8,20 +8,34 @@
 }
 
 .markdown blockquote {
-  border-left: 3px solid #acbf8c;
+  border-left: 3px solid var(--green);
   padding-left: 16px;
   margin-left: 0;
-  color: #65776e
+  color: var(--muted)
 }
 
 :root {
-  --bg: #f6f7f3;
-  --paper: #fff;
-  --ink: #233b34;
-  --muted: #758079;
-  --green: #244d40;
-  --lime: #dceba0;
-  --line: #e3e8df;
+  color-scheme: dark;
+  --bg: #101713;
+  --paper: #19231d;
+  --ink: #e5ede4;
+  --muted: #a3b0a5;
+  --green: #b4d3a3;
+  --lime: #c8dca4;
+  --line: #344239;
+  --sidebar: #141e18;
+  --raised: #233128;
+  --field: #111b15;
+  --hover: #2b3b30;
+  --feature: #234133;
+  --feature-muted: #bdd1c0;
+  --on-green: #142318;
+  --green-hover: #c8dfb8;
+  --warning-bg: #332f1e;
+  --warning-ink: #dfcd94;
+  --error-bg: #382620;
+  --error-ink: #f0b39e;
+  --error-line: #715044;
   --radius: 18px
 }
 
@@ -64,6 +78,25 @@ button:disabled {
 
 button {
   border: 0
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--green)
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 1
+}
+
+::selection {
+  background: #466147;
+  color: var(--ink)
 }
 
 a {
@@ -113,7 +146,7 @@ p {
 
 .brand span {
   font-size: 13px;
-  color: #afc968;
+  color: var(--lime);
   margin-left: 5px;
   letter-spacing: 0
 }
@@ -126,7 +159,7 @@ p {
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  background: #f0f3eb
+  background: var(--sidebar)
 }
 
 .sidebar-caption {
@@ -148,7 +181,7 @@ p {
   text-align: left;
   border-radius: 10px;
   background: none;
-  color: #65776e;
+  color: var(--muted);
   padding: 13px 15px
 }
 
@@ -159,12 +192,12 @@ p {
 }
 
 .nav-button.active {
-  background: var(--green);
-  color: white
+  background: var(--feature);
+  color: var(--green)
 }
 
 .nav-button:hover:not(.active) {
-  background: #e5ebdf
+  background: var(--hover)
 }
 
 .sidebar-bottom {
@@ -184,7 +217,7 @@ p {
   height: 6px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: #789454
+  background: var(--green)
 }
 
 .text-button {
@@ -211,7 +244,7 @@ main {
   justify-content: space-between;
   font-size: 10px;
   letter-spacing: 1.1px;
-  color: #849087;
+  color: var(--muted);
   border-bottom: 1px solid var(--line)
 }
 
@@ -241,12 +274,12 @@ main {
   font-size: 10px;
   letter-spacing: 1.8px;
   font-weight: 600;
-  color: #77876d;
+  color: var(--muted);
   margin-bottom: 12px
 }
 
 .accent {
-  color: #9ab36c
+  color: var(--green)
 }
 
 .primary,
@@ -258,22 +291,22 @@ main {
 
 .primary {
   background: var(--green);
-  color: white
+  color: var(--on-green)
 }
 
 .primary:hover {
-  background: #163b2d
+  background: var(--green-hover)
 }
 
 .secondary {
-  background: white;
+  background: var(--paper);
   border: 1px solid var(--line);
   color: var(--ink);
   font-size: 12px
 }
 
 .secondary:hover {
-  background: #edf2e6
+  background: var(--hover)
 }
 
 .dashboard-toolbar {
@@ -288,7 +321,7 @@ main {
 .segmented {
   display: flex;
   gap: 4px;
-  background: #e9eee3;
+  background: var(--sidebar);
   padding: 4px;
   border-radius: 9px
 }
@@ -302,9 +335,9 @@ main {
 }
 
 .segmented button.selected {
-  background: white;
+  background: var(--raised);
   color: var(--ink);
-  box-shadow: 0 1px 3px #21352110
+  box-shadow: 0 1px 3px #00000030
 }
 
 .kpi-grid {
@@ -315,15 +348,15 @@ main {
 
 .kpi {
   padding: 22px;
-  background: white;
+  background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius)
 }
 
 .kpi:first-child {
-  background: var(--green);
-  color: white;
-  border-color: var(--green)
+  background: var(--feature);
+  color: var(--ink);
+  border-color: #46614d
 }
 
 .kpi-label {
@@ -335,7 +368,7 @@ main {
 
 .kpi:first-child .kpi-label,
 .kpi:first-child small {
-  color: #c4d6c7
+  color: var(--feature-muted)
 }
 
 .kpi-value {
@@ -381,7 +414,7 @@ main {
 
 .panel,
 .chart-card {
-  background: white;
+  background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 24px
@@ -421,7 +454,7 @@ main {
 
 .chart text {
   font-size: 10px;
-  fill: #89938a
+  fill: var(--muted)
 }
 
 .chart-summary {
@@ -484,8 +517,8 @@ main {
 }
 
 .mode-banner {
-  background: #eef2d9;
-  color: #5f6b32;
+  background: var(--warning-bg);
+  color: var(--warning-ink);
   padding: 10px 16px;
   border-radius: 8px;
   margin-top: 18px;
@@ -493,17 +526,17 @@ main {
 }
 
 #global-error {
-  background: #fff0e8;
-  border: 1px solid #eed1be;
+  background: var(--error-bg);
+  border: 1px solid var(--error-line);
   padding: 12px 18px;
   border-radius: 8px;
   margin-top: 16px;
-  color: #9a402c
+  color: var(--error-ink)
 }
 
 footer {
   padding: 28px 0;
-  color: #98a094;
+  color: var(--muted);
   font-size: 10px;
   letter-spacing: .3px
 }
@@ -514,7 +547,7 @@ footer span {
 
 .chat-shell {
   max-width: 960px;
-  background: white;
+  background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 22px;
@@ -539,20 +572,24 @@ footer span {
   padding: 17px 20px;
   margin-bottom: 16px;
   border-radius: 14px;
-  background: #f0f3eb;
+  background: var(--raised);
   overflow-wrap: anywhere
 }
 
 .message.user {
   margin-left: auto;
-  background: #244d40;
-  color: #fff
+  background: var(--feature);
+  color: var(--ink)
 }
 
 .message .meta {
   font-size: 10px;
-  opacity: .6;
+  color: var(--muted);
   margin-bottom: 7px
+}
+
+.message.user .meta {
+  color: var(--feature-muted)
 }
 
 .message .message-body {
@@ -582,7 +619,7 @@ footer span {
   min-height: 70px;
   max-height: 220px;
   padding: 10px;
-  background: #fafbf8;
+  background: var(--field);
   border-radius: 8px;
   color: var(--ink)
 }
@@ -614,7 +651,7 @@ footer span {
 
 #chat-error,
 #login-error {
-  color: #a34331;
+  color: var(--error-ink);
   font-size: 12px;
   margin: 8px 0 0
 }
@@ -623,13 +660,15 @@ footer span {
   padding: 10px 15px;
   font-size: 12px;
   border-radius: 8px;
-  background: #f5f3e6;
+  background: var(--warning-bg);
+  color: var(--warning-ink);
   margin-bottom: 7px
 }
 
 .job.failed,
 .job.interrupted {
-  background: #fff0e8
+  background: var(--error-bg);
+  color: var(--error-ink)
 }
 
 .data-controls {
@@ -647,8 +686,8 @@ input,
 select {
   display: block;
   padding: 10px 12px;
-  background: white;
-  border: 1px solid #dce3d7;
+  background: var(--field);
+  border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--ink);
   margin-top: 6px
@@ -667,7 +706,7 @@ select {
 }
 
 .table-wrap {
-  background: white;
+  background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: auto;
@@ -682,7 +721,7 @@ table {
 }
 
 th {
-  background: #eaf0e3;
+  background: var(--raised);
   position: sticky;
   top: 0;
   z-index: 1;
@@ -707,7 +746,7 @@ td {
 }
 
 tr:hover td {
-  background: #fafbf7
+  background: var(--hover)
 }
 
 td .cell {
@@ -751,7 +790,7 @@ td .cell {
 }
 
 #document-list button.selected {
-  background: #e4ecd9;
+  background: var(--feature);
   color: var(--green)
 }
 
@@ -796,7 +835,7 @@ td .cell {
 }
 
 .markdown code {
-  background: #eef2e7;
+  background: var(--field);
   padding: 2px 4px;
   border-radius: 4px
 }
@@ -815,8 +854,8 @@ pre#document-raw {
 }
 
 .login-art {
-  background: var(--green);
-  color: white;
+  background: linear-gradient(145deg, var(--feature), var(--sidebar));
+  color: var(--ink);
   padding: 60px 12%;
   position: relative;
   overflow: hidden;
@@ -839,14 +878,14 @@ pre#document-raw {
 }
 
 .login-art p {
-  color: #c8d9ce;
+  color: var(--feature-muted);
   position: relative;
   z-index: 1
 }
 
 .orbit {
   position: absolute;
-  border: 1px solid #aac87640;
+  border: 1px solid #b4d3a330;
   border-radius: 50%;
   width: 460px;
   height: 460px;

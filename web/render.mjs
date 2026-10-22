@@ -82,7 +82,7 @@ export function formatTimestamp(value, timezone = "Europe/Warsaw") {
   });
 }
 
-export function chart(rows, key, color = "#608969", maxGapHours = 48) {
+export function chart(rows, key, color = "#9fc7a3", maxGapHours = 48) {
   const points = rows.filter(r => r[key] != null && r[key] !== "" && Number.isFinite(Number(r[key])))
     .map(r => ({
       x: Date.parse(r.data.length === 10 ? r.data + "T12:00:00" : r.data),
@@ -108,12 +108,12 @@ export function chart(rows, key, color = "#608969", maxGapHours = 48) {
     const gap = i && p.x - points[i - 1].x > maxGapHours * 3600000;
     path += `${i && !gap ? "L" : "M"}${xpos(p).toFixed(1)},${ypos(p).toFixed(1)} `;
   });
-  const safeColor = /^#[0-9a-f]{6}$/i.test(color) ? color : "#608969";
+  const safeColor = /^#[0-9a-f]{6}$/i.test(color) ? color : "#9fc7a3";
   const grid = [low, (low + high) / 2, high].map(y => {
     const py = ypos({
       y
     });
-    return `<line x1="${pad}" y1="${py}" x2="${w-10}" y2="${py}" stroke="#edf0e9"/><text x="0" y="${py+3}">${number(y,1)}</text>`;
+    return `<line x1="${pad}" y1="${py}" x2="${w-10}" y2="${py}" stroke="var(--line)"/><text x="0" y="${py+3}">${number(y,1)}</text>`;
   }).join("");
   const dots = points.length < 100 ? points.map(p => `<circle cx="${xpos(p)}" cy="${ypos(p)}" r="2.8" fill="${safeColor}"><title>${escapeHTML(p.date)}: ${number(p.y,1)}</title></circle>`).join("") : "";
   return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Wykres: ${points.length} pomiarów, od ${number(min,1)} do ${number(max,1)}">${grid}<path d="${path}" fill="none" stroke="${safeColor}" stroke-width="2.5" stroke-linejoin="round"/>${dots}<text x="${pad}" y="${h-1}">${escapeHTML(points[0].date.slice(5,10))}</text><text x="${w-10}" y="${h-1}" text-anchor="end">${escapeHTML(points.at(-1).date.slice(5,10))}</text></svg><p class="chart-summary">${points.length} pomiarów · zakres ${number(min,1)}–${number(max,1)}</p>`;
