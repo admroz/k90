@@ -19,7 +19,7 @@ Agent AI działający jako osobisty lekarz rodzinny, diabetolog i dietetyk. Komu
 - **Komunikacja:** Telegram Bot API przez long polling
 - **Baza danych:** SQLite (historia rozmów, dane zdrowotne, podsumowanie pacjenta)
 - **Dane Garmin:** `fetch_garmin.py` → bezpośredni sync do SQLite
-- **Deployment:** Docker Compose (Synology NAS lub lokalnie)
+- **Deployment:** Docker Compose (Lenovo M900 / Intel/AMD x86-64; build ARM64 wyłączony)
 
 ## Struktura
 
@@ -119,7 +119,7 @@ Domyślne `CONVERSATION_USER_ID=owner` rozpoczyna nową historię czatu. Aby kon
 
 Jeśli czujnik Libre nie jest używany, ustaw `LIBRE_ENABLED=false`. Wyłącza to auto-sync, ręczny sync przez `/update` i wywołania syncu przez agenta, ale nie usuwa historycznych pomiarów z SQLite.
 
-## Deployment na Synology
+## Deployment na Lenovo / Docker
 
 Zobacz [DEPLOY.md](DEPLOY.md).
 

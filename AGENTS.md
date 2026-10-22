@@ -8,7 +8,7 @@ Osobisty asystent zdrowotny działający przez Telegram. Odpowiada na wiadomośc
 - **Komunikacja:** Telegram Bot API przez long polling
 - **Baza danych:** SQLite (`data/k90.db`) — dane zdrowotne, historia rozmów, podsumowanie pacjenta
 - **Dane Garmin:** `fetch_garmin.py` → bezpośredni sync do SQLite
-- **Deployment:** Docker Compose (Synology DS223 lub lokalnie)
+- **Deployment:** Docker Compose (Lenovo M900, Intel/AMD x86-64). CI buduje `linux/amd64`; konfiguracja ARM64 dla Synology jest zachowana, ale wyłączona.
 
 ## Struktura projektu
 
