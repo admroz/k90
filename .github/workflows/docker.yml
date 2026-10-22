@@ -8,7 +8,15 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-24.04-arm
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          # ARM64 disabled; uncomment this entry to restore native ARM tests.
+          # - arch: arm64
+          #   runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
 
@@ -28,9 +36,22 @@ jobs:
         run: pytest -q
 
   build:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: test
-    runs-on: ubuntu-24.04-arm
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            platform: linux/amd64
+            tag_suffix: ''
+          # ARM64 disabled; uncomment together with the ARM test entry above.
+          # Separate tags prevent the ARM build from overwriting Intel's latest.
+          # - arch: arm64
+          #   runner: ubuntu-24.04-arm
+          #   platform: linux/arm64
+          #   tag_suffix: '-arm64'
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
 
@@ -49,14 +70,15 @@ jobs:
         with:
           images: admroz/k90
           tags: |
-            type=raw,value=latest
-            type=sha,prefix=sha-
+            type=raw,value=latest${{ matrix.tag_suffix }}
+            type=sha,prefix=sha-,suffix=${{ matrix.tag_suffix }}
 
       - uses: docker/build-push-action@v7
         with:
           context: .
+          platforms: ${{ matrix.platform }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=k90-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=k90-${{ matrix.arch }}

@@ -1,17 +1,42 @@
-# Deployment na Synology NAS
+# Deployment na Lenovo M900 (Intel x86-64)
 
 ## Architektura
 
-- Obraz budowany automatycznie przez GitHub Actions (push do `main`) na natywnym runnerze ARM64
+- Obraz `linux/amd64` budowany automatycznie przez GitHub Actions (push do `main`) na natywnym runnerze `ubuntu-24.04`
 - Obraz publikowany przez GitHub Actions na Docker Hub: `admroz/k90:latest`
-- Dane (`data/` + `.env`) przenoszone raz ręcznie, potem trzymane na Synology
+- Dane (`data/` + `.env`) przenoszone raz ręcznie, potem trzymane na Lenovo
 - Komunikacja przez Telegram Bot API w trybie long polling; bez publicznego portu i dodatkowego kontenera
+
+Konfiguracja ARM64 dla Synology pozostaje zakomentowana w macierzach `test` i `build`
+w `.github/workflows/docker.yml`. Aby ją przywrócić, odkomentuj oba wpisy. ARM otrzyma
+osobny cache oraz tagi `latest-arm64` i `sha-<commit>-arm64`, bez nadpisywania obrazu Intela.
+Na Synology należy wówczas ustawić `AGENT_IMAGE=admroz/k90:latest-arm64`.
+
+## Przeniesienie z Synology na Lenovo
+
+1. Na Lenovo przygotuj Docker Engine z Compose oraz katalog aplikacji, np. `~/k90/`, z `docker-compose.yml` z repozytorium.
+2. Zatrzymaj dotychczasowy kontener k90 na Synology, a potem skopiuj całe `data/` i `.env` do katalogu aplikacji na Lenovo. Zachowaj kopię źródłową. Uwzględnij ukryte katalogi tokenów i istniejące pliki SQLite `-wal`/`-shm`; nie kopiuj samego aktywnego `k90.db`.
+3. W `.env` zmień `DATA_PATH` na `./data` (lub bezwzględną ścieżkę na Lenovo) i ustaw `AGENT_IMAGE=admroz/k90:latest`. Zachowaj `CONVERSATION_USER_ID`, token Telegrama i pozostałe dane dostępu.
+4. Po publikacji obrazu AMD64 uruchom na Lenovo:
+
+```bash
+docker compose pull agent
+docker compose up -d --remove-orphans
+docker compose logs --tail=100 agent
+docker image inspect admroz/k90:latest --format '{{.Os}}/{{.Architecture}}'
+```
+
+Oczekiwana architektura obrazu to `linux/amd64`. Sprawdź `/help` i zwykłą rozmowę na Telegramie.
+Nie uruchamiaj obu instancji z tym samym botem. Sam push do `main` publikuje obraz;
+nie aktualizuje działającego kontenera na żadnym serwerze.
 
 ## Wymagania wstępne (jednorazowo)
 
-1. Publiczny obraz `admroz/k90:latest` nie wymaga logowania do rejestru na Synology.
+1. Publiczny obraz `admroz/k90:latest` nie wymaga logowania do rejestru na Lenovo.
 
-## Jednorazowa migracja danych na Synology
+## Historyczna konfiguracja Synology (ARM64)
+
+Poniższy wariant wymaga ponownego włączenia builda ARM64 i użycia tagu `latest-arm64`.
 
 ```bash
 # 1. Skopiuj dane i konfigurację
@@ -20,7 +45,7 @@ scp .env synology:/volume1/docker/k90/
 
 # 2. Na Synology — dostosuj .env:
 #   DATA_PATH=/volume1/docker/k90/data
-#   AGENT_IMAGE=admroz/k90:latest
+#   AGENT_IMAGE=admroz/k90:latest-arm64
 #   TELEGRAM_BOT_TOKEN=token_z_BotFather
 #   TELEGRAM_ALLOWED_USER_ID=numeryczny_id_wlasciciela
 
@@ -35,11 +60,12 @@ Jeśli masz jeszcze historyczną bazę `kadencja90.db`, zmigruj ją ręcznie poz
 
 Build i push odbywa się automatycznie przez GitHub Actions przy każdym pushu do `main`.
 Możesz też uruchomić ręcznie z zakładki Actions → "Build & Push Docker image" → Run workflow.
+Publikacja jest dozwolona wyłącznie dla `main`; PR-y uruchamiają same testy.
 
 ## Aktualizacja po zmianie kodu
 
 ```bash
-# Push do main wyzwala build — po zakończeniu (~3-5 min) na Synology:
+# Push do main wyzwala build — po jego zakończeniu na Lenovo:
 docker compose pull agent && docker compose up -d --remove-orphans
 ```
 
@@ -52,9 +78,9 @@ docker compose pull agent && docker compose up -d --remove-orphans
 
 ## Zmienne środowiskowe
 
-| Zmienna | Lokalnie | Synology |
+| Zmienna | Lokalnie | Lenovo |
 |---------|----------|----------|
-| `DATA_PATH` | (domyślnie `./data`) | `/volume1/docker/k90/data` |
+| `DATA_PATH` | (domyślnie `./data`) | `./data` lub ścieżka na Lenovo |
 | `AGENT_IMAGE` | `admroz/k90:latest` | `admroz/k90:latest` |
 | `DB_PATH` | (domyślnie `./data/k90.db`) | `/data/k90.db` |
 | `TELEGRAM_BOT_TOKEN` | token z `@BotFather` | token z `@BotFather` |
