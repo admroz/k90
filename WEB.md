@@ -2,7 +2,7 @@
 
 Pierwsza wersja obejmuje wspólny chat WWW/Telegram, dashboard na danych SQLite,
 przeglądarkę tabel oraz odczyt dokumentów Markdown i pamięci pacjenta.
-Prace są na branchu `codex/web-frontend`.
+Obraz `admroz/k90:latest` jest budowany dla `linux/amd64` (Lenovo M900).
 
 ## Uruchomienie na Macu
 
@@ -135,12 +135,15 @@ Przed wdrożeniem pozostaje ręcznie ocenić wygląd desktop/mobile, sprawdzić 
 model na kopii danych i przeprowadzić smoke test obrazu. Testy nie wysyłają
 wiadomości do prawdziwego Telegrama ani nie wykonują operacji na NAS.
 
-## Konfiguracja NAS po zaakceptowaniu wersji
+## Konfiguracja serwera
 
 `WEB_PASSWORD` musi mieć co najmniej 12 znaków. Compose publikuje port 8000
-domyślnie na `127.0.0.1` NAS; frontend ma być dostępny przez lokalny reverse proxy
-Synology z HTTPS. DNS/nazwa hosta i certyfikat są osobnym krokiem konfiguracyjnym.
+domyślnie na `127.0.0.1` serwera; frontend może być dostępny przez lokalny reverse proxy
+z HTTPS. DNS/nazwa hosta i certyfikat są osobnym krokiem konfiguracyjnym.
 Domyślne `WEB_COOKIE_SECURE=true` wymaga HTTPS. Nie wystawiaj tego portu publicznie.
+
+Dla bezpośredniego HTTP w zaufanym LAN ustaw `WEB_BIND_IP` na adres serwera i
+`WEB_COOKIE_SECURE=false`. Mapowanie portu jest już w Compose. Przykład: [DEPLOY.md](DEPLOY.md).
 
 Schemat dodaje dwie opcjonalne kolumny do historii oraz tabele kolejki i transportu.
 Przed wdrożeniem zachowaj backup bazy i dokumentów. Ten branch nie został wdrożony
