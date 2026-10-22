@@ -119,14 +119,14 @@ async function loadDashboard() {
     hours: r.total_sleep_min == null ? null : r.total_sleep_min / 60
   }));
   const configsCharts = [
-    ["Masa ciała", "kg", d.waga, "waga_kg", "#608969"],
-    ["Energia z posiłków", "kcal / dzień", d.kalorie, "kcal", "#b29b5a"],
-    ["Długość snu", "godziny", sleep, "hours", "#7b87ad"],
-    ["HRV w nocy", "ms", d.hrv, "hrv_noc", "#6a9993"],
-    ["Ciśnienie skurczowe", "mmHg", d.cisnienie, "skurczowe", "#bc8772"],
-    ["Body Battery", "maksimum dnia", d.body_battery, "max_bateria", "#83a465"],
-    ["Aktywność", "minuty / aktywność", d.aktywnosci, "czas_trwania_min", "#608969"],
-    ["Glukoza", "mg/dL · średnie godzinowe", d.glukoza, "glukoza", "#b29b5a", 2]
+    ["Masa ciała", "kg", d.waga, "waga_kg", "#9fc7a3"],
+    ["Energia z posiłków", "kcal / dzień", d.kalorie, "kcal", "#d3b974"],
+    ["Długość snu", "godziny", sleep, "hours", "#a6b3da"],
+    ["HRV w nocy", "ms", d.hrv, "hrv_noc", "#87bdb5"],
+    ["Ciśnienie skurczowe", "mmHg", d.cisnienie, "skurczowe", "#d7a48b"],
+    ["Body Battery", "maksimum dnia", d.body_battery, "max_bateria", "#b0c78a"],
+    ["Aktywność", "minuty / aktywność", d.aktywnosci, "czas_trwania_min", "#9fc7a3"],
+    ["Glukoza", "mg/dL · średnie godzinowe", d.glukoza, "glukoza", "#d3b974", 2]
   ];
   $("#charts").innerHTML = configsCharts.map(([title, unit, rows, key, color, gap]) => `<section class="chart-card"><div class="chart-heading"><div><h2>${title}</h2><p>${unit}</p></div><button class="text-button discuss" data-topic="${title}">Omów ↗</button></div>${chart(rows,key,color,gap)}</section>`).join("");
   $$(".discuss").forEach(b => b.onclick = async () => {
