@@ -84,7 +84,10 @@ Docker sam nie restartuje kontenera tylko dlatego, że healthcheck jest unhealth
 ## Zakres interfejsu
 
 - Przegląd: ostatnie pomiary z datami, wykresy 7/30/90/365 dni, posiłki i status
-  synchronizacji. Przycisk „Omów” przygotowuje pytanie dla agenta.
+  synchronizacji. Posiłki domyślnie pokazują dzisiaj, z wyborem daty, przechodzeniem
+  do poprzednich dni i sumami kalorii, białka, węglowodanów oraz tłuszczu.
+  Wybór dnia jest niezależny od okresu wykresów; braki wartości odżywczych są oznaczone.
+  Przycisk „Omów” przygotowuje pytanie dla agenta.
 - Rozmowa: tekst, JPG/PNG/WebP do 5 MB, starsze wiadomości, stan kolejki i błędy.
   Odpowiedź pojawia się po zakończeniu przetwarzania; token streaming jest poza v1.
 - Dane: dozwolone tabele, wyszukiwanie, sortowanie i stronicowanie. Odczyt bez

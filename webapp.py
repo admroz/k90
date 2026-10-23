@@ -12,6 +12,7 @@ import secrets
 import time
 from collections import deque
 from contextlib import asynccontextmanager, closing
+from datetime import date
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -273,6 +274,10 @@ def create_app(*, start_worker=True, processor=None):
     @app.get("/api/dashboard", dependencies=[Depends(authenticated)])
     def dashboard(days: int = Query(30, ge=1, le=366)):
         return web_data.dashboard(days)
+
+    @app.get("/api/meals", dependencies=[Depends(authenticated)])
+    def meals(day: date | None = Query(None, alias="date")):
+        return web_data.meals_for_day(day)
 
     @app.get("/api/tables", dependencies=[Depends(authenticated)])
     def tables():

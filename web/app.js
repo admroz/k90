@@ -4,7 +4,10 @@ import {
   number,
   markdown,
   chart,
-  formatTimestamp
+  formatTimestamp,
+  mealSummary,
+  mealList,
+  mealDayLabel
 } from "./render.mjs";
 import { createRequestId } from "./request.mjs";
 const $ = (selector) => document.querySelector(selector);
@@ -29,6 +32,7 @@ let history = new Map(),
   dashboardRequest = 0,
   tableRequest = 0,
   documentRequest = 0;
+let mealDate = null, mealView = null, mealRequest = 0;
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -55,6 +59,9 @@ function error(message) {
 function showLogin() {
   session = null;
   history.clear();
+  mealDate = null;
+  mealView = null;
+  mealRequest++;
   $("#messages").replaceChildren();
   $("#jobs").replaceChildren();
   $("#app").hidden = true;
@@ -99,7 +106,7 @@ async function navigate(view) {
 }
 async function loadDashboard() {
   const request = ++dashboardRequest;
-  const d = await api(`/api/dashboard?days=${days}`);
+  const [d] = await Promise.all([api(`/api/dashboard?days=${days}`), loadMeals()]);
   if (request !== dashboardRequest || !session) return;
   $("#date-range").textContent = `${d.from} — ${d.to}`;
   const configs = [
@@ -139,9 +146,51 @@ async function loadDashboard() {
       error(e.message);
     }
   });
-  $("#meals").innerHTML = d.posilki.slice(-4).reverse().map(r => `<div class="meal-row"><div><strong>${escapeHTML(r.opis||"Posiłek")}</strong><small>${escapeHTML(r.data)} · ${escapeHTML(r.czas||"")}</small></div><span>${number(r.kalorie)} kcal</span></div>`).join("") || '<div class="empty">Brak zapisanych posiłków.</div>';
   $("#sync-status").innerHTML = d.sync.map(r => `<div class="sync-row"><div>${escapeHTML(r.source)}<small>${escapeHTML(r.last_status||"Brak synchronizacji")}</small></div><small>${escapeHTML(r.last_success_at||"Jeszcze nie pobrano danych")}</small></div>`).join("") || '<div class="empty">Brak historii synchronizacji.</div>';
 }
+async function loadMeals(day = mealDate) {
+  const request = ++mealRequest;
+  mealDate = day;
+  const controls = ["#meal-previous", "#meal-next", "#meal-date", "#meal-today"];
+  $("#meals-panel").setAttribute("aria-busy", "true");
+  controls.forEach(selector => $(selector).disabled = true);
+  $("#meal-error").hidden = true;
+  try {
+    const data = await api(`/api/meals${day ? `?date=${encodeURIComponent(day)}` : ""}`);
+    if (request !== mealRequest || !session) return;
+    mealView = data;
+    mealDate = data.date === data.today ? null : data.date;
+    $("#meal-date").value = data.date;
+    $("#meal-date").max = data.today;
+    $("#meal-day-label").textContent = mealDayLabel(data.date, data.today);
+    $("#meal-summary").innerHTML = mealSummary(data.totals, data.missing_values);
+    $("#meal-note").hidden = !Object.values(data.missing_values).some(count => count > 0);
+    $("#meals").innerHTML = mealList(data.meals);
+  } catch (e) {
+    if (request !== mealRequest || !session) return;
+    // Keep the previous day and its data together if navigation fails.
+    if (mealView) $("#meal-date").value = mealView.date;
+    mealDate = mealView && mealView.date !== mealView.today ? mealView.date : null;
+    $("#meal-error").textContent = e.message;
+    $("#meal-error").hidden = false;
+  } finally {
+    if (request === mealRequest) {
+      $("#meals-panel").setAttribute("aria-busy", "false");
+      $("#meal-date").disabled = false;
+      $("#meal-previous").disabled = !mealView?.previous_date;
+      $("#meal-next").disabled = !mealView?.next_date;
+      $("#meal-today").disabled = !!mealView && mealView.date === mealView.today;
+    }
+  }
+}
+$("#meal-previous").onclick = () => loadMeals(mealView.previous_date);
+$("#meal-next").onclick = () => loadMeals(mealView.next_date);
+$("#meal-today").onclick = () => loadMeals(null);
+$("#meal-date").onchange = () => {
+  const input = $("#meal-date");
+  if (input.value && input.checkValidity()) loadMeals(input.value);
+  else if (mealView) input.value = mealView.date;
+};
 async function loadChat(before = null) {
   const [messages, jobs] = await Promise.all([api(`/api/messages${before?`?before=${before}`:""}`), api("/api/jobs")]);
   if (!session) return;

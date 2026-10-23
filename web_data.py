@@ -2,7 +2,7 @@
 
 import json
 from contextlib import closing
-from datetime import timedelta
+from datetime import date, timedelta
 
 from tools.db import get_conn, get_data_dir
 from tools.patient import ALLOWED_FILES
@@ -112,6 +112,29 @@ def history_content(raw):
             str(part.get("text", "")) for part in parts if part.get("type") == "text"
         ),
         "has_image": any(part.get("type") == "image_url" for part in parts),
+    }
+
+
+def meals_for_day(day: date | None = None):
+    today = now_local().date()
+    day = day or today
+    with closing(get_conn()) as conn:
+        rows = [dict(row) for row in conn.execute(
+            """SELECT * FROM posilki WHERE data = ?
+               ORDER BY CASE WHEN czas IS NULL OR czas = '' THEN 1 ELSE 0 END,
+                        czas, id""",
+            (day.isoformat(),),
+        )]
+    totals, missing = {}, {}
+    for field in ("kalorie", "bialko_g", "weglowodany_g", "tluszcze_g"):
+        values = [row[field] for row in rows if row[field] is not None]
+        totals[field] = sum(values) if values else (None if rows else 0)
+        missing[field] = len(rows) - len(values)
+    return {
+        "date": day.isoformat(), "today": today.isoformat(), "meals": rows,
+        "totals": totals, "missing_values": missing,
+        "previous_date": (day - timedelta(days=1)).isoformat() if day > date.min else None,
+        "next_date": (day + timedelta(days=1)).isoformat() if day < today else None,
     }
 
 

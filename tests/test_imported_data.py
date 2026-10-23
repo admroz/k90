@@ -48,6 +48,7 @@ def test_downloaded_backup_serves_every_view_without_modifying_source(
         for document in client.get("/api/documents").json():
             assert client.get(f"/api/documents/{document}").status_code == 200
         assert client.get("/api/messages").status_code == 200
+        assert client.get("/api/meals").status_code == 200
         assert client.get("/api/jobs").json() == []
     assert {
         path: hashlib.sha256(path.read_bytes()).digest() for path in original_files

@@ -10,6 +10,27 @@ export const number = (value, digits = 0) => value == null ? "—" : Number(valu
   maximumFractionDigits: digits
 });
 
+export function mealSummary(totals, missing) {
+  return [
+    ["Kalorie", "kalorie", "kcal"], ["Białko", "bialko_g", "g"],
+    ["Węglowodany", "weglowodany_g", "g"], ["Tłuszcz", "tluszcze_g", "g"]
+  ].map(([label, key, unit]) => `<div><span>${label}</span><strong>${number(totals[key], 1)}${missing[key] && totals[key] != null ? " *" : ""} <small>${unit}</small></strong></div>`).join("");
+}
+
+export function mealList(meals) {
+  return meals.map(meal => `<div class="meal-row"><div class="meal-description"><strong>${escapeHTML(meal.opis || "Posiłek")}</strong><small>${escapeHTML(meal.czas || "Godzina niepodana")}</small><p class="meal-macros">Białko ${number(meal.bialko_g, 1)} g · Węglowodany ${number(meal.weglowodany_g, 1)} g · Tłuszcz ${number(meal.tluszcze_g, 1)} g</p></div><span>${number(meal.kalorie, 1)} kcal</span></div>`).join("") || '<div class="empty">Brak zapisanych posiłków w tym dniu.</div>';
+}
+
+export function mealDayLabel(day, today) {
+  // ISO calendar dates come from the server's application timezone.
+  const yesterday = new Date(`${today}T12:00:00Z`);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const prefix = day === today ? "Dzisiaj · " : day === yesterday.toISOString().slice(0, 10) ? "Wczoraj · " : "";
+  return prefix + new Date(`${day}T12:00:00Z`).toLocaleDateString("pl-PL", {
+    day: "numeric", month: "long", year: "numeric", timeZone: "UTC"
+  });
+}
+
 function inline(text) {
   return escapeHTML(text).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/`([^`]+)`/g, "<code>$1</code>");
 }

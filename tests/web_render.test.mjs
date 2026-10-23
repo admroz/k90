@@ -4,7 +4,10 @@ import {
   markdown,
   chart,
   number,
-  formatTimestamp
+  formatTimestamp,
+  mealList,
+  mealSummary,
+  mealDayLabel
 } from "../web/render.mjs";
 
 test("Markdown escapes HTML and never activates links or images", () => {
@@ -74,4 +77,38 @@ test("Long gaps split the line instead of interpolating absent days", () => {
 test("SQLite UTC timestamps and explicit timezone offsets display consistently", () => {
   assert.equal(formatTimestamp("2026-09-20 14:00:00"), formatTimestamp("2026-09-20T16:00:00+02:00"));
   assert.ok(formatTimestamp("2026-09-20 14:00:00").includes("16:00"));
+});
+
+test("Daily meal list includes every meal and escapes descriptions", () => {
+  const meals = Array.from({length: 6}, (_, i) => ({
+    opis: i === 0 ? '<script>test</script>' : `Posiłek ${i}`,
+    czas: i === 0 ? null : '12:30', kalorie: i === 0 ? 0 : 200,
+    bialko_g: null, weglowodany_g: 20, tluszcze_g: 10
+  }));
+  const html = mealList(meals);
+  assert.equal((html.match(/class="meal-row"/g) || []).length, 6);
+  assert.ok(html.includes('&lt;script&gt;'));
+  assert.ok(!html.includes('<script>'));
+  assert.ok(html.includes('0 kcal'));
+  assert.ok(html.includes('Białko — g'));
+  assert.ok(html.includes('Godzina niepodana'));
+  assert.ok(mealList([]).includes('Brak zapisanych posiłków w tym dniu'));
+});
+
+test("Meal summary flags partial sums and preserves unknown and zero values", () => {
+  const html = mealSummary(
+    {kalorie: 500, bialko_g: 20, weglowodany_g: null, tluszcze_g: 0},
+    {kalorie: 0, bialko_g: 1, weglowodany_g: 2, tluszcze_g: 0}
+  );
+  assert.ok(html.includes('20 *'));
+  assert.ok(html.includes('>— <small>g'));
+  assert.ok(html.includes('>0 <small>g'));
+  assert.ok(!html.includes('null') && !html.includes('NaN'));
+});
+
+test("Meal date labels use calendar days across year and daylight-saving boundaries", () => {
+  assert.ok(mealDayLabel('2026-01-01', '2026-01-01').startsWith('Dzisiaj'));
+  assert.ok(mealDayLabel('2025-12-31', '2026-01-01').startsWith('Wczoraj'));
+  assert.ok(mealDayLabel('2026-03-29', '2026-03-30').includes('29 marca 2026'));
+  assert.ok(!mealDayLabel('2024-02-29', '2026-01-01').includes('Wczoraj'));
 });
