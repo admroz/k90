@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field, model_validator
 
 import web_data
 from tools.db import get_conn, get_db_path
+from tools.images import MAX_IMAGE_BYTES, image_mime_type
 from tools.patient import ALLOWED_FILES
 from tools.time_utils import APP_TIMEZONE
 from web_runtime import (
@@ -89,21 +90,10 @@ class Message(BaseModel):
                 raw = base64.b64decode(encoded, validate=True)
             except ValueError:
                 raise ValueError("Nieprawidłowy obraz.") from None
-            if not raw or len(raw) > 5_000_000:
+            if not raw or len(raw) > MAX_IMAGE_BYTES:
                 raise ValueError("Zdjęcie może mieć maksymalnie 5 MB.")
-            valid = (
-                (header == "data:image/jpeg;base64" and raw.startswith(b"\xff\xd8\xff"))
-                or (
-                    header == "data:image/png;base64"
-                    and raw.startswith(b"\x89PNG\r\n\x1a\n")
-                )
-                or (
-                    header == "data:image/webp;base64"
-                    and raw.startswith(b"RIFF")
-                    and raw[8:12] == b"WEBP"
-                )
-            )
-            if not valid:
+            declared_mime = header.removeprefix("data:").removesuffix(";base64")
+            if image_mime_type(raw) != declared_mime:
                 raise ValueError("Zawartość pliku nie odpowiada formatowi zdjęcia.")
         return self
 

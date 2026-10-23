@@ -10,6 +10,7 @@ import time
 import requests
 
 from server import TelegramAPI, _image_from_message, split_message
+from tools.images import MAX_IMAGE_BYTES, image_mime_type
 
 log = logging.getLogger(__name__)
 
@@ -48,11 +49,16 @@ def accept_update(api, backend, update):
         "text": text,
     }
     if image_info:
-        raw, mime = api.download_file(image_info[0])
-        if (
-            mime not in ("image/jpeg", "image/png", "image/webp")
-            or len(raw) > 5_000_000
-        ):
+        raw, _ = api.download_file(image_info[0])
+        # Telegram downloads may be application/octet-stream even for valid photos.
+        # Detect the same signatures checked by the backend before enqueueing.
+        mime = image_mime_type(raw)
+        if mime is None or len(raw) > MAX_IMAGE_BYTES:
+            log.warning(
+                "telegram.image_rejected reason=%s bytes=%d",
+                "too_large" if len(raw) > MAX_IMAGE_BYTES else "unsupported_format",
+                len(raw),
+            )
             # Acknowledge unsupported input without getting stuck on the same update forever.
             body["text"] = (
                 "Użytkownik przesłał obraz w nieobsługiwanym formacie lub większy niż 5 MB. Poproś o JPG, PNG lub WebP do 5 MB. "
@@ -60,6 +66,7 @@ def accept_update(api, backend, update):
             )
         else:
             body["image"] = f"data:{mime};base64," + base64.b64encode(raw).decode()
+            log.info("telegram.image mime=%s bytes=%d", mime, len(raw))
     backend.call("POST", "/internal/messages", json=body)
 
 
