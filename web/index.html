@@ -36,7 +36,22 @@
         <div id="kpis" class="kpi-grid"></div>
         <div class="section-heading"><h2>Trendy w czasie</h2><span>Pomiary z wybranego okresu</span></div>
         <div id="charts" class="chart-grid"></div>
-        <div class="bottom-grid"><section class="panel"><div class="panel-heading"><h2>Ostatnie posiłki</h2><button class="text-button" data-open-meals>Wszystkie ↗</button></div><div id="meals"></div></section><section class="panel"><div class="panel-heading"><h2>Aktualność danych</h2><button id="sync-data" class="text-button">Synchronizuj ↻</button></div><div id="sync-status"></div><p class="subtle">Odświeżenie widoku odczytuje bazę. Synchronizacja pobiera nowe dane ze źródeł.</p></section></div>
+        <div class="bottom-grid">
+          <section class="panel meals-panel" id="meals-panel" aria-labelledby="meals-heading">
+            <div class="panel-heading"><div><h2 id="meals-heading">Posiłki</h2><p id="meal-day-label"></p></div><button class="text-button" data-open-meals>Wszystkie ↗</button></div>
+            <div class="meal-navigation">
+              <button id="meal-previous" type="button" class="secondary" aria-label="Poprzedni dzień" title="Poprzedni dzień" disabled>←</button>
+              <input id="meal-date" type="date" aria-label="Dzień posiłków" required disabled>
+              <button id="meal-next" type="button" class="secondary" aria-label="Następny dzień" title="Następny dzień" disabled>→</button>
+              <button id="meal-today" type="button" class="text-button" disabled>Dzisiaj</button>
+            </div>
+            <div id="meal-summary" class="meal-summary"></div>
+            <p id="meal-note" class="subtle" hidden>Brak części wartości odżywczych. Sumy oznaczone * obejmują tylko zapisane wartości.</p>
+            <div id="meals" aria-live="polite"></div>
+            <p id="meal-error" role="alert" hidden></p>
+          </section>
+          <section class="panel"><div class="panel-heading"><h2>Aktualność danych</h2><button id="sync-data" class="text-button">Synchronizuj ↻</button></div><div id="sync-status"></div><p class="subtle">Odświeżenie widoku odczytuje bazę. Synchronizacja pobiera nowe dane ze źródeł.</p></section>
+        </div>
       </section>
       <section id="chat-view" class="view" hidden>
         <div class="page-heading"><div><span class="eyebrow">WSPÓLNY KONTEKST</span><h1>Porozmawiajmy<span class="accent">.</span></h1><p>Jedna rozmowa — w przeglądarce i na Telegramie.</p></div></div>

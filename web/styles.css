@@ -472,6 +472,7 @@ main {
 
 .bottom-grid {
   display: grid;
+  align-items: start;
   grid-template-columns: 1.2fr 1fr;
   gap: 18px;
   margin-top: 20px
@@ -508,6 +509,90 @@ main {
 .meal-row>span {
   font-size: 12px;
   white-space: nowrap
+}
+
+.meals-panel .panel-heading p {
+  font-size: 11px;
+  margin: 5px 0 0
+}
+
+.meal-navigation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px
+}
+
+.meal-navigation .secondary {
+  padding: 8px 11px
+}
+
+.meal-navigation input {
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  padding: 8px
+}
+
+.meal-navigation .text-button {
+  padding: 8px 0;
+  white-space: nowrap
+}
+
+.meal-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 18px 0 8px
+}
+
+.meal-summary>div {
+  background: var(--raised);
+  border-radius: 10px;
+  padding: 12px 14px
+}
+
+.meal-summary>div:first-child {
+  background: var(--feature)
+}
+
+.meal-summary span,
+.meal-summary small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted)
+}
+
+.meal-summary span {
+  display: block
+}
+
+.meal-summary strong {
+  display: block;
+  font-size: 21px;
+  font-weight: 550;
+  margin-top: 4px
+}
+
+.meals-panel .meal-row {
+  align-items: flex-start;
+  gap: 12px
+}
+
+.meal-description {
+  min-width: 0;
+  overflow-wrap: anywhere
+}
+
+.meal-macros {
+  font-size: 11px;
+  line-height: 1.6;
+  margin: 6px 0 0
+}
+
+.meals-panel[aria-busy="true"] #meals,
+.meals-panel[aria-busy="true"] #meal-summary {
+  opacity: .6
 }
 
 .subtle {
@@ -650,7 +735,8 @@ footer span {
 }
 
 #chat-error,
-#login-error {
+#login-error,
+#meal-error {
   color: var(--error-ink);
   font-size: 12px;
   margin: 8px 0 0

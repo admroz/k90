@@ -36,6 +36,7 @@ def login(client):
     "path",
     [
         "/api/dashboard",
+        "/api/meals",
         "/api/tables",
         "/api/tables/waga",
         "/api/documents/pacjent.md",
@@ -64,6 +65,75 @@ def test_login_logout_and_session_cookie(web_client):
 def test_default_cookie_requires_https(web_client, monkeypatch):
     monkeypatch.delenv("WEB_COOKIE_SECURE")
     assert "Secure" in login(web_client).headers["set-cookie"]
+
+
+def test_daily_meals_default_to_application_date_and_include_all_meals(web_client, monkeypatch):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    # In UTC it is still yesterday. Use the application's calendar date.
+    monkeypatch.setattr(web_data, "now_local", lambda: datetime(2026, 10, 23, 0, 30, tzinfo=ZoneInfo("Europe/Warsaw")))
+    with get_conn() as conn:
+        for hour in (20, 7, 16, 10, 13, 22):
+            conn.execute(
+                "INSERT INTO posilki (data,czas,opis,kalorie,bialko_g,weglowodany_g,tluszcze_g) VALUES (?,?,?,?,?,?,?)",
+                ("2026-10-23", f"{hour:02}:00", f"Posiłek {hour}", 100, 5, 10, 4),
+            )
+        conn.execute("INSERT INTO posilki (data,kalorie) VALUES ('2026-10-22', 999)")
+        conn.commit()
+    login(web_client)
+    data = web_client.get("/api/meals").json()
+    assert data["date"] == data["today"] == "2026-10-23"
+    assert data["previous_date"] == "2026-10-22"
+    assert data["next_date"] is None
+    assert [row["czas"] for row in data["meals"]] == ["07:00", "10:00", "13:00", "16:00", "20:00", "22:00"]
+    assert data["totals"] == {"kalorie": 600, "bialko_g": 30, "weglowodany_g": 60, "tluszcze_g": 24}
+    assert all(count == 0 for count in data["missing_values"].values())
+
+
+def test_daily_meals_can_read_older_days_independently_of_chart_period(web_client, monkeypatch):
+    from datetime import datetime
+
+    monkeypatch.setattr(web_data, "now_local", lambda: datetime(2026, 10, 23, 12))
+    with get_conn() as conn:
+        conn.execute("INSERT INTO posilki (data,czas,opis,kalorie,bialko_g,weglowodany_g,tluszcze_g) VALUES ('2024-02-29','12:30','Starszy posiłek',450,20,50,12)")
+        conn.commit()
+    login(web_client)
+    data = web_client.get("/api/meals?date=2024-02-29").json()
+    assert data["date"] == "2024-02-29"
+    assert data["previous_date"] == "2024-02-28"
+    assert data["next_date"] == "2024-03-01"
+    assert data["meals"][0]["opis"] == "Starszy posiłek"
+    assert data["totals"]["kalorie"] == 450
+    assert web_client.get("/api/dashboard?days=7").json()["posilki"] == []
+
+
+def test_empty_meal_day_has_zero_totals(web_client):
+    login(web_client)
+    data = web_client.get("/api/meals?date=2020-01-01").json()
+    assert data["meals"] == []
+    assert all(value == 0 for value in data["totals"].values())
+    assert all(count == 0 for count in data["missing_values"].values())
+
+
+def test_daily_totals_distinguish_missing_values_from_real_zero(web_client):
+    with get_conn() as conn:
+        conn.executemany(
+            "INSERT INTO posilki (data,kalorie,bialko_g,weglowodany_g,tluszcze_g) VALUES ('2026-10-22',?,?,?,?)",
+            [(500, 20, None, 10), (None, None, None, 0), (0, 0, None, None)],
+        )
+        conn.commit()
+    login(web_client)
+    data = web_client.get("/api/meals?date=2026-10-22").json()
+    assert data["totals"] == {"kalorie": 500, "bialko_g": 20, "weglowodany_g": None, "tluszcze_g": 10}
+    assert data["missing_values"] == {"kalorie": 1, "bialko_g": 1, "weglowodany_g": 3, "tluszcze_g": 1}
+    assert data["meals"][2]["kalorie"] == 0
+
+
+@pytest.mark.parametrize("day", ["2026-02-30", "not-a-date", "2026-10-23' OR 1=1--"])
+def test_meal_day_is_validated(web_client, day):
+    login(web_client)
+    assert web_client.get("/api/meals", params={"date": day}).status_code == 422
 
 
 def test_cross_origin_post_and_missing_header_rejected(web_client):
