@@ -16,6 +16,7 @@ from agent import run_agent
 from summary import maybe_refresh_summary, refresh_patient_summary
 from tools.commands import handle_command
 from tools.db import init_db
+from tools.images import IMAGE_EXTENSIONS, image_mime_type
 from tools.garmin import mark_summary_refreshed, should_auto_sync_today, sync_garmin_data, sync_has_changes
 from tools.libre import should_auto_sync as should_auto_sync_libre, sync_libre_data, sync_has_changes as libre_sync_has_changes
 
@@ -148,9 +149,12 @@ def _image_from_message(message: dict) -> tuple[str, str] | None:
     if photos:
         return photos[-1]["file_id"], "image/jpeg"
     document = message.get("document") or {}
-    mime_type = document.get("mime_type", "")
-    if document.get("file_id") and mime_type.startswith("image/"):
-        return document["file_id"], mime_type
+    mime_type = document.get("mime_type") or ""
+    extension = os.path.splitext(document.get("file_name") or "")[1].lower()
+    if document.get("file_id") and (
+        mime_type.startswith("image/") or extension in IMAGE_EXTENSIONS
+    ):
+        return document["file_id"], IMAGE_EXTENSIONS.get(extension, mime_type)
     return None
 
 
@@ -200,7 +204,9 @@ def handle_telegram_message(api: TelegramAPI, message: dict) -> None:
         file_id, declared_mime_type = image
         try:
             image_bytes, downloaded_mime_type = api.download_file(file_id)
-            mime_type = downloaded_mime_type if downloaded_mime_type.startswith("image/") else declared_mime_type
+            mime_type = image_mime_type(image_bytes) or (
+                downloaded_mime_type if downloaded_mime_type.startswith("image/") else declared_mime_type
+            )
             encoded = base64.b64encode(image_bytes).decode()
             content_parts.append({"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{encoded}"}})
             log.info("telegram.image mime=%s bytes=%d", mime_type, len(image_bytes))
