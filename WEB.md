@@ -4,9 +4,15 @@ Pierwsza wersja obejmuje wspólny chat WWW/Telegram, dashboard na danych SQLite,
 przeglądarkę tabel oraz odczyt dokumentów Markdown i pamięci pacjenta.
 Obraz `admroz/k90:latest` jest budowany dla `linux/amd64` (Lenovo M900).
 
+Frontend jest częścią `main`, a nie wyłącznie eksperymentalnym branchem.
+Ten dokument opisuje kod i procedury; nie potwierdza wersji działającej na serwerze.
+Plan rozszerzenia pamięci, jeszcze bez implementacji:
+[Pamięć k90](docs/MEMORY_ARCHITECTURE.md).
+
 ## Uruchomienie na Macu
 
 ```bash
+python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-dev.txt
 .venv/bin/python dev.py
 ```
@@ -117,7 +123,7 @@ wcześniejszego przesłania danych z zegarka do Garmin Connect.
 Harmonogram synchronizacji niezależny od wiadomości
 pozostaje do dalszego ustalenia. Dotychczasowy auto-sync przy rozmowie pozostaje.
 
-## Testy przed Synology
+## Testy przed wdrożeniem (aktualnie AMD64)
 
 ```bash
 .venv/bin/python -m pytest -q
@@ -152,7 +158,7 @@ i PR-ach. Publikowanie obrazu `latest` jest możliwe wyłącznie z `main` po tes
 
 Przed wdrożeniem pozostaje ręcznie ocenić wygląd desktop/mobile, sprawdzić prawdziwy
 model na kopii danych i przeprowadzić smoke test obrazu. Testy nie wysyłają
-wiadomości do prawdziwego Telegrama ani nie wykonują operacji na NAS.
+wiadomości do prawdziwego Telegrama ani nie wykonują operacji na serwerze produkcyjnym.
 
 ## Konfiguracja serwera
 
@@ -164,7 +170,7 @@ Domyślne `WEB_COOKIE_SECURE=true` wymaga HTTPS. Nie wystawiaj tego portu public
 Dla bezpośredniego HTTP w zaufanym LAN ustaw `WEB_BIND_IP` na adres serwera i
 `WEB_COOKIE_SECURE=false`. Mapowanie portu jest już w Compose. Przykład: [DEPLOY.md](DEPLOY.md).
 
-Schemat dodaje dwie opcjonalne kolumny do historii oraz tabele kolejki i transportu.
-Przed wdrożeniem zachowaj backup bazy i dokumentów. Ten branch nie został wdrożony
-na NAS; dotychczasowe `python server.py` pozostaje starszym trybem Telegram-only
-i nie powinno działać równolegle z nowym adapterem dla tego samego bota.
+Schemat obsługuje dwie opcjonalne kolumny historii oraz tabele kolejki i transportu.
+Przed aktualizacją starszej instalacji zachowaj backup bazy i dokumentów.
+`python server.py` pozostaje alternatywnym, starszym trybem Telegram-only;
+nie uruchamiaj go równolegle z nowym adapterem dla tego samego bota.

@@ -1,42 +1,62 @@
 # k90 — Osobisty asystent zdrowotny
 
-Agent AI działający jako osobisty lekarz rodzinny, diabetolog i dietetyk. Komunikuje się przez Telegram, ma dostęp do danych z Garmin Connect i bazy danych zdrowotnych, monitoruje trendy i pomaga zarządzać dietą. Używa świeżego kontekstu operacyjnego z ostatnich dni przy każdej rozmowie.
+Osobisty asystent AI do rozmów o zdrowiu i diecie. Udostępnia wspólną rozmowę
+przez Telegram i panel WWW, korzysta z Garmin Connect, LibreLinkUp i lokalnej
+bazy danych. Przy każdej rozmowie buduje kontekst z zapisanych pomiarów,
+posiłków i dokumentów. Nie zastępuje opieki medycznej.
 
 ## Funkcje
 
 - Odpowiada na prywatne wiadomości Telegram
+- Panel WWW: wspólny chat, dashboard, posiłki z wyborem dnia, regeneracja,
+  aktywność oraz podgląd tabel i dokumentów
 - Analizuje dane zdrowotne: ciśnienie, waga, sen, HRV, Body Battery, aktywności
 - Pobiera dane z Garmin Connect i synchronizuje je bezpośrednio do SQLite
+- Pobiera dostępne odczyty glukozy z LibreLinkUp (opcjonalnie)
 - Loguje posiłki, w tym na podstawie zdjęć
 - Przechowuje wyniki badań laboratoryjnych i analizuje trendy
 - Prowadzi pliki medyczne pacjenta (profil, wywiad, dieta, analiza)
 - Generuje i aktualizuje krótkie patient summary w formie rekordu faktów medycznych
-- Obsługuje komendy slash bez udziału LLM: `/status`, `/debug`, `/update`, `/summary`, `/backup`, `/help`
+- Obsługuje komendy slash poza pętlą rozmowy: `/status`, `/debug`, `/update`,
+  `/summary`, `/backup`, `/help`; `/update` może wywołać model do odświeżenia summary
 
 ## Stack
 
-- **Agent:** Python + LiteLLM (domyślnie OpenAI GPT przez `.env`)
-- **Komunikacja:** Telegram Bot API przez long polling
-- **Baza danych:** SQLite (historia rozmów, dane zdrowotne, podsumowanie pacjenta)
-- **Dane Garmin:** `fetch_garmin.py` → bezpośredni sync do SQLite
+- **Agent:** Python, własna pętla narzędzi; LiteLLM / Chat Completions lub
+  bezpośrednie OpenAI Responses API dla rodziny GPT-6.1 Sol
+- **Backend:** FastAPI i trwała kolejka SQLite, jeden worker agenta
+- **Komunikacja:** statyczny frontend WWW oraz Telegram Bot API przez long polling
+- **Baza danych:** SQLite (historia, dane zdrowotne, summary, kolejka i stan transportu)
+- **Źródła:** `fetch_garmin.py` i `fetch_libre.py` → bezpośredni sync do SQLite
+- **Procesy:** backend WWW i adapter Telegrama w jednym kontenerze pod Supervisorem
 - **Deployment:** Docker Compose (Lenovo M900 / Intel/AMD x86-64; build ARM64 wyłączony)
 
 ## Struktura
 
 ```
 k90/
-├── agent.py                  # pętla LiteLLM + historia rozmów z SQLite
-├── server.py                 # Telegram long-polling listener
+├── agent.py                  # pętla modelu/narzędzi + historia rozmów z SQLite
+├── responses_api.py          # adapter OpenAI Responses dla rodziny Sol
+├── webapp.py                 # FastAPI: logowanie, chat, dashboard i dane
+├── web_runtime.py            # trwała kolejka i jeden worker agenta
+├── web_data.py               # odczyty danych do panelu WWW
+├── web/                      # statyczny frontend bez CDN
+├── telegram_adapter.py       # Telegram → wewnętrzne API backendu
+├── server.py                 # starszy, alternatywny tryb Telegram-only
+├── dev.py                    # lokalny podgląd na fikcyjnych danych lub kopii backupu
 ├── summary.py                # generowanie podsumowania pacjenta
 ├── system_prompt.py          # ładowanie promptu (data/ override lub repo)
 ├── system_prompt.md          # ogólny prompt systemowy (bez danych osobowych)
 ├── fetch_garmin.py           # pobieranie danych z Garmin Connect → SQLite
+├── fetch_libre.py            # pobieranie glukozy z LibreLinkUp → SQLite
 ├── migrate_csv_to_sqlite.py  # legacy import CSV → SQLite
 ├── tools/
 │   ├── health.py             # dane zdrowotne z SQLite
 │   ├── lab.py                # wyniki badań laboratoryjnych
 │   ├── diet.py               # logowanie posiłków
 │   ├── garmin.py             # sync Garmin direct-to-db
+│   ├── libre.py              # sync Libre i kontrola włączenia źródła
+│   ├── context.py            # wyciąg bieżących danych do kontekstu rozmowy
 │   ├── patient.py            # pliki .md pacjenta
 │   ├── commands.py           # komendy slash bez LLM
 │   └── db.py                 # połączenie SQLite + init_db()
@@ -48,12 +68,41 @@ k90/
 │   ├── analiza.md            # analiza wyników badań
 │   ├── dieta.md              # plan diety
 │   ├── tydzien.md            # menu posiłków
-│   └── *.csv                 # eksporty Garmin (pośredni format)
+│   └── *.csv                 # opcjonalne historyczne eksporty/importy
+├── docs/MEMORY_ARCHITECTURE.md # plan pamięci długoterminowej (niezaimplementowany)
+├── supervisord.conf          # osobne procesy backendu i Telegrama
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env.example
 └── .env                      # klucze API i dane logowania (gitignored)
 ```
+
+## Architektura i pamięć
+
+```text
+WWW ──────────────────────┐
+Telegram → adapter HTTP ──┴→ FastAPI → kolejka SQLite → worker → agent
+                                                              ↕
+                                                   model i narzędzia
+                                                              ↕
+                                                   SQLite + dokumenty
+```
+
+Oba kanały używają jednej historii `CONVERSATION_USER_ID`. Agent dostaje
+domyślnie ostatnie 10 par wiadomości, siedmioliniowe summary z pięciu plików
+pacjenta oraz bieżący wyciąg danych. Starsza historia pozostaje w SQLite,
+ale obecnie nie jest semantycznie wyszukiwana. Summary nie powstaje z rozmów.
+
+**Plan rozwoju:** Hindsight jako opcjonalny, wymienialny indeks kontekstu rozmów,
+przy zachowaniu pełnych źródeł lokalnie, z filtrem prywatności i lokalnym fallbackiem.
+To kierunek rozwoju, nie działająca integracja. Założenia i kryteria odbioru:
+[Pamięć k90](docs/MEMORY_ARCHITECTURE.md). Bieżąca architektura: [AGENTS.md](AGENTS.md),
+zadania: [TODO.md](TODO.md).
+
+Synchronizacja Garmin/Libre działa na żądanie oraz przy rozmowie, gdy brakuje
+udanego pobrania danego dnia. Przycisk WWW „Pobierz Garmin” pomija model, Libre
+i summary. Nie ma niezależnego harmonogramu ciągłego monitoringu; data ostatniego
+pomiaru może być starsza niż data zbudowania kontekstu.
 
 ## Konfiguracja
 
@@ -111,11 +160,12 @@ zapytania i nie są zapisywane do historii. Dostępność modelu zależy od kont
 Zasady API: [GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol)
 i [migracja do Responses](https://developers.openai.com/api/docs/guides/migrate-to-responses).
 
-Komendy slash dostępne przez Telegram:
+Komendy slash dostępne przez Telegram i wspólny backend WWW:
 
 - `/status` — szybkie podsumowanie: waga, kalorie z ostatnich dni, ostatnia aktywność
 - `/debug` — liczba zapytań, tokeny i stan summary
-- `/update` — synchronizacja Garmin bez LLM
+- `/update` — synchronizacja Garmin i włączonego Libre; zmiany Garmin mogą
+  uruchomić odświeżenie summary przez model
 - `/summary` — pokazuje aktualne patient summary
 - `/backup` — tworzy snapshot SQLite w `data/backups/`
 - `/help` — lista dostępnych komend
@@ -125,6 +175,7 @@ Komendy slash dostępne przez Telegram:
 Frontend WWW można uruchomić lokalnie bez Dockera i bez Telegrama:
 
 ```bash
+python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-dev.txt
 .venv/bin/python dev.py
 # Lub na osobnej kopii backupu pobranego z NAS:
@@ -172,6 +223,10 @@ Zobacz [DEPLOY.md](DEPLOY.md).
 
 ## Dane pacjenta
 
-Cały folder `data/` jest gitignored i montowany jako wolumin Dockera. Przeniesienie na nowy serwer = skopiowanie `data/` i `.env`.
+Folder `data/` jest gitignored i montowany jako wolumin Dockera. Przeniesienie
+na nowy serwer wymaga spójnego backupu bazy SQLite, dokumentów i konfiguracji.
+Nie kopiuj samego aktywnego `k90.db`: najnowsze zapisy mogą pozostawać w WAL.
+Komenda `/backup` tworzy snapshot bazy; dokumenty i `.env` trzeba zabezpieczyć
+oddzielnie. Pełna procedura: [DEPLOY.md](DEPLOY.md).
 
 Plik `system_prompt.md` z repo jest ogólny — bez danych osobowych. Możesz nadpisać go plikiem `data/system_prompt.md`, który nie trafi do gita.
