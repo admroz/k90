@@ -125,7 +125,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "get_daily_metrics",
-            "description": "Pobiera dzienne metryki zdrowotne (RHR, stres, oddech) z ostatnich N dni.",
+            "description": "Pobiera dzienne metryki zdrowotne (RHR, stres, oddech) oraz kalorie spoczynkowe, aktywne i spalone łącznie z Garmin z ostatnich N dni. Do bilansu używaj tych kalorii, bez dodawania kalorii treningów. Brak danych nie oznacza zera ani stałego BMR.",
             "parameters": {
                 "type": "object",
                 "properties": {

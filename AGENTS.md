@@ -10,6 +10,7 @@
 - Przegląd pokazuje bilans i posiłki, Regeneracja sen/HRV/Body Battery, Aktywność
   treningi i wydatek energii. Bilans bazuje na `kalorie_dzienne` z Garmin
   (`bmrKilocalories` + `activeKilocalories`), bez sumowania kalorii treningów.
+  Te same wartości są dostępne agentowi przez `get_daily_metrics`.
 - `POST /api/sync/garmin`: zadanie `garmin_sync` w tej samej kolejce; pomija LLM,
   podsumowanie i Libre. Stan: `GET /api/sync/garmin`. Pierwsze pobranie pustej
   tabeli kalorii od `2022-01-01`, zapis co 30 dni i wznowienie z buforem 7 dni.

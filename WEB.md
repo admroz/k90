@@ -94,6 +94,8 @@ Docker sam nie restartuje kontenera tylko dlatego, że healthcheck jest unhealth
   zerem; bilans wymaga danych Garmin i kompletnych kalorii zapisanych posiłków.
 - Regeneracja: sen, HRV, Body Battery, tętno spoczynkowe, stres i oddech.
 - Aktywność: treningi, dystans oraz dzienne kalorie aktywne i całkowite spalanie.
+  Przycisk „Omów” przygotowuje pytanie; agent odczytuje dzienne spalanie przez
+  `get_daily_metrics`, korzystając z tych samych zapisanych wartości Garmin.
 - Rozmowa: tekst, JPG/PNG/WebP do 5 MB, starsze wiadomości, stan kolejki i błędy.
   Odpowiedź pojawia się po zakończeniu przetwarzania; token streaming jest poza v1.
 - Dane: dozwolone tabele, wyszukiwanie, sortowanie i stronicowanie. Odczyt bez
