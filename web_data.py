@@ -16,6 +16,7 @@ TABLES = (
     "body_battery",
     "aktywnosci",
     "metryki_dzienne",
+    "kalorie_dzienne",
     "posilki",
     "glukoza_libre",
     "wyniki_lab",
@@ -125,14 +126,25 @@ def meals_for_day(day: date | None = None):
                         czas, id""",
             (day.isoformat(),),
         )]
+        energy = conn.execute("SELECT * FROM kalorie_dzienne WHERE data = ?", (day.isoformat(),)).fetchone()
     totals, missing = {}, {}
     for field in ("kalorie", "bialko_g", "weglowodany_g", "tluszcze_g"):
         values = [row[field] for row in rows if row[field] is not None]
         totals[field] = sum(values) if values else (None if rows else 0)
         missing[field] = len(rows) - len(values)
+    energy = dict(energy) if energy else {}
+    resting, active = energy.get("spoczynkowe_kcal"), energy.get("aktywne_kcal")
+    burned = resting + active if resting is not None and active is not None else None
+    # A missing meal or expenditure value cannot turn into a reliable balance.
+    balance = totals["kalorie"] - burned if rows and burned is not None and not missing["kalorie"] else None
     return {
         "date": day.isoformat(), "today": today.isoformat(), "meals": rows,
         "totals": totals, "missing_values": missing,
+        "energy": {
+            "resting_kcal": resting, "active_kcal": active, "burned_kcal": burned,
+            "balance_kcal": balance, "fetched_at": energy.get("pobrano_at"),
+            "day_in_progress": day == today,
+        },
         "previous_date": (day - timedelta(days=1)).isoformat() if day > date.min else None,
         "next_date": (day + timedelta(days=1)).isoformat() if day < today else None,
     }
@@ -152,6 +164,7 @@ def dashboard(days):
             "metryki_dzienne",
             "aktywnosci",
             "posilki",
+            "kalorie_dzienne",
         ):
             result[table] = [
                 dict(row)
@@ -185,9 +198,12 @@ def dashboard(days):
             dict(row) for row in conn.execute("SELECT * FROM sync_status")
         ]
         result["latest"] = {}
-        for table in ("waga", "sen", "hrv", "cisnienie"):
+        for table in ("waga", "sen", "hrv", "cisnienie", "body_battery", "metryki_dzienne"):
             row = conn.execute(
                 f'SELECT * FROM "{table}" ORDER BY data DESC, rowid DESC LIMIT 1'
             ).fetchone()
             result["latest"][table] = dict(row) if row else None
+        for row in result["kalorie_dzienne"]:
+            resting, active = row["spoczynkowe_kcal"], row["aktywne_kcal"]
+            row["spalone_kcal"] = resting + active if resting is not None and active is not None else None
     return {**result, "from": start, "to": end, "days": days}

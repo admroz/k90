@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
 
@@ -117,6 +117,10 @@ class TelegramMessage(Message):
 
 class Login(BaseModel):
     password: str = Field(max_length=1024)
+
+
+class SyncRequest(BaseModel):
+    request_id: str = Field(min_length=5, max_length=120, pattern=r"^web:[a-zA-Z0-9:_-]+$")
 
 
 class Delivery(BaseModel):
@@ -222,6 +226,10 @@ def create_app(*, start_worker=True, processor=None):
         healthy = not start_worker or app.state.worker.thread.is_alive()
         return JSONResponse({"ok": healthy}, status_code=200 if healthy else 503)
 
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon():
+        return RedirectResponse("/static/favicon.svg")
+
     @app.post("/api/login")
     async def login(body: Login, response: Response):
         now = time.time()
@@ -279,6 +287,25 @@ def create_app(*, start_worker=True, processor=None):
     def meals(day: date | None = Query(None, alias="date")):
         return web_data.meals_for_day(day)
 
+    @app.post("/api/sync/garmin", status_code=202, dependencies=[Depends(authenticated)])
+    def sync_garmin(body: SyncRequest):
+        if os.getenv("K90_SYNC_ENABLED", "true").lower() == "false":
+            raise HTTPException(409, "Synchronizacja jest wyłączona w lokalnej kopii danych.")
+        try:
+            job = enqueue(body.request_id, "", kind="garmin_sync")
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from None
+        except OverflowError as exc:
+            raise HTTPException(429, str(exc)) from None
+        return {"request_id": job["request_id"], "state": job["state"]}
+
+    @app.get("/api/sync/garmin", dependencies=[Depends(authenticated)])
+    def garmin_sync_status():
+        with closing(get_conn()) as conn:
+            row = conn.execute("SELECT request_id, state, response, created_at, finished_at FROM chat_jobs WHERE kind = 'garmin_sync' ORDER BY seq DESC LIMIT 1").fetchone()
+            through = conn.execute("SELECT MAX(data) FROM kalorie_dzienne").fetchone()[0]
+        return {**dict(row), "calories_through": through} if row else None
+
     @app.get("/api/tables", dependencies=[Depends(authenticated)])
     def tables():
         return list(web_data.TABLES)
@@ -331,7 +358,7 @@ def create_app(*, start_worker=True, processor=None):
     def jobs():
         with closing(get_conn()) as conn:
             rows = conn.execute(
-                "SELECT request_id, channel, payload, state, response, created_at FROM chat_jobs WHERE state != 'done' ORDER BY seq DESC LIMIT 100"
+                "SELECT request_id, channel, payload, state, response, created_at FROM chat_jobs WHERE state != 'done' AND kind = 'message' ORDER BY seq DESC LIMIT 100"
             ).fetchall()
         return [
             {

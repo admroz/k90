@@ -9,6 +9,7 @@ CSV nie są już częścią standardowego flow synchronizacji.
 from __future__ import annotations
 
 import os
+import math
 import sqlite3
 import sys
 import time
@@ -95,6 +96,11 @@ TABLE_CONFIG = {
     "metryki_dzienne": {
         "key_cols": ["data"],
         "columns": ["data", "rhr", "avg_stres", "max_stres", "avg_oddech", "min_oddech", "max_oddech"],
+    },
+    "kalorie_dzienne": {
+        "key_cols": ["data"],
+        "columns": ["data", "spoczynkowe_kcal", "aktywne_kcal", "calkowite_kcal", "pobrano_at"],
+        "compare_columns": ["data", "spoczynkowe_kcal", "aktywne_kcal", "calkowite_kcal"],
     },
     "hrv": {
         "key_cols": ["data"],
@@ -213,7 +219,10 @@ def _insert_or_update_many(conn: sqlite3.Connection, table: str, records: list[d
             conn.execute(insert_sql, [normalized[col] for col in columns])
             stats["inserted"] += 1
             continue
-        if _compare_rows(existing, normalized, columns):
+        if _compare_rows(existing, normalized, config.get("compare_columns", columns)):
+            if table == "kalorie_dzienne":
+                # Refresh freshness without claiming the calorie values changed.
+                conn.execute("UPDATE kalorie_dzienne SET pobrano_at = ? WHERE data = ?", (normalized["pobrano_at"], normalized["data"]))
             stats["unchanged"] += 1
             continue
         conn.execute(update_sql, [normalized[col] for col in update_cols] + key_values)
@@ -392,6 +401,43 @@ def fetch_daily_metrics(client, start: str, end: str) -> list[dict]:
     return sorted(records, key=lambda row: row["data"])
 
 
+def fetch_daily_calories(client, start: str, end: str) -> list[dict]:
+    records = []
+    for day in date_range(start, end):
+        try:
+            data = client.get_stats(day) or {}
+        except garminconnect.GarminConnectConnectionError as exc:
+            # The client uses this exact error for an empty, successful summary.
+            # Do not treat authentication, rate limiting or network failures as gaps.
+            if str(exc) != "No data received from server":
+                raise
+            data = {}
+        if data.get("calendarDate") not in (None, day):
+            raise ValueError("Garmin returned calorie data for a different date")
+
+        def value(key):
+            raw = data.get(key)
+            if raw is None or isinstance(raw, bool):
+                return None
+            try:
+                number = float(raw)
+            except (TypeError, ValueError):
+                return None
+            return number if math.isfinite(number) and number >= 0 else None
+
+        # Unknown values remain NULL. A successful empty response also records
+        # the queried day, so a historical backfill can resume after a restart.
+        records.append({
+            "data": day,
+            "spoczynkowe_kcal": value("bmrKilocalories"),
+            "aktywne_kcal": value("activeKilocalories"),
+            "calkowite_kcal": value("totalKilocalories"),
+            "pobrano_at": datetime.now(ZoneInfo(APP_TIMEZONE)).isoformat(),
+        })
+        time.sleep(0.1)
+    return records
+
+
 def fetch_hrv(client, start: str, end: str) -> list[dict]:
     records = []
     dates = list(date_range(start, end))
@@ -476,6 +522,7 @@ def sync_garmin_to_db(client=None, full_mode: bool = False, end_date: str | None
         "metryki_dzienne": FULL_START if full_mode else _start_date_for_table(conn, "metryki_dzienne"),
         "hrv": FULL_START if full_mode else _start_date_for_table(conn, "hrv"),
         "body_battery": FULL_START if full_mode else _start_date_for_table(conn, "body_battery"),
+        "kalorie_dzienne": FULL_START if full_mode else _start_date_for_table(conn, "kalorie_dzienne"),
     }
 
     print(f"\n{'=' * 55}")
@@ -495,15 +542,24 @@ def sync_garmin_to_db(client=None, full_mode: bool = False, end_date: str | None
         ("metryki_dzienne", fetch_daily_metrics),
         ("hrv", fetch_hrv),
         ("body_battery", fetch_body_battery),
+        ("kalorie_dzienne", fetch_daily_calories),
     ]
 
     results = {"ok": True, "datasets": {}, "end_date": target_end}
     try:
         for table, fetcher in dataset_fetchers:
             print(f"\n── {table} ──")
-            records = fetcher(client, starts[table], target_end)
-            stats = _insert_or_update_many(conn, table, records)
-            conn.commit()
+            start = starts.get(table, FULL_START)
+            chunks = date_chunks(start, target_end, chunk_days=30) if table == "kalorie_dzienne" else [(start, target_end)]
+            stats = {"fetched": 0, "inserted": 0, "updated": 0, "unchanged": 0}
+            for batch_start, batch_end in chunks:
+                records = fetcher(client, batch_start, batch_end)
+                batch = _insert_or_update_many(conn, table, records)
+                conn.commit()
+                for key in stats:
+                    stats[key] += batch[key]
+                if table == "kalorie_dzienne":
+                    print(f"  kalorie zapisane: {batch_start} → {batch_end}", flush=True)
             results["datasets"][table] = stats
             print(
                 f"  {table}: pobrane {stats['fetched']}, nowe {stats['inserted']}, "

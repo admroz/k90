@@ -37,6 +37,7 @@ def login(client):
     [
         "/api/dashboard",
         "/api/meals",
+        "/api/sync/garmin",
         "/api/tables",
         "/api/tables/waga",
         "/api/documents/pacjent.md",
@@ -114,6 +115,86 @@ def test_empty_meal_day_has_zero_totals(web_client):
     assert data["meals"] == []
     assert all(value == 0 for value in data["totals"].values())
     assert all(count == 0 for count in data["missing_values"].values())
+
+
+def test_energy_balance_uses_daily_garmin_components_without_adding_workouts(web_client):
+    with get_conn() as conn:
+        conn.execute("INSERT INTO posilki(data,kalorie) VALUES ('2026-10-23', 1800)")
+        conn.execute("INSERT INTO kalorie_dzienne VALUES ('2026-10-23',1900,500,2400,'2026-10-23T20:00:00+02:00')")
+        conn.execute("INSERT INTO aktywnosci(data,czas,kalorie) VALUES ('2026-10-23','12:00',800)")
+        conn.commit()
+    login(web_client)
+    energy = web_client.get("/api/meals?date=2026-10-23").json()["energy"]
+    assert energy["resting_kcal"] == 1900
+    assert energy["active_kcal"] == 500
+    assert energy["burned_kcal"] == 2400
+    assert energy["balance_kcal"] == -600
+    assert energy["fetched_at"] == "2026-10-23T20:00:00+02:00"
+
+
+def test_energy_balance_never_substitutes_unknown_or_incomplete_values(web_client):
+    with get_conn() as conn:
+        conn.execute("INSERT INTO posilki(data,kalorie) VALUES ('2026-10-23', 500)")
+        conn.execute("INSERT INTO kalorie_dzienne VALUES ('2026-10-23',1900,NULL,2400,'now')")
+        conn.commit()
+    login(web_client)
+    data = web_client.get("/api/meals?date=2026-10-23").json()
+    assert data["energy"]["burned_kcal"] is None
+    assert data["energy"]["balance_kcal"] is None
+    with get_conn() as conn:
+        conn.execute("UPDATE kalorie_dzienne SET aktywne_kcal = 0")
+        conn.execute("INSERT INTO posilki(data,kalorie) VALUES ('2026-10-23', NULL)")
+        conn.commit()
+    data = web_client.get("/api/meals?date=2026-10-23").json()
+    assert data["energy"]["burned_kcal"] == 1900
+    assert data["energy"]["balance_kcal"] is None
+    assert web_client.get("/api/meals?date=2026-10-22").json()["energy"]["balance_kcal"] is None
+
+
+def test_web_garmin_sync_bypasses_all_llm_paths_and_is_deduplicated(web_client, monkeypatch):
+    import agent
+    import summary
+    import tools.garmin as garmin
+    from unittest.mock import Mock
+    from web_runtime import ConversationWorker
+
+    monkeypatch.setenv("K90_SYNC_ENABLED", "true")
+    sync = Mock(return_value={"ok": True})
+    monkeypatch.setattr(garmin, "sync_garmin_data", sync)
+    monkeypatch.setattr(agent, "run_agent", lambda *args, **kwargs: pytest.fail("Agent must not run"))
+    monkeypatch.setattr(summary, "refresh_patient_summary", lambda *args, **kwargs: pytest.fail("LLM summary must not run"))
+    login(web_client)
+    first = web_client.post("/api/sync/garmin", json={"request_id": "web:sync-1"}, headers={"X-K90-Request": "1"})
+    assert first.status_code == 202
+    second = web_client.post("/api/sync/garmin", json={"request_id": "web:sync-2"}, headers={"X-K90-Request": "1"})
+    assert second.json()["request_id"] == first.json()["request_id"]
+    assert web_client.get("/api/jobs").json() == []
+    assert ConversationWorker().run_once()
+    assert not ConversationWorker().run_once()
+    sync.assert_called_once_with(trigger="web_button")
+    assert web_client.get("/api/sync/garmin").json()["state"] == "done"
+    again = web_client.post("/api/sync/garmin", json={"request_id": "web:sync-1"}, headers={"X-K90-Request": "1"})
+    assert again.json()["state"] == "done"
+    assert not ConversationWorker().run_once()
+    with get_conn() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM conversations").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM usage_stats").fetchone()[0] == 0
+
+
+def test_garmin_sync_is_blocked_in_local_preview_and_requires_csrf(web_client, monkeypatch):
+    login(web_client)
+    payload = {"request_id": "web:blocked"}
+    assert web_client.post("/api/sync/garmin", json=payload).status_code == 403
+    assert web_client.post("/api/sync/garmin", json=payload, headers={"X-K90-Request": "1"}).status_code == 409
+    with get_conn() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM chat_jobs").fetchone()[0] == 0
+
+
+def test_favicon_is_available_before_login(web_client):
+    response = web_client.get("/static/favicon.svg")
+    assert response.status_code == 200
+    assert "image/svg+xml" in response.headers["content-type"]
+    assert web_client.get("/favicon.ico").status_code == 200
 
 
 def test_daily_totals_distinguish_missing_values_from_real_zero(web_client):

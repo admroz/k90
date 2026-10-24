@@ -7,6 +7,12 @@
 - `web/`: statyczny frontend bez CDN i bez wymaganego serwera Node.
 - `telegram_adapter.py`: transport Telegrama korzystający z wewnętrznego API backendu.
 - `supervisord.conf`: jeden kontener, niezależne procesy backendu i adaptera.
+- Przegląd pokazuje bilans i posiłki, Regeneracja sen/HRV/Body Battery, Aktywność
+  treningi i wydatek energii. Bilans bazuje na `kalorie_dzienne` z Garmin
+  (`bmrKilocalories` + `activeKilocalories`), bez sumowania kalorii treningów.
+- `POST /api/sync/garmin`: zadanie `garmin_sync` w tej samej kolejce; pomija LLM,
+  podsumowanie i Libre. Stan: `GET /api/sync/garmin`. Pierwsze pobranie pustej
+  tabeli kalorii od `2022-01-01`, zapis co 30 dni i wznowienie z buforem 7 dni.
 - `dev.py --snapshot <katalog>`: lokalna kopia robocza pobranego backupu; Telegram
   i sync źródeł wyłączone. Domyślnie chat demonstracyjny; `--live-agent` włącza LLM.
 - Pobieranie danych z NAS jest ręczne (istniejący backup + SCP/File Station).

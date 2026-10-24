@@ -42,6 +42,9 @@ def init_runtime():
                 updated_at REAL NOT NULL
             );
         """)
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(chat_jobs)")}
+        if "kind" not in columns:
+            conn.execute("ALTER TABLE chat_jobs ADD COLUMN kind TEXT NOT NULL DEFAULT 'message'")
 
 
 def set_transport(name, value):
@@ -60,7 +63,9 @@ def get_transport(name, default=None):
     return json.loads(row[0]) if row else default
 
 
-def enqueue(request_id, content, channel="web", chat_id=None):
+def enqueue(request_id, content, channel="web", chat_id=None, *, kind="message"):
+    if kind not in ("message", "garmin_sync"):
+        raise ValueError("Nieznany rodzaj operacji")
     payload = json.dumps(content, ensure_ascii=False)
     with closing(get_conn()) as conn, conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -68,13 +73,18 @@ def enqueue(request_id, content, channel="web", chat_id=None):
             "SELECT * FROM chat_jobs WHERE request_id = ?", (request_id,)
         ).fetchone()
         if existing:
-            if (existing["payload"], existing["channel"], existing["chat_id"]) != (
+            if (existing["payload"], existing["channel"], existing["chat_id"], existing["kind"]) != (
                 payload,
                 channel,
                 chat_id,
+                kind,
             ):
                 raise ValueError("Ten identyfikator wiadomości ma już inną treść.")
             return dict(existing)
+        if kind == "garmin_sync":
+            active = conn.execute("SELECT * FROM chat_jobs WHERE kind = 'garmin_sync' AND state IN ('queued', 'running') ORDER BY seq LIMIT 1").fetchone()
+            if active:
+                return dict(active)
         count = conn.execute(
             "SELECT COUNT(*) FROM chat_jobs WHERE state IN ('queued', 'running')"
         ).fetchone()[0]
@@ -83,8 +93,8 @@ def enqueue(request_id, content, channel="web", chat_id=None):
                 "Kolejka jest pełna. Poczekaj na zakończenie poprzednich wiadomości."
             )
         conn.execute(
-            "INSERT INTO chat_jobs (request_id, channel, payload, chat_id) VALUES (?, ?, ?, ?)",
-            (request_id, channel, payload, chat_id),
+            "INSERT INTO chat_jobs (request_id, channel, payload, chat_id, kind) VALUES (?, ?, ?, ?, ?)",
+            (request_id, channel, payload, chat_id, kind),
         )
         return dict(
             conn.execute(
@@ -216,11 +226,22 @@ class ConversationWorker:
             {"channel": job["channel"], "request_id": job["request_id"]}
         )
         try:
-            response = self.processor(json.loads(job["payload"]))
+            if job["kind"] == "garmin_sync":
+                # Intentionally bypass agent, slash commands and LLM summaries.
+                from tools.garmin import sync_garmin_data
+
+                result = sync_garmin_data(trigger="web_button")
+                if "error" in result:
+                    raise RuntimeError("Garmin synchronization failed")
+                response = "Dane Garmin zostały pobrane."
+            else:
+                response = self.processor(json.loads(job["payload"]))
             state = "done"
         except Exception:
             log.exception("conversation.failed request_id=%s", job["request_id"])
             response = "Nie udało się zakończyć odpowiedzi. Sprawdź dane przed ponowieniem — część operacji mogła zostać wykonana."
+            if job["kind"] == "garmin_sync":
+                response = "Nie udało się pobrać danych Garmin. Sprawdź połączenie i konfigurację w logach kontenera."
             state = "failed"
         finally:
             MESSAGE_CONTEXT.reset(token)

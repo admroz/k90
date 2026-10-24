@@ -126,6 +126,46 @@ def test_queue_is_bounded_but_duplicate_retries_still_work(runtime):
         enqueue("web:overflow", "new")
 
 
+def test_garmin_sync_runs_serially_between_messages_without_agent(runtime, monkeypatch):
+    import tools.garmin as garmin
+
+    calls = []
+    monkeypatch.setattr(garmin, "sync_garmin_data", lambda **kwargs: calls.append("sync") or {"ok": True})
+    enqueue("web:first", "first")
+    enqueue("web:sync", "", kind="garmin_sync")
+    enqueue("web:last", "last")
+    worker = ConversationWorker(lambda content: calls.append(content) or "answer")
+    assert all(worker.run_once() for _ in range(3))
+    assert not worker.run_once()
+    assert calls == ["first", "sync", "last"]
+
+
+def test_existing_queue_records_migrate_as_messages(runtime):
+    enqueue("web:legacy", "legacy content")
+    with closing(get_conn()) as conn, conn:
+        conn.execute("ALTER TABLE chat_jobs DROP COLUMN kind")
+    init_runtime()
+    with closing(get_conn()) as conn:
+        row = conn.execute("SELECT kind, payload FROM chat_jobs").fetchone()
+    assert row["kind"] == "message"
+    assert row["payload"] == '"legacy content"'
+
+
+def test_failed_garmin_sync_has_a_terminal_state_and_does_not_block_chat(runtime, monkeypatch):
+    import tools.garmin as garmin
+
+    monkeypatch.setattr(garmin, "sync_garmin_data", lambda **kwargs: {"error": "synthetic outage"})
+    enqueue("web:sync", "", kind="garmin_sync")
+    enqueue("web:next", "next")
+    worker = ConversationWorker(lambda content: "answer")
+    assert worker.run_once() and worker.run_once()
+    with closing(get_conn()) as conn:
+        rows = conn.execute("SELECT state, response FROM chat_jobs ORDER BY seq").fetchall()
+    assert rows[0]["state"] == "failed"
+    assert "Garmin" in rows[0]["response"]
+    assert rows[1]["state"] == "done"
+
+
 def test_unexpected_sync_exception_still_allows_answer(runtime, monkeypatch):
     import agent
     import tools.garmin as garmin

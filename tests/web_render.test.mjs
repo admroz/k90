@@ -7,7 +7,8 @@ import {
   formatTimestamp,
   mealList,
   mealSummary,
-  mealDayLabel
+  mealDayLabel,
+  energyBalance
 } from "../web/render.mjs";
 
 test("Markdown escapes HTML and never activates links or images", () => {
@@ -111,4 +112,18 @@ test("Meal date labels use calendar days across year and daylight-saving boundar
   assert.ok(mealDayLabel('2025-12-31', '2026-01-01').startsWith('Wczoraj'));
   assert.ok(mealDayLabel('2026-03-29', '2026-03-30').includes('29 marca 2026'));
   assert.ok(!mealDayLabel('2024-02-29', '2026-01-01').includes('Wczoraj'));
+});
+
+test("Energy balance preserves positive, negative, zero and unknown values", () => {
+  const data = {meals: [{}], missing_values: {kalorie: 0}, energy: {resting_kcal: 1900, active_kcal: 0, burned_kcal: 1900, balance_kcal: -200, day_in_progress: true}};
+  assert.ok(energyBalance(data).includes('-200'));
+  assert.ok(energyBalance(data).includes('0 kcal'));
+  assert.ok(energyBalance(data).includes('Dzień jeszcze trwa'));
+  data.energy.balance_kcal = 200;
+  assert.ok(energyBalance(data).includes('+200'));
+  data.energy.balance_kcal = 0;
+  assert.ok(energyBalance(data).includes('>0 <small>kcal'));
+  data.energy = {};
+  assert.ok(energyBalance(data).includes('Brak kompletnych danych Garmin'));
+  assert.ok(energyBalance(data).includes('>— <small>kcal'));
 });

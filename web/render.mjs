@@ -17,6 +17,21 @@ export function mealSummary(totals, missing) {
   ].map(([label, key, unit]) => `<div><span>${label}</span><strong>${number(totals[key], 1)}${missing[key] && totals[key] != null ? " *" : ""} <small>${unit}</small></strong></div>`).join("");
 }
 
+export function energyBalance(data) {
+  const energy = data.energy || {};
+  const balance = energy.balance_kcal;
+  const signed = balance > 0 ? `+${number(balance, 0)}` : number(balance, 0);
+  let note = "Zapisane kalorie minus spalanie. Minus oznacza deficyt, plus — nadwyżkę.";
+  if (energy.burned_kcal == null) note = "Brak kompletnych danych Garmin o spalaniu dla tego dnia.";
+  else if (!data.meals.length) note = "Zapisz posiłki, aby obliczyć bilans dnia.";
+  else if (data.missing_values.kalorie) note = "Bilans niedostępny: część posiłków nie ma podanych kalorii.";
+  return `<dl class="energy-breakdown"><div><dt>Zapisane kalorie</dt><dd>${number(data.totals?.kalorie, 0)}${data.missing_values.kalorie ? " *" : ""} kcal</dd></div><div><dt>Spoczynkowe</dt><dd>${number(energy.resting_kcal, 0)} kcal</dd></div><div><dt>Aktywne</dt><dd>${number(energy.active_kcal, 0)} kcal</dd></div><div><dt>Spalone łącznie</dt><dd>${number(energy.burned_kcal, 0)} kcal</dd></div></dl><div class="energy-result"><span>Bilans dnia</span><strong>${signed} <small>kcal</small></strong></div><p class="subtle">${note}</p><p class="subtle">Spalanie jest estymacją Garmin.${energy.day_in_progress ? " Dzień jeszcze trwa; wartości mogą się zmienić." : ""}${energy.fetched_at ? ` Odczyt: ${escapeHTML(formatTimestamp(energy.fetched_at))}.` : ""}</p>`;
+}
+
+export function activityList(rows) {
+  return rows.slice(-20).reverse().map(row => `<div class="meal-row"><div class="meal-description"><strong>${escapeHTML(row.nazwa || row.typ || "Aktywność")}</strong><small>${escapeHTML(row.data)} · ${escapeHTML(row.czas || "")}</small><p class="meal-macros">${number(row.czas_trwania_min, 0)} min · ${number(row.dystans_km, 1)} km</p></div><span>${number(row.kalorie, 0)} kcal</span></div>`).join("") || '<div class="empty">Brak aktywności w wybranym okresie.</div>';
+}
+
 export function mealList(meals) {
   return meals.map(meal => `<div class="meal-row"><div class="meal-description"><strong>${escapeHTML(meal.opis || "Posiłek")}</strong><small>${escapeHTML(meal.czas || "Godzina niepodana")}</small><p class="meal-macros">Białko ${number(meal.bialko_g, 1)} g · Węglowodany ${number(meal.weglowodany_g, 1)} g · Tłuszcz ${number(meal.tluszcze_g, 1)} g</p></div><span>${number(meal.kalorie, 1)} kcal</span></div>`).join("") || '<div class="empty">Brak zapisanych posiłków w tym dniu.</div>';
 }
