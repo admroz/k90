@@ -1,159 +1,131 @@
-# k90 — architektura projektu
+# k90 — architektura i praca nad projektem
 
-## Frontend WWW
+Ten plik opisuje aktualny kod, nie potwierdza wersji uruchomionej na serwerze.
+Konfiguracja i uruchamianie: [README.md](README.md), panel: [WEB.md](WEB.md),
+wdrożenie: [DEPLOY.md](DEPLOY.md), zadania: [TODO.md](TODO.md).
 
-- `webapp.py`, `web_runtime.py`, `web_data.py`: API FastAPI, trwała kolejka wiadomości,
-  jeden worker agenta oraz kontrolowany odczyt danych i dokumentów.
-- `web/`: statyczny frontend bez CDN i bez wymaganego serwera Node.
-- `telegram_adapter.py`: transport Telegrama korzystający z wewnętrznego API backendu.
-- `supervisord.conf`: jeden kontener, niezależne procesy backendu i adaptera.
-- Przegląd pokazuje bilans i posiłki, Regeneracja sen/HRV/Body Battery, Aktywność
-  treningi i wydatek energii. Bilans bazuje na `kalorie_dzienne` z Garmin
-  (`bmrKilocalories` + `activeKilocalories`), bez sumowania kalorii treningów.
-  Te same wartości są dostępne agentowi przez `get_daily_metrics`.
-- `POST /api/sync/garmin`: zadanie `garmin_sync` w tej samej kolejce; pomija LLM,
-  podsumowanie i Libre. Stan: `GET /api/sync/garmin`. Pierwsze pobranie pustej
-  tabeli kalorii od `2022-01-01`, zapis co 30 dni i wznowienie z buforem 7 dni.
-- `dev.py --snapshot <katalog>`: lokalna kopia robocza pobranego backupu; Telegram
-  i sync źródeł wyłączone. Domyślnie chat demonstracyjny; `--live-agent` włącza LLM.
-- Pobieranie danych z NAS jest ręczne (istniejący backup + SCP/File Station).
-  Nie uruchamiać na NAS własnych skryptów tworzących snapshot.
-- Procedury, testy i ograniczenia pierwszej wersji: `WEB.md`.
-- `server.py` pozostaje starszym trybem Telegram-only. Nie uruchamiać go razem
-  z nowym adapterem dla tego samego bota.
+**Plan pamięci długoterminowej:** [docs/MEMORY_ARCHITECTURE.md](docs/MEMORY_ARCHITECTURE.md).
+To kierunek rozwoju, nie istniejąca integracja Hindsight. Nie opisywać planowanych
+filtrów prywatności, indeksów i migracji jako działających zabezpieczeń.
 
-Osobisty asystent zdrowotny działający przez Telegram. Odpowiada na wiadomości, pobiera dane z Garmin Connect i zarządza bazą danych zdrowotnych.
+## Stack i procesy
 
-## Stack
-
-- **Agent:** Python + LiteLLM (własna pętla tool-use, domyślnie OpenAI GPT)
-- **Komunikacja:** Telegram Bot API przez long polling
-- **Baza danych:** SQLite (`data/k90.db`) — dane zdrowotne, historia rozmów, podsumowanie pacjenta
-- **Dane Garmin:** `fetch_garmin.py` → bezpośredni sync do SQLite
-- **Deployment:** Docker Compose (Lenovo M900, Intel/AMD x86-64). CI buduje `linux/amd64`; konfiguracja ARM64 dla Synology jest zachowana, ale wyłączona.
-
-## Struktura projektu
-
-```
-k90/
-├── agent.py                  # pętla LiteLLM + historia rozmów (SQLite)
-├── server.py                 # Telegram long-polling listener + dispatcher
-├── summary.py                # podsumowanie pacjenta: generowanie i zarządzanie
-├── system_prompt.py          # ładowanie promptu (data/ override lub repo)
-├── system_prompt.md          # ogólny prompt bez danych osobowych
-├── fetch_garmin.py           # OAuth + pobieranie danych z Garmin Connect → SQLite
-├── migrate_csv_to_sqlite.py  # legacy import wszystkich CSV → SQLite
-├── tools/
-│   ├── health.py             # 7 narzędzi: BP, waga, sen, HRV, Battery, aktywności, metryki
-│   ├── lab.py                # wyniki badań laboratoryjnych
-│   ├── diet.py               # log_meal, get_recent_meals, delete_meal
-│   ├── garmin.py             # sync_garmin_data (direct-to-db)
-│   ├── patient.py            # read_patient_file, update_patient_file
-│   ├── commands.py           # /status, /debug, /update, /summary, /help bez LLM
-│   └── db.py                 # get_conn(), init_db(), rows_to_list()
-├── data/                     # gitignored, montowane jako wolumin Docker
-└── Dockerfile                # multi-stage: base (deps) + app (kod)
-```
+- Python, własna pętla tool-use w `agent.py`; LiteLLM / Chat Completions albo
+  `responses_api.py` dla rodziny GPT-6.1 Sol. Model rozmowy i summary wybierane
+  niezależnie, domyślnie `gpt-5.4`.
+- `webapp.py`: FastAPI, logowanie hasłem, sesje, kontrola żądań i API WWW.
+- `web_runtime.py`: trwała kolejka SQLite, jeden worker i odzyskiwanie stanu.
+- `web_data.py` i `web/`: dashboard, wykresy, posiłki, tabele, dokumenty i chat;
+  statyczny frontend bez CDN i bez serwera Node w runtime.
+- `telegram_adapter.py`: long polling, wyłącznie dozwolony właściciel i prywatny
+  chat; przekazywanie wiadomości przez wewnętrzne HTTP do tego samego backendu.
+- `container_start.py` generuje wewnętrzny token, `supervisord.conf` nadzoruje
+  backend oraz adapter Telegrama jako dwa procesy w jednym kontenerze.
+- SQLite oraz dokumenty w katalogu danych; `fetch_garmin.py` i `fetch_libre.py`
+  zapisują dane źródeł bezpośrednio do SQLite.
+- Docker Compose, obraz AMD64 publikowany do Docker Hub. ARM64 jest zachowane
+  w komentarzach workflow, ale wyłączone. Push do `main` nie wdraża kontenera.
+- `server.py` to starszy, alternatywny tryb Telegram-only; `agent.py` ma CLI.
+  Nie uruchamiać dwóch odbiorców tego samego bota Telegrama.
 
 ## Przepływ wiadomości
 
+```text
+WWW ───────────────────────────┐
+Telegram → telegram_adapter.py ┴→ webapp.py → chat_jobs (SQLite)
+                                                 ↓
+                                          jeden worker
+                                                 ↓
+                                  komendy / sync / agent.py
+                                                 ↓
+                                      model ↔ tools/ ↔ dane
+                                                 ↓
+                                      conversations + wynik
+                                                 ↓
+                                      WWW / dostawa Telegram
 ```
-Telegram → long polling → server.py → agent.py → LiteLLM
-                                     ↓            ↓
-                              SQLite history   tool calls
-                                     ↓            ↓
-                              save response   tools/
-                                     ↓
-                              Telegram ← response
-```
 
-## Zarządzanie kontekstem
+Oba kanały korzystają z `CONVERSATION_USER_ID` (domyślnie `owner`). Odpowiedzi
+Telegrama są dostarczane tylko dla jego zleceń. Szczegóły idempotencji, restartu
+i ograniczeń dostarczania: [WEB.md](WEB.md#architektura).
+Backend wymaga jednego procesu Uvicorn (`--workers 1`) na tę bazę.
 
-Każde zapytanie do LLM zawiera:
-1. **System prompt** — rola i zasady (z `system_prompt.md`)
-2. **Podsumowanie pacjenta** — krótki rekord faktów medycznych (z `patient_summary` w SQLite)
-3. **Historia rozmów** — ostatnie N par wiadomości (konfigurowalnie przez `HISTORY_MESSAGES`)
-4. **Wiadomość użytkownika** — tekst lub tekst + obraz (Telegram photo/document)
+## Kontekst i historia
 
-## Narzędzia agenta (16 total)
+`agent._build_system_message()` dołącza prompt systemowy, datę i godzinę,
+`patient_summary` oraz bieżący kontekst z `tools/context.py`. Dalej trafiają
+ostatnie `HISTORY_MESSAGES * 2` rekordów rozmowy i bieżąca wiadomość
+(tekst lub tekst ze zdjęciem). Domyślnie to 10 par wiadomości.
 
-| Narzędzie | Opis |
-|-----------|------|
-| `get_blood_pressure(days)` | Pomiary ciśnienia |
-| `get_weight_trend(days)` | Historia wagi + BMI |
-| `get_sleep_stats(days)` | Fazy snu, score, SpO2 |
-| `get_activities(days, type)` | Aktywności fizyczne |
-| `get_hrv(days)` | Heart rate variability |
-| `get_body_battery(days)` | Garmin Body Battery |
-| `get_daily_metrics(days)` | RHR, stres, oddech |
-| `get_lab_results(category, test)` | Wyniki badań lab |
-| `log_meal(...)` | Zapis posiłku |
-| `update_meal(...)` | Aktualizacja zapisanego posiłku |
-| `get_recent_meals(days)` | Historia posiłków |
-| `delete_meal(id)` | Usunięcie posiłku |
-| `sync_garmin_data()` | Sync danych Garmin → SQLite |
-| `read_patient_file(filename)` | Odczyt pliku .md pacjenta |
-| `update_patient_file(filename, content)` | Zapis pliku .md pacjenta |
-| `refresh_patient_summary()` | Odświeżenie podsumowania pacjenta |
+`conversations` zapisuje wejście użytkownika i końcową odpowiedź, nie pełny
+przebieg wywołań narzędzi. Starsze rekordy nie są obecnie wyszukiwane semantycznie.
+Kontekst operacyjny zawiera ograniczony wyciąg danych z ostatnich dni;
+aktualny odczyt bazy nie gwarantuje aktualnego pomiaru.
 
-## Komendy slash (bez LLM)
+`summary.py` buduje siedmioliniowy rekord z dokładnie pięciu dokumentów:
+`pacjent.md`, `wywiad.md`, `analiza.md`, `dieta.md`, `tydzien.md`.
+Nie jest to podsumowanie historii rozmów. Zapis jest singletonem
+`patient_summary` (`id=1`). Odświeżanie następuje przy starcie, gdy brak summary
+lub jest przeterminowane, oraz przez narzędzie i ścieżki obsługi zmian/synchronizacji.
+Przycisk WWW „Pobierz Garmin” świadomie pomija summary i model.
 
-| Komenda | Opis |
-|---------|------|
-| `/status` | Szybkie podsumowanie: waga, kalorie z ostatnich dni, ostatnia aktywność |
-| `/debug` | Liczba zapytań, tokeny i stan summary |
-| `/update` | Synchronizacja Garmin bez LLM |
-| `/summary` | Podgląd aktualnego patient summary |
-| `/help` | Lista dostępnych komend |
+Prompt ładuje `system_prompt.py`: plik z `DATA_DIR` może nadpisać wersję repo.
+Dane i prompt produkcyjny nie są ustalane na podstawie samego repozytorium.
 
-## Podsumowanie pacjenta
+## Narzędzia i dane
 
-Singleton w tabeli `patient_summary` (SQLite). Generowane przez `SUMMARY_MODEL` (domyślnie `gpt-5.4`) na podstawie wszystkich plików `.md` z `data/`.
+Aktualny rejestr i definicje narzędzi: `tools/__init__.py`.
 
-Odświeżane gdy:
-- Startup i podsumowanie starsze niż `SUMMARY_MAX_AGE_DAYS` dni
-- Po wywołaniu `sync_garmin_data` lub `update_patient_file`
-- Na żądanie przez tool `refresh_patient_summary()`
+| Moduł | Odpowiedzialność |
+| --- | --- |
+| `tools/health.py` | Odczyt ciśnienia, wagi, snu, aktywności, HRV, Body Battery, metryk dziennych i glukozy. |
+| `tools/lab.py` | Odczyt wyników laboratoryjnych. |
+| `tools/diet.py` | Dodawanie, aktualizacja, odczyt i usuwanie posiłków. |
+| `tools/garmin.py` | Kontrola synchronizacji Garmin, statusy i statystyki zmian. |
+| `tools/libre.py` | Kontrola synchronizacji Libre i przełącznik `LIBRE_ENABLED`. |
+| `tools/patient.py` | Odczyt i pełne nadpisanie pięciu dozwolonych dokumentów pacjenta; nie promptu systemowego. |
+| `summary.py` | Generowanie i odświeżanie podsumowania pacjenta. |
+| `tools/context.py` | Bieżący wyciąg danych do promptu, bez wyszukiwania starszych rozmów. |
+| `tools/db.py` | Połączenie, inicjalizacja schematu i backup przez API SQLite. |
 
-## Historia rozmów
+Tabele danych zdrowotnych obejmują `cisnienie`, `waga`, `sen`, `aktywnosci`,
+`hrv`, `body_battery`, `metryki_dzienne`, `kalorie_dzienne`, `wyniki_lab`,
+`posilki` i `glukoza_libre`. `init_db()` inicjalizuje schemat także bez importu CSV.
+Dodatkowo istnieją `conversations`, `patient_summary`, `usage_stats`, `sync_status`;
+`web_runtime.init_runtime()` dodaje `chat_jobs` i `transport_state`.
 
-Tabela `conversations` (SQLite). Każda wiadomość jest zapisana ze stabilnym `user_id` ustawianym przez `CONVERSATION_USER_ID`. Do kontekstu trafia ostatnie `HISTORY_MESSAGES` par wiadomości.
+Bilans dnia opiera się na zapisanych posiłkach i `kalorie_dzienne`
+(`bmrKilocalories` + `activeKilocalories`), bez ponownego dodawania treningów.
+Agent przez `get_daily_metrics` i panel korzystają z tych samych danych.
 
-## Schemat SQLite
+## Synchronizacja i komendy
 
-Dane zdrowotne (wypełniane przez `migrate_csv_to_sqlite.py`):
-`cisnienie`, `waga`, `sen`, `aktywnosci`, `hrv`, `body_battery`, `metryki_dzienne`, `wyniki_lab`, `posilki`
+- Auto-sync przy rozmowie, gdy danego dnia nie było udanego pobrania źródła;
+  błędy nie muszą blokować odpowiedzi. Nie ma niezależnego schedulera.
+- Garmin uzupełnia dane od ostatniego zapisu z buforem 7 dni; dla pustych tabel
+  od `2022-01-01`. Dzienna energia jest zapisywana partiami po 30 dni.
+- Libre pobiera dostępne `graphData` i najnowszy pomiar, nie dowolny zakres historii.
+- `POST /api/sync/garmin` kolejkuje zadanie data-only; stan przez
+  `GET /api/sync/garmin`. Pomija LLM, Libre i summary.
+- `/status`, `/debug`, `/update`, `/summary`, `/backup`, `/help` działają bez
+  rozmowy z modelem. `/update` synchronizuje Garmin i włączone Libre; może też
+  odświeżyć summary przez model, jeśli wykryto zmiany Garmin.
 
-Dane agenta (tworzone przez `init_db()`):
-`conversations`, `patient_summary`
+## Bezpieczny rozwój i weryfikacja
 
-## Zmienne środowiskowe
+- `dev.py` domyślnie uruchamia demonstracyjny chat na fikcyjnych danych.
+  Telegram i sync są wyłączone. `--live-agent` świadomie włącza model.
+- `dev.py --snapshot <katalog>` tworzy nową kopię roboczą backupu, sprawdza
+  integralność i usuwa stan kolejki/transportu z kopii, aby nie odtworzyć zleceń.
+- Backup produkcji pobiera właściciel dotychczasową procedurą. Nie wykonywać
+  samowolnie poleceń na serwerze ani nie podłączać testów do działającej bazy.
+- Dane pacjenta, `.env`, tokeny i rzeczywiste rozmowy nie mogą trafić do Git.
+  Publiczna dokumentacja i testy mają używać danych fikcyjnych.
+- Nie kopiować samego aktywnego pliku SQLite jako gwarantowanego backupu;
+  uwzględnić WAL, użyć wspieranego backupu i zachować dokumenty.
+- Testy Python: `python -m pytest -q`; frontend: `node --check web/app.js`
+  i `node --test tests/web_*.test.mjs`. Testy kontenera: [WEB.md](WEB.md).
+- Przechodzące testy na atrapach nie potwierdzają działania integracji ani
+  wersji produkcyjnej. Zmiany kodu, publikacja obrazu i wdrożenie to osobne etapy.
 
-| Zmienna | Opis | Domyślnie |
-|---------|------|-----------|
-| `AGENT_MODEL` | Model do konwersacji | `gpt-5.4` |
-| `SUMMARY_MODEL` | Model do podsumowania pacjenta | `gpt-5.4` |
-| `HISTORY_MESSAGES` | Liczba par wiadomości w kontekście | `10` |
-| `SUMMARY_MAX_AGE_DAYS` | Auto-odświeżenie po X dniach | `7` |
-| `DB_PATH` | Ścieżka do bazy SQLite | `/data/k90.db` |
-| `DATA_DIR` | Katalog z plikami pacjenta | `/data` |
-| `TELEGRAM_BOT_TOKEN` | Token bota z `@BotFather` | — |
-| `TELEGRAM_ALLOWED_USER_ID` | Whitelisted numeryczny Telegram user ID | — |
-| `CONVERSATION_USER_ID` | Stabilny klucz historii rozmowy | `owner` |
-| `OPENAI_API_KEY` | Klucz OpenAI | — |
-| `ANTHROPIC_API_KEY` | Klucz Anthropic (opcjonalnie) | — |
-| `GEMINI_API_KEY` | Klucz Google Gemini (opcjonalnie) | — |
-| `GARMIN_EMAIL` / `GARMIN_PASSWORD` | Dane logowania Garmin | — |
-| `LIBRE_ENABLED` | Włącza pobieranie i synchronizację Libre | `true` |
-
-GPT-6.1 Sol (również `openai/gpt-6.1-sol`) korzysta automatycznie z `responses_api.py`
-i OpenAI Responses API, z reasoning `low` oraz `store=false`. Adapter zachowuje
-wszystkie elementy odpowiedzi pomiędzy wywołaniami narzędzi; w SQLite pozostaje
-dotychczasowy format historii i statystyk użycia. Starsze modele oraz inni dostawcy
-korzystają z LiteLLM / Chat Completions. GPT-5.6 zachowuje `reasoning_effort=none`.
-
-Model rozmowy i podsumowania można wybrać niezależnie. Opcje dla Sol:
-`AGENT_REASONING_EFFORT` (domyślnie `low`), `AGENT_MAX_OUTPUT_TOKENS` (`8192`),
-`SUMMARY_REASONING_EFFORT` (`low`), `SUMMARY_MAX_OUTPUT_TOKENS` (`4096`). Limity
-Responses obejmują reasoning i odpowiedź; `SUMMARY_MAX_TOKENS` pozostaje limitem
-dla podsumowań przez Chat Completions. Wartości domyślne modeli pozostają `gpt-5.4`.
+Szczegółowe zmienne modeli i przykłady konfiguracji: [README.md](README.md#konfiguracja).

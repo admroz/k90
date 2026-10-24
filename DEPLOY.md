@@ -9,6 +9,11 @@
 - Frontend tylko w LAN: port HTTP domyślnie na loopback serwera, HTTPS przez reverse proxy.
 - Nowa konfiguracja wymaga `WEB_PASSWORD` (minimum 12 znaków). Przygotowanie i testy: [WEB.md](WEB.md).
 
+Dokument opisuje docelową konfigurację z repozytorium, nie jest raportem stanu
+serwera. Frontend i adapter są już częścią `main`. Plan integracji Hindsight
+opisany w [Pamięć k90](docs/MEMORY_ARCHITECTURE.md) nie jest jeszcze wdrożony
+w kodzie ani skonfigurowany w tym Compose.
+
 Konfiguracja ARM64 dla Synology pozostaje zakomentowana w macierzach `test` i `build`
 w `.github/workflows/docker.yml`. Aby ją przywrócić, odkomentuj oba wpisy. ARM otrzyma
 osobny cache oraz tagi `latest-arm64` i `sha-<commit>-arm64`, bez nadpisywania obrazu Intela.

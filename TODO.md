@@ -4,66 +4,63 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
 
 ## Now
 
-- [ ] Ocenić lokalną wersję frontendu na branchu `codex/web-frontend`.
-  Implementacja i procedury: `WEB.md`. Dostęp tylko LAN, wspólna rozmowa WWW/Telegram,
-  dashboard, podgląd tabel i dokumentów. Jeden kontener, osobne procesy backendu i Telegrama.
-  Przed wdrożeniem: test obrazu ARM64, ręczna ocena UI i rzeczywisty agent na kopii danych.
+- [ ] Doprecyzować i przetestować projekt pamięci długoterminowej.
+  Uzgodnione założenia i kryteria: [Pamięć k90](docs/MEMORY_ARCHITECTURE.md).
+  Hindsight ma być wymienialnym indeksem, nie jedynym magazynem danych.
+  Plan nie jest implementacją; brak zgody na automatyczny import produkcyjnej historii.
+- [ ] Zaprojektować trwałe źródła i kolejkę indeksowania w SQLite.
+  Pełna historia i wersje niezależne od HS, atomowy zapis źródła i zlecenia,
+  retry, aktualizacja/usuwanie oraz odbudowa indeksu.
+- [ ] Ustalić politykę prywatności przed podłączeniem pamięci do danych rzeczywistych.
+  Maskowanie identyfikatorów, blokowanie sekretów i lokalnych treści, kontrola
+  wszystkich wyjść do modeli; osobna polityka obrazów i dokumentów.
+- [ ] Przygotować adapter HS, automatyczny recall i lokalny fallback FTS5.
+  Osobny bank testowy, źródła z datami, limity czasu/kontekstu i testy awarii.
+
+- [ ] Ocenić UI desktop/mobile oraz prawdziwy model na kopii danych przed kolejnym wdrożeniem.
+  Frontend jest już częścią `main`; procedury i smoke test kontenera: `WEB.md`.
+  Aktualny cel CI to AMD64. Powrót do ARM64 wymaga osobnego włączenia i testów.
+  Ta lista nie potwierdza wersji działającej na serwerze.
 
 - [ ] Zaplanować przeniesienie trwałych danych z plików `.md` do SQLite.
-  Dotyczy to zwłaszcza danych pacjenta i notatek, które dziś są rozproszone między bazą i plikami.
-  Warunek: migracja bez utraty danych i bez pogorszenia edytowalności danych.
+  Dotyczy danych pacjenta i notatek; bez utraty danych i pogorszenia edytowalności.
+  Nie łączyć koniecznie tej migracji z pierwszym pilotem Hindsight.
 
-- [ ] Dodać komendy i procedury operacyjne do diagnozy produkcji.
-  Przykłady: podgląd ostatnich posiłków, ostatniego syncu Garmin, rozmiaru i integralności bazy.
+- [ ] Rozszerzyć komendy i procedury operacyjne do diagnozy produkcji.
+  `/debug` już pokazuje użycie, summary i statusy syncu; dalszy zakres to m.in.
+  integralność/rozmiar bazy i wygodny podgląd ostatnich zapisów.
 
 ## Next
 
-- [ ] Zbudować prosty frontend do podglądu danych live, dostępny tylko z sieci domowej.
-  Pierwsza wersja gotowa do lokalnej weryfikacji: chat, dashboard, lista posiłków,
-  tabele i dokumenty. Formularze edycji posiłków w dalszym etapie.
-  Inspiracja: dawne `prywatne/dashboard.html` i `prywatne/dieta.html`, ale na żywych danych z bazy.
+- [ ] Rozszerzyć observability bez zapisywania wrażliwych treści w logach.
+  Obecny kod loguje rundy agenta, nazwy narzędzi i błędy. Rozważyć trwałe logi
+  z retencją i podglądem WWW oraz metryki jakości/kosztu/opóźnień pamięci.
 
-- [ ] Dodać bezpieczny live-wgląd w bazę przez osobne narzędzie lub kontener.
-  Kierunek: coś w rodzaju `phpMyAdmin` dla SQLite, ale bez wystawiania do Internetu i tylko z sieci domowej.
-  To może być osobny kontener administracyjny albo lekki widok w nowym frontendzie.
+- [ ] Dodać runtime'owe przełączniki funkcji i modeli zapisywane w SQLite.
+  Obecnie modele i przełączniki pochodzą z konfiguracji środowiskowej.
+  Cel: komendy administracyjne i feature flags bez odtwarzania kontenera.
 
-- [ ] Rozszerzyć observability.
-  Dodać lepsze logi z głównej pętli agenta, wywołań narzędzi, błędów i liczników syncu.
-  Osobno ocenić czy logi warto trzymać w SQLite z retencją i późniejszym podglądem przez frontend.
-
-- [ ] Dodać runtime'owe przełączniki funkcji i modeli zapisywane w SQLite, a nie tylko w `.env`.
-  Przykłady: włączenie/wyłączenie Libre, auto-synców, wybranych kanałów i przełączenie modelu bez przebudowy kontenera.
-  Preferowany kierunek: proste komendy administracyjne + tabela ustawień/feature flags w bazie.
-
-- [ ] Uporządkować przejście na OpenAI API / Codex w pracy nad projektem i w samym agencie.
-  Wyjaśnić decyzję architektoniczną: co zostaje w LiteLLM, a co przechodzi na bezpośrednie API OpenAI.
-
-- [ ] Przenieść pętlę GPT-5.6 z Chat Completions do Responses API.
-  Cel: function tools z reasoning (`low` lub `medium`) i poprawne przenoszenie reasoning items między rundami.
-  Do czasu migracji rodzina GPT-5.6 działa z `reasoning_effort=none`.
+- [ ] Ocenić sens migracji GPT-5.6 do Responses API.
+  Rodzina Sol już używa `responses_api.py`; GPT-5.6 pozostaje przy
+  LiteLLM / Chat Completions z `reasoning_effort=none`.
 
 ## Data Model
 
-- [ ] Przy migracji danych do bazy rozpocząć sensowną rozmowę o embeddings.
-  Pytania do rozstrzygnięcia:
-  - co embeddingować: pliki pacjenta, historię rozmów, podsumowania, dokumenty,
-  - czy embeddings mają wspierać retrieval do promptu czy tylko wyszukiwanie,
-  - gdzie je trzymać: SQLite czy osobny store.
+- [ ] Doprecyzować zakres indeksowania i wersjonowania zgodnie z planem pamięci.
+  Rozmowy i kontekst decyzji są priorytetem; pomiary pozostają w SQLite.
+  Ustalić retencję, korekty i usuwanie, schemat załączników oraz eksport źródeł.
 
 ## Frontend
 
-- [ ] Zaprojektować minimalny model zabezpieczenia frontendowego.
-  Na start wystarczy dostęp tylko z sieci domowej i proste hasło albo reverse proxy z auth.
-
-- [ ] Udostępnić przez frontend podgląd live danych zdrowotnych i historii posiłków.
-  Razem z chatem w podstawowym zakresie; trwa lokalna weryfikacja.
-
-- [ ] Dodać możliwość podstawowej edycji posiłków z poziomu frontendowego UI.
-  Przykład: lista, szczegóły, usuwanie, korekta opisu i makro.
-
-- [ ] Rozważyć chat z agentem przez frontend.
-  Ustalony podstawowy zakres: jedna wspólna rozmowa i historia z Telegramem.
-  Implementacja na branchu `codex/web-frontend`; do oceny przed wdrożeniem.
+- [x] Wspólny chat WWW/Telegram, dashboard, posiłki z wyborem dnia, regeneracja,
+  aktywność, podgląd dozwolonych tabel i dokumentów są zaimplementowane na `main`.
+- [x] Podstawowe logowanie hasłem, sesje, kontrola źródła żądań, limity i nagłówki
+  bezpieczeństwa są zaimplementowane; panel jest przeznaczony do dostępu prywatnego.
+  Nie jest to deklaracja pełnego audytu bezpieczeństwa ani konfiguracji serwera.
+- [ ] Dodać formularze edycji posiłków i dokumentów (obecnie podgląd; zapis przez agenta).
+- [ ] Dodać podgląd pamięci ze źródłami, korektami i możliwością usunięcia.
+- [ ] Rozważyć dodatkowe narzędzie administracyjne bazy tylko jeśli istniejący
+  odczyt tabel w WWW i komendy nie wystarczą; bez domyślnego dostępu do dowolnego SQL.
 
 ## Later
 
