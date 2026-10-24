@@ -88,6 +88,14 @@ Docker sam nie restartuje kontenera tylko dlatego, że healthcheck jest unhealth
   do poprzednich dni i sumami kalorii, białka, węglowodanów oraz tłuszczu.
   Wybór dnia jest niezależny od okresu wykresów; braki wartości odżywczych są oznaczone.
   Przycisk „Omów” przygotowuje pytanie dla agenta.
+- Bilans dnia: zapisane kalorie minus suma dziennych kalorii spoczynkowych i aktywnych
+  Garmin (`bmrKilocalories` + `activeKilocalories`). To estymacja Garmin, bez stałej
+  wartości BMR i bez ponownego dodawania kalorii treningów. Brak wartości nie jest
+  zerem; bilans wymaga danych Garmin i kompletnych kalorii zapisanych posiłków.
+- Regeneracja: sen, HRV, Body Battery, tętno spoczynkowe, stres i oddech.
+- Aktywność: treningi, dystans oraz dzienne kalorie aktywne i całkowite spalanie.
+  Przycisk „Omów” przygotowuje pytanie; agent odczytuje dzienne spalanie przez
+  `get_daily_metrics`, korzystając z tych samych zapisanych wartości Garmin.
 - Rozmowa: tekst, JPG/PNG/WebP do 5 MB, starsze wiadomości, stan kolejki i błędy.
   Odpowiedź pojawia się po zakończeniu przetwarzania; token streaming jest poza v1.
 - Dane: dozwolone tabele, wyszukiwanie, sortowanie i stronicowanie. Odczyt bez
@@ -98,7 +106,15 @@ Docker sam nie restartuje kontenera tylko dlatego, że healthcheck jest unhealth
 Wykresy powstają bez LLM. Glukoza jest agregowana godzinowo, z preferowaniem
 odczytu `latest` przy duplikacie czasu. Brak pomiaru nie jest zerem. Widok czyta
 aktualną bazę po wejściu/odświeżeniu; synchronizacja źródeł jest osobną operacją
-(`/update` lub przycisk). Harmonogram synchronizacji niezależny od wiadomości
+(`/update` lub przycisk). Przycisk „Pobierz Garmin” korzysta z osobnego zadania
+w tej samej kolejce: nie wywołuje agenta, Libre ani podsumowania LLM. Stan pobierania
+jest dostępny po odświeżeniu strony, a ponowione żądania nie dublują zadania.
+Pierwszy odczyt pustej tabeli `kalorie_dzienne` uzupełnia historię od `2022-01-01`.
+Partie po 30 dni są od razu zapisywane; po błędzie lub restarcie nowe pobranie wznawia
+pracę od ostatniego zapisanego dnia z 7-dniowym buforem. Brak historycznych danych
+Garmin pozostaje brakiem, a nie wymyślonym spalaniem. Aktualne wartości wymagają
+wcześniejszego przesłania danych z zegarka do Garmin Connect.
+Harmonogram synchronizacji niezależny od wiadomości
 pozostaje do dalszego ustalenia. Dotychczasowy auto-sync przy rozmowie pozostaje.
 
 ## Testy przed Synology

@@ -94,6 +94,14 @@ def create_schema(conn):
             max_oddech  REAL
         );
 
+        CREATE TABLE IF NOT EXISTS kalorie_dzienne (
+            data                TEXT PRIMARY KEY,
+            spoczynkowe_kcal     REAL,
+            aktywne_kcal         REAL,
+            calkowite_kcal       REAL,
+            pobrano_at          TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS hrv (
             data          TEXT PRIMARY KEY,
             hrv_noc       REAL,

@@ -41,7 +41,7 @@ async function app(mealsHandler) {
       assert.ok(path.startsWith("/api/dashboard"));
       return {ok: true, json: async () => ({
         from: "2026-10-17", to: "2026-10-23", latest: {},
-        waga: [], sen: [], hrv: [], cisnienie: [], kalorie: [], body_battery: [], aktywnosci: [], glukoza: [], sync: []
+        waga: [], sen: [], hrv: [], cisnienie: [], kalorie: [], body_battery: [], aktywnosci: [], glukoza: [], sync: [], kalorie_dzienne: [], metryki_dzienne: []
       })};
     }
   });
@@ -99,4 +99,19 @@ test("Failed navigation preserves the previous day's date and totals and allows 
   assert.equal(ui.element("#meals-panel")["aria-busy"], "false");
   await ui.evaluate("loadMeals()");
   assert.equal(ui.requests.at(-1), "/api/meals");
+});
+
+test("Recovery and activity tabs load their functional charts without changing meal dates", async () => {
+  const ui = await app(day => dayData(day || undefined));
+  await ui.evaluate('loadMeals("2026-10-22")');
+  await ui.evaluate('navigate("recovery")');
+  assert.ok(ui.element("#recovery-charts").innerHTML.includes("Długość snu"));
+  assert.ok(ui.element("#recovery-charts").innerHTML.includes("HRV w nocy"));
+  assert.ok(!ui.element("#recovery-charts").innerHTML.includes("Masa ciała"));
+  await ui.evaluate('navigate("activity")');
+  assert.ok(ui.element("#activity-charts").innerHTML.includes("Kalorie aktywne"));
+  assert.ok(ui.element("#activities").innerHTML.includes("Brak aktywności"));
+  await ui.evaluate('navigate("dashboard")');
+  assert.equal(ui.element("#meal-date").value, "2026-10-22");
+  assert.ok(!ui.element("#charts").innerHTML.includes("Długość snu"));
 });

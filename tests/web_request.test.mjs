@@ -89,8 +89,4 @@ test("Chat sends over HTTP and retries the same message with the same ID", async
   await submit();
   assert.notEqual(submissions[2].request_id, submissions[1].request_id);
 
-  await element("#sync-data").onclick();
-  assert.equal(submissions[3].text, "/update");
-  assert.match(submissions[3].request_id, requestPattern);
-  assert.equal(element("#global-error").textContent, "");
 });

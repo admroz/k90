@@ -7,13 +7,17 @@ import {
   formatTimestamp,
   mealSummary,
   mealList,
-  mealDayLabel
+  mealDayLabel,
+  energyBalance,
+  activityList
 } from "./render.mjs";
 import { createRequestId } from "./request.mjs";
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const labels = {
   dashboard: "Przegląd",
+  recovery: "Regeneracja",
+  activity: "Aktywność",
   chat: "Rozmowa",
   data: "Dane",
   documents: "Dokumenty"
@@ -33,6 +37,7 @@ let history = new Map(),
   tableRequest = 0,
   documentRequest = 0;
 let mealDate = null, mealView = null, mealRequest = 0;
+let garminActive = false, garminPendingRequest = null, garminStatusBusy = false, garminStatusVersion = 0;
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -62,6 +67,9 @@ function showLogin() {
   mealDate = null;
   mealView = null;
   mealRequest++;
+  garminActive = false;
+  garminPendingRequest = null;
+  garminStatusVersion++;
   $("#messages").replaceChildren();
   $("#jobs").replaceChildren();
   $("#app").hidden = true;
@@ -75,7 +83,7 @@ async function enter() {
   $("#mode-banner").hidden = !session.local && !session.preview;
   $("#mode-banner").textContent = session.preview ? "Lokalny podgląd · osobna kopia danych · chat demonstracyjny bez wywoływania AI" : "Lokalna kopia danych · agent AI włączony · synchronizacja źródeł wyłączona";
   updateTransport();
-  $("#sync-data").disabled = !session.sync_enabled;
+  updateSyncButtons();
   $("#today").textContent = new Date().toLocaleDateString("pl-PL", {
     day: "numeric",
     month: "long",
@@ -85,6 +93,7 @@ async function enter() {
   $("#table-select").innerHTML = tables.map(t => `<option>${escapeHTML(t)}</option>`).join("");
   $("#document-list").innerHTML = documents.map(t => `<button data-document="${escapeHTML(t)}">${t==="patient_summary"?"Pamięć pacjenta":escapeHTML(t)}</button>`).join("");
   $$("[data-document]").forEach(b => b.onclick = () => loadDocument(b.dataset.document).catch(e => error(e.message)));
+  await checkGarminSync(false);
   await navigate(labels[location.hash.slice(1)] ? location.hash.slice(1) : "dashboard");
 }
 
@@ -100,6 +109,7 @@ async function navigate(view) {
   $$("[data-view]").forEach(b => b.classList.toggle("active", b.dataset.view === view));
   $("#breadcrumb").textContent = labels[view].toUpperCase();
   if (view === "dashboard") await loadDashboard();
+  if (view === "recovery" || view === "activity") await loadHealthView(view);
   if (view === "chat") await loadChat();
   if (view === "data") await loadTable();
   if (view === "documents") await loadDocument(currentDocument?.name || "pacjent.md");
@@ -121,22 +131,21 @@ async function loadDashboard() {
     if (table === "sen" && v != null) v /= 60;
     return `<div class="kpi"><div class="kpi-label">${title}<span>↗</span></div><div class="kpi-value">${table==="cisnienie"&&r?`${number(v)}/${number(r.rozkurczowe)}`:number(v,dec)}<span>${unit}</span></div><small>${r?`Ostatni pomiar · ${escapeHTML(r.data)}`:"Brak pomiarów"}</small></div>`;
   }).join("");
-  const sleep = d.sen.map(r => ({
-    ...r,
-    hours: r.total_sleep_min == null ? null : r.total_sleep_min / 60
-  }));
   const configsCharts = [
     ["Masa ciała", "kg", d.waga, "waga_kg", "#9fc7a3"],
-    ["Energia z posiłków", "kcal / dzień", d.kalorie, "kcal", "#d3b974"],
-    ["Długość snu", "godziny", sleep, "hours", "#a6b3da"],
-    ["HRV w nocy", "ms", d.hrv, "hrv_noc", "#87bdb5"],
     ["Ciśnienie skurczowe", "mmHg", d.cisnienie, "skurczowe", "#d7a48b"],
-    ["Body Battery", "maksimum dnia", d.body_battery, "max_bateria", "#b0c78a"],
-    ["Aktywność", "minuty / aktywność", d.aktywnosci, "czas_trwania_min", "#9fc7a3"],
     ["Glukoza", "mg/dL · średnie godzinowe", d.glukoza, "glukoza", "#d3b974", 2]
   ];
-  $("#charts").innerHTML = configsCharts.map(([title, unit, rows, key, color, gap]) => `<section class="chart-card"><div class="chart-heading"><div><h2>${title}</h2><p>${unit}</p></div><button class="text-button discuss" data-topic="${title}">Omów ↗</button></div>${chart(rows,key,color,gap)}</section>`).join("");
-  $$(".discuss").forEach(b => b.onclick = async () => {
+  renderCharts("#charts", configsCharts, d);
+  $("#sync-status").innerHTML = d.sync.map(r => {
+    const status = r.last_status || "";
+    const label = status.startsWith("running") ? "Pobieranie danych" : status.startsWith("success") ? "Pobrano dane" : status.startsWith("error") ? "Błąd pobierania" : "Brak synchronizacji";
+    return `<div class="sync-row"><div>${escapeHTML(r.source === "garmin" ? "Garmin" : r.source === "libre" ? "Libre" : r.source)}<small>${label}</small></div><small>${r.last_success_at ? escapeHTML(formatTimestamp(r.last_success_at)) : "Jeszcze nie pobrano danych"}</small></div>`;
+  }).join("") || '<div class="empty">Brak historii synchronizacji.</div>';
+}
+function renderCharts(target, configs, d) {
+  $(target).innerHTML = configs.map(([title, unit, rows, key, color, gap]) => `<section class="chart-card"><div class="chart-heading"><div><h2>${title}</h2><p>${unit}</p></div><button class="text-button discuss" data-topic="${title}">Omów ↗</button></div>${chart(rows,key,color,gap)}</section>`).join("");
+  $$(`${target} .discuss`).forEach(b => b.onclick = async () => {
     try {
       await navigate("chat");
       $("#message").value = `Przeanalizuj ${b.dataset.topic.toLowerCase()} w okresie ${d.from}–${d.to}. Uwzględnij dostępność danych i porównaj trendy.`;
@@ -146,7 +155,31 @@ async function loadDashboard() {
       error(e.message);
     }
   });
-  $("#sync-status").innerHTML = d.sync.map(r => `<div class="sync-row"><div>${escapeHTML(r.source)}<small>${escapeHTML(r.last_status||"Brak synchronizacji")}</small></div><small>${escapeHTML(r.last_success_at||"Jeszcze nie pobrano danych")}</small></div>`).join("") || '<div class="empty">Brak historii synchronizacji.</div>';
+}
+async function loadHealthView(view) {
+  const request = ++dashboardRequest;
+  const d = await api(`/api/dashboard?days=${days}`);
+  if (request !== dashboardRequest || !session || currentView !== view) return;
+  $(`#${view}-range`).textContent = `${d.from} — ${d.to}`;
+  if (view === "recovery") {
+    const sleep = d.sen.map(row => ({...row, hours: row.total_sleep_min == null ? null : row.total_sleep_min / 60}));
+    renderCharts("#recovery-charts", [
+      ["Długość snu", "godziny", sleep, "hours", "#a6b3da"],
+      ["HRV w nocy", "ms", d.hrv, "hrv_noc", "#87bdb5"],
+      ["Body Battery", "maksimum dnia", d.body_battery, "max_bateria", "#b0c78a"],
+      ["Tętno spoczynkowe", "uderzenia / min", d.metryki_dzienne, "rhr", "#d7a48b"],
+      ["Średni stres", "wskaźnik Garmin", d.metryki_dzienne, "avg_stres", "#d3b974"],
+      ["Oddech", "oddechy / min", d.metryki_dzienne, "avg_oddech", "#9fc7a3"]
+    ], d);
+  } else {
+    renderCharts("#activity-charts", [
+      ["Czas aktywności", "minuty / aktywność", d.aktywnosci, "czas_trwania_min", "#9fc7a3"],
+      ["Dystans", "km / aktywność", d.aktywnosci, "dystans_km", "#a6b3da"],
+      ["Kalorie aktywne", "kcal / dzień · Garmin", d.kalorie_dzienne, "aktywne_kcal", "#d3b974"],
+      ["Spalanie łącznie", "spoczynkowe + aktywne · kcal / dzień", d.kalorie_dzienne, "spalone_kcal", "#87bdb5"]
+    ], d);
+    $("#activities").innerHTML = activityList(d.aktywnosci);
+  }
 }
 async function loadMeals(day = mealDate) {
   const request = ++mealRequest;
@@ -164,6 +197,7 @@ async function loadMeals(day = mealDate) {
     $("#meal-date").max = data.today;
     $("#meal-day-label").textContent = mealDayLabel(data.date, data.today);
     $("#meal-summary").innerHTML = mealSummary(data.totals, data.missing_values);
+    $("#energy-balance").innerHTML = energyBalance(data);
     $("#meal-note").hidden = !Object.values(data.missing_values).some(count => count > 0);
     $("#meals").innerHTML = mealList(data.meals);
   } catch (e) {
@@ -275,8 +309,8 @@ $$("[data-view]").forEach(b => b.onclick = () => navigate(b.dataset.view).catch(
 $("#refresh-dashboard").onclick = () => loadDashboard().catch(e => error(e.message));
 $$("[data-days]").forEach(b => b.onclick = () => {
   days = Number(b.dataset.days);
-  $$("[data-days]").forEach(x => x.classList.toggle("selected", x === b));
-  loadDashboard().catch(e => error(e.message));
+  $$("[data-days]").forEach(x => x.classList.toggle("selected", Number(x.dataset.days) === days));
+  (currentView === "recovery" || currentView === "activity" ? loadHealthView(currentView) : loadDashboard()).catch(e => error(e.message));
 });
 $("[data-open-meals]").onclick = () => {
   $("#table-select").value = "posilki";
@@ -284,20 +318,56 @@ $("[data-open-meals]").onclick = () => {
   tableSort = null;
   navigate("data").catch(e => error(e.message));
 };
-$("#sync-data").onclick = async () => {
+function updateSyncButtons() {
+  ["#sync-data", "#sync-garmin"].forEach(selector => {
+    $(selector).disabled = !session?.sync_enabled || garminActive;
+    $(selector).textContent = garminActive ? "Pobieranie…" : "Pobierz Garmin ↻";
+  });
+}
+async function checkGarminSync(refresh = true) {
+  if (!session || garminStatusBusy) return;
+  garminStatusBusy = true;
+  const version = garminStatusVersion;
   try {
-    await api("/api/messages", {
-      method: "POST",
-      body: JSON.stringify({
-        request_id: createRequestId(),
-        text: "/update"
-      })
-    });
-    await navigate("chat");
+    const job = await api("/api/sync/garmin");
+    if (!session || version !== garminStatusVersion) return;
+    const wasActive = garminActive;
+    garminActive = !!job && ["queued", "running"].includes(job.state);
+    if (job) {
+      $("#garmin-sync-status").textContent = job.state === "queued" ? "Garmin: oczekiwanie na rozpoczęcie pobierania." : job.state === "running" ? `Pobieranie danych Garmin…${job.calories_through ? ` Kalorie zapisane do ${job.calories_through}.` : " Pierwsze uzupełnienie historii może potrwać dłużej."}` : job.response;
+    }
+    updateSyncButtons();
+    if (refresh && wasActive && job?.state === "done" && currentView === "dashboard") await loadDashboard();
   } catch (e) {
-    error(e.message);
+    if (session && version === garminStatusVersion) $("#garmin-sync-status").textContent = e.message;
+  } finally {
+    garminStatusBusy = false;
   }
-};
+}
+async function startGarminSync() {
+  if (!session?.sync_enabled || garminActive) return;
+  garminStatusVersion++;
+  const version = garminStatusVersion;
+  garminPendingRequest ||= createRequestId();
+  garminActive = true;
+  updateSyncButtons();
+  try {
+    await api("/api/sync/garmin", {
+      method: "POST",
+      body: JSON.stringify({request_id: garminPendingRequest})
+    });
+    if (!session || version !== garminStatusVersion) return;
+    garminPendingRequest = null;
+    await checkGarminSync();
+  } catch (e) {
+    if (!session || version !== garminStatusVersion) return;
+    garminActive = false;
+    updateSyncButtons();
+    $("#garmin-sync-status").textContent = `${e.message} Możesz ponowić pobieranie.`;
+  }
+}
+$("#sync-data").onclick = startGarminSync;
+$("#sync-garmin").onclick = startGarminSync;
 $("#older-messages").onclick = () => loadChat(Math.min(...history.keys())).catch(e => error(e.message));
 $("#image").onchange = async () => {
   imageData = null;
@@ -394,6 +464,8 @@ setInterval(async () => {
     if (currentView === "chat") await loadChat();
     session = await api("/api/session");
     updateTransport();
+    updateSyncButtons();
+    if (garminActive) await checkGarminSync();
   } catch (e) {
     error(e.message);
   } finally {

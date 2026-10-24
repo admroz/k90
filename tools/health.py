@@ -147,15 +147,26 @@ def get_daily_metrics(days: int = 14) -> list[dict]:
         days: Liczba dni wstecz (domyślnie 14).
 
     Returns:
-        Lista rekordów: data, RHR, stres, oddech.
+        Lista rekordów: data, RHR, stres, oddech oraz kalorie spoczynkowe,
+        aktywne i spalone łącznie z Garmin. Brak danych pozostaje None.
     """
     with get_conn() as conn:
         rows = conn.execute(
-            """SELECT data, rhr, avg_stres, max_stres, avg_oddech
-               FROM metryki_dzienne
-               WHERE data >= ?
-                 AND rhr IS NOT NULL
-               ORDER BY data DESC""",
+            """WITH dates AS (
+                   SELECT data FROM metryki_dzienne
+                   UNION SELECT data FROM kalorie_dzienne
+               )
+               SELECT d.data, m.rhr, m.avg_stres, m.max_stres, m.avg_oddech,
+                      k.spoczynkowe_kcal, k.aktywne_kcal,
+                      k.spoczynkowe_kcal + k.aktywne_kcal AS spalone_kcal,
+                      k.pobrano_at AS kalorie_pobrano_at
+               FROM dates d
+               LEFT JOIN metryki_dzienne m ON m.data = d.data
+               LEFT JOIN kalorie_dzienne k ON k.data = d.data
+               WHERE d.data >= ?
+                 AND (m.rhr IS NOT NULL OR k.spoczynkowe_kcal IS NOT NULL
+                      OR k.aktywne_kcal IS NOT NULL)
+               ORDER BY d.data DESC""",
             (date_days_ago(days),)
         ).fetchall()
     return rows_to_list(rows)
