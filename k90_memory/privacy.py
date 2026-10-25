@@ -84,16 +84,25 @@ class PrivacyPolicy:
                 if budget[1] > self.max_chars:
                     raise PrivacyError()
                 stripped = obj.lstrip()
-                if required_json or (stripped.startswith(('{', '[')) and not stripped.startswith('[REDACTED]')):
+                if required_json or stripped.startswith(('{', '[', '"')):
                     try:
                         parsed = json.loads(obj)
                     except (ValueError, RecursionError):
-                        if required_json or re.match(r'^(?:\{\s*(?:["}]|$)|\[\s*(?:[\[\]{"\d-]|true\b|false\b|null\b|$))', stripped):
-                            # JSON-looking structures (including truncated or
-                            # trailing data) must not fall back to unchecked prose.
-                            # Markdown links start with ordinary label text.
+                        # Object-like and quoted encodings are always fail-closed.
+                        # Only a complete, plain Markdown label can disambiguate
+                        # a leading '[' from a malformed JSON array. Do not infer
+                        # safety from an unrecognized/broken JSON key prefix.
+                        label, closed, _ = stripped[1:].partition(']')
+                        markdown = (stripped.startswith('[') and closed and label
+                                    and not any(c in label for c in '{}["\'\\,:')
+                                    and (not label.strip() or
+                                         (label.lstrip()[0].isalpha() and
+                                          label.strip() not in ('true', 'false', 'null'))))
+                        if required_json or not markdown:
                             raise PrivacyError() from None
                         return self._text(obj)
+                    # Reuse this walk's depth/node/character budgets for every
+                    # decoded layer, and retain the original number of encodings.
                     return json.dumps(walk(parsed, depth + 1), ensure_ascii=False, separators=(',', ':'))
                 return self._text(obj)
             if obj is None or type(obj) is bool:

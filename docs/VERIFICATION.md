@@ -1,5 +1,41 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+## Redesign granicy JSON — świeża regresja prowadzącego 08:17 UTC
+
+Checkpoint zastanej pracy `a3d54da8c2d20173b1e2a2ae082195039e5e36fa` został
+wypchnięty wyłącznie na origin/feat/long-term-memory i potwierdzony ls-remote.
+Rola implementacyjna odtworzyła pierwotny RED (6 failed/7 passed), dopisała
+20 receiver-level/budget/Markdown przypadków (RED 14 failed/6 passed), następnie
+przeprojektowała kontrakt: pełny decode obiektów/tablic/stringów JSON ze wspólnym
+budżetem; malformed object/string fail-closed; ograniczona gramatyka etykiet
+Markdown zamiast rozpoznawania prefiksów błędnych kluczy. Szczegóły i ograniczenia:
+`review-evidence/privacy_json_contract.md`. GREEN implementatora: 100 passed.
+
+Prowadzący odczytał dokładny diff, nowe testy, helper i guard, następnie wykonał:
+
+```sh
+bash /opt/data/cache/scratch/k90-verification-20261025/run-fixes.sh privacy-parent-full
+bash /opt/data/cache/scratch/k90-verification-20261025/run-fixes.sh privacy-parent-probe docs/review-evidence/privacy_boundary_probe.py
+node --check web/app.js && node --test tests/web_*.test.mjs
+```
+
+Wyniki rzeczywiste: 298 passed / 1 skipped in 79.66s, exit 0; pierwotny probe
+13 passed in 1.51s, exit 0; JS syntax OK, frontend 21 passed/0 failed, exit 0.
+Skip nadal dotyczy niewybranego lokalnego importu; żadnych danych produkcyjnych.
+Sanity: `git diff --check` exit 0. Szczegółowe logi pytest w scratch pod etykietami
+powyżej; trwały skrócony wynik w `review-evidence/privacy_parent_regression.txt`.
+
+Niezależny krytyczny przegląd NOWEJ poprawki nadal NIEZALICZONY: próba uruchomienia
+osobnej roli została odrzucona przez runtime `delegation.oneshot_max_children=2`.
+Pierwsze dwie role zakończone: read-only audyt checkpointu, implementator.
+To ograniczenie tej sesji, nie bloker właściciela ani akceptacja bezpieczeństwa.
+Następna sesja musi zacząć od niezależnego adversarial review, nie powtarzać
+audytu starego checkpointu. Real HS/OAuth/container/CI nadal niepotwierdzone.
+
+Quota 08:15:37 oraz 08:17:25 UTC: Session 77%, Weekly 12%; resety bez zmian.
+Bez reset/fallback/zmian kont. Nie zaczynać szerokiej integracji blisko progu;
+mały checkpoint WIP nie oznacza pełnego odbioru.
+
 ## Wznowienie 08:10 UTC — checkpoint WIP/BLOCKED
 
 Nowy mandat autonomiczny zastępuje historyczne zakazy checkpoint commit/push
