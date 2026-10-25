@@ -2,6 +2,13 @@
 
 ## Redesign granicy JSON — świeża regresja prowadzącego 08:17 UTC
 
+Testowane źródła utrwalono w `6a3b3066653eb08dd519b46e69e0e1ecf33a6661`.
+Push origin/feat/long-term-memory potwierdzony identycznym SHA przez ls-remote;
+working tree czyste po tym push. Skan sześciu kandydatów i oba diff checks PASS.
+Końcowy odczyt 08:18:27 UTC: Session 78%, Weekly 12%. Kolejny checkpoint zawiera
+wyłącznie dokumentację, nie zmienia testowanych źródeł. Brak niezależnego review
+nowej poprawki uniemożliwia READY; kontynuacja w świeżej sesji (limit delegacji).
+
 Checkpoint zastanej pracy `a3d54da8c2d20173b1e2a2ae082195039e5e36fa` został
 wypchnięty wyłącznie na origin/feat/long-term-memory i potwierdzony ls-remote.
 Rola implementacyjna odtworzyła pierwotny RED (6 failed/7 passed), dopisała

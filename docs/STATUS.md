@@ -15,6 +15,9 @@
   prowadzącego: bez zidentyfikowanych sekretów/real PII/baz/cache. Workflow i hooks
   sprawdzone; jawny push tylko origin/feat/long-term-memory, bez publikacji obrazu.
 - Pierwszy checkpoint lokalny/zdalny: a3d54da8c2d20173b1e2a2ae082195039e5e36fa.
+- Testowane źródła z poprawką: 6a3b3066653eb08dd519b46e69e0e1ecf33a6661;
+  commit wypchnięty i SHA potwierdzony przez ls-remote. Późniejsze zmiany tylko docs.
+  Końcowy checkpoint dokumentacji jest HEAD gałęzi; exact SHA przez git/ls-remote.
 - Kolejny etap: niezależny review poprawki w świeżej sesji, następnie realne bramki
   HS/OAuth/kontenera/CI. Nie powtarzać audytu zastanej pracy jako finalnego review.
 - Rzeczywiste HS/OAuth, kontener i CI niepotwierdzone według dotychczasowego checkpointu.
@@ -28,8 +31,8 @@ Użytkownik zlecił autonomiczną kontynuację 2026-10-25. Rutynowe decyzje tech
 nie wymagają kolejnego potwierdzenia. Nowe logowanie, koszty, zmiana zakresu
 lub osłabienie zabezpieczeń wymagają właściciela.
 
-Odczyt: Session 77%, Weekly 12% (usage API,
-2026-10-25T08:17:25Z). Resety: 2026-10-25T11:22:00Z / 2026-11-01T06:22:00Z.
+Odczyt: Session 78%, Weekly 12% (usage API,
+2026-10-25T08:18:27Z). Resety: 2026-10-25T11:22:00Z / 2026-11-01T06:22:00Z.
 Każdy wykonawca sprawdza quota przed większym etapem i po dłuższej partii.
 80%: nie zaczynać dużego etapu; 90%: checkpoint i pauza. Nieznany odczyt blokuje
 nowy duży etap. Bez banked reset i płatnego fallbacku.
