@@ -49,6 +49,9 @@ def clone_snapshot(source: Path, destination: Path):
     with closing(sqlite3.connect(destination / "k90.db")) as conn, conn:
         conn.execute("DROP TABLE IF EXISTS chat_jobs")
         conn.execute("DROP TABLE IF EXISTS transport_state")
+        from patient_documents import import_markdown
+
+        import_markdown(conn, destination)
 
 
 def main():

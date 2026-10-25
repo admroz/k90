@@ -7,6 +7,7 @@ from copy import deepcopy
 import json
 
 from openai import OpenAI
+from outbound_policy import ModelCallError, sanitize_payload
 
 
 def uses_responses(model: str) -> bool:
@@ -63,7 +64,7 @@ class ResponsesConversation:
         if max_output_tokens <= 0:
             raise ValueError("max_output_tokens must be positive")
         self.model = model.removeprefix("openai/")
-        self.input = _input_messages(messages)
+        self.input = _input_messages(sanitize_payload(messages))
         # Existing schemas have optional/default fields. Preserve their semantics.
         self.tools = [
             {"type": "function", **deepcopy(tool["function"]), "strict": False}
@@ -76,16 +77,16 @@ class ResponsesConversation:
         options = {}
         if self.tools:
             options = {"tools": self.tools, "tool_choice": "auto"}
-        with OpenAI(timeout=120.0, max_retries=2) as client:
-            response = client.responses.create(
-                model=self.model,
-                input=deepcopy(self.input),
-                reasoning={"effort": self.reasoning_effort},
-                max_output_tokens=self.max_output_tokens,
-                store=False,
-                include=["reasoning.encrypted_content"],
-                **options,
-            )
+        payload = sanitize_payload(dict(
+            model=self.model, input=deepcopy(self.input),
+            reasoning={"effort": self.reasoning_effort}, max_output_tokens=self.max_output_tokens,
+            store=False, include=["reasoning.encrypted_content"], **options,
+        ))
+        try:
+            with OpenAI(timeout=120.0, max_retries=2) as client:
+                response = client.responses.create(**payload)
+        except Exception:
+            raise ModelCallError('model_request_failed') from None
         if response.status not in {"completed", "incomplete"}:
             raise RuntimeError("Responses API did not complete the request")
         # Replay ALL output items, including encrypted reasoning, within this turn.

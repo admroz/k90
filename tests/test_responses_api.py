@@ -114,6 +114,8 @@ def test_multiple_tool_rounds_preserve_reasoning_and_record_usage(mock_api, agen
 
 
 def test_images_and_existing_history_work_with_prefixed_model(mock_api, agent_context, monkeypatch):
+    # Synthetic images are explicitly permitted; production now requires this consent.
+    monkeypatch.setenv("K90_ALLOW_MODEL_IMAGES", "true")
     monkeypatch.setattr(agent, "MODEL", "openai/gpt-6.1-sol")
     image = [{"type": "text", "text": "Posiłek"},
              {"type": "image_url", "image_url": {"url": "data:image/png;base64,dGVzdA==", "detail": "low"}}]

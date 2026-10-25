@@ -4,15 +4,21 @@ Ten plik opisuje aktualny kod, nie potwierdza wersji uruchomionej na serwerze.
 Konfiguracja i uruchamianie: [README.md](README.md), panel: [WEB.md](WEB.md),
 wdrożenie: [DEPLOY.md](DEPLOY.md), zadania: [TODO.md](TODO.md).
 
-**Plan pamięci długoterminowej:** [docs/MEMORY_ARCHITECTURE.md](docs/MEMORY_ARCHITECTURE.md).
-To kierunek rozwoju, nie istniejąca integracja Hindsight. Nie opisywać planowanych
-filtrów prywatności, indeksów i migracji jako działających zabezpieczeń.
+**Pamięć i autoryzacja:** założenia w [docs/MEMORY_ARCHITECTURE.md](docs/MEMORY_ARCHITECTURE.md),
+aktualne polecenia i granice w [docs/OPERATIONS_MEMORY_AUTH.md](docs/OPERATIONS_MEMORY_AUTH.md),
+wyniki i niewykonane bramki w [docs/VERIFICATION.md](docs/VERIFICATION.md).
+Obecność implementacji i testy na syntetykach nie dowodzą wdrożenia produkcyjnego,
+pełnej anonimizacji ani autoryzacji między bankami Hindsight.
 
 ## Stack i procesy
 
 - Python, własna pętla tool-use w `agent.py`; LiteLLM / Chat Completions albo
   `responses_api.py` dla rodziny GPT-6.1 Sol. Model rozmowy i summary wybierane
   niezależnie, domyślnie `gpt-5.4`.
+- `subscription_api.py` / `subscription_auth.py` / `subscription_login.py`:
+  opcjonalny tryb ChatGPT OAuth, własny magazyn i serializowany refresh;
+  `K90_AGENT_AUTH=chatgpt`, summary dziedziczy ten wybór, o ile nie nadpisane.
+  Bez automatycznego płatnego API fallbacku. Ustawienie kredytów potwierdza operator.
 - `webapp.py`: FastAPI, logowanie hasłem, sesje, kontrola żądań i API WWW.
 - `web_runtime.py`: trwała kolejka SQLite, jeden worker i odzyskiwanie stanu.
 - `web_data.py` i `web/`: dashboard, wykresy, posiłki, tabele, dokumenty i chat;
@@ -57,12 +63,16 @@ Backend wymaga jednego procesu Uvicorn (`--workers 1`) na tę bazę.
 ostatnie `HISTORY_MESSAGES * 2` rekordów rozmowy i bieżąca wiadomość
 (tekst lub tekst ze zdjęciem). Domyślnie to 10 par wiadomości.
 
-`conversations` zapisuje wejście użytkownika i końcową odpowiedź, nie pełny
-przebieg wywołań narzędzi. Starsze rekordy nie są obecnie wyszukiwane semantycznie.
-Kontekst operacyjny zawiera ograniczony wyciąg danych z ostatnich dni;
-aktualny odczyt bazy nie gwarantuje aktualnego pomiaru.
+`conversations` zachowuje kompatybilną historię udanych par wiadomości.
+`agent_events` dodatkowo zapisuje oryginalne wejście przed modelem, także po błędzie,
+oraz argumenty/wyniki narzędzi i końcową odpowiedź. Nie utrwala reasoning providera.
+`memory_runtime.py` dołącza ograniczony recall ze źródeł lokalnych; `k90_memory/`
+prowadzi wersje, FTS5 i transakcyjny outbox dla wymiennego adaptera HS.
+Domyślnie działa lokalnie, bez sieci HS; starej historii nie importuje automatycznie.
+Źródła wracają z rolą/datą/rewizją. Wynik HS musi przejść lokalną weryfikację właściciela
+i bieżącej wersji. Pomiary nadal odczytujemy z SQL, nie traktujemy wspomnień jako pomiaru.
 
-`summary.py` buduje siedmioliniowy rekord z dokładnie pięciu dokumentów:
+`summary.py` buduje siedmioliniowy rekord z dokładnie pięciu dokumentów SQLite:
 `pacjent.md`, `wywiad.md`, `analiza.md`, `dieta.md`, `tydzien.md`.
 Nie jest to podsumowanie historii rozmów. Zapis jest singletonem
 `patient_summary` (`id=1`). Odświeżanie następuje przy starcie, gdy brak summary
@@ -84,6 +94,7 @@ Aktualny rejestr i definicje narzędzi: `tools/__init__.py`.
 | `tools/garmin.py` | Kontrola synchronizacji Garmin, statusy i statystyki zmian. |
 | `tools/libre.py` | Kontrola synchronizacji Libre i przełącznik `LIBRE_ENABLED`. |
 | `tools/patient.py` | Odczyt i pełne nadpisanie pięciu dozwolonych dokumentów pacjenta; nie promptu systemowego. |
+| `patient_documents.py` | Canonical dokumenty i rewizje w SQLite; zachowawczy import i jawny eksport Markdown. |
 | `summary.py` | Generowanie i odświeżanie podsumowania pacjenta. |
 | `tools/context.py` | Bieżący wyciąg danych do promptu, bez wyszukiwania starszych rozmów. |
 | `tools/db.py` | Połączenie, inicjalizacja schematu i backup przez API SQLite. |
@@ -93,6 +104,14 @@ Tabele danych zdrowotnych obejmują `cisnienie`, `waga`, `sen`, `aktywnosci`,
 `posilki` i `glukoza_libre`. `init_db()` inicjalizuje schemat także bez importu CSV.
 Dodatkowo istnieją `conversations`, `patient_summary`, `usage_stats`, `sync_status`;
 `web_runtime.init_runtime()` dodaje `chat_jobs` i `transport_state`.
+Nowe tabele obejmują `patient_documents`, `patient_document_revisions`, `agent_events`,
+`memory_sources`, `memory_versions`, `memory_fts`, `memory_outbox`, `memory_settings`.
+Zmiana dokumentu i zlecenie indeksowania są częścią jednej transakcji. Klucz HMAC
+w `memory_settings` jest lokalny i musi przetrwać backup/restore; nie jest kluczem API.
+
+`outbound_policy.py` filtruje wszystkie ścieżki modelowe, w tym summary i wyniki narzędzi.
+Nie wyłączać filtra dla naprawienia testu. Obrazy wymagają osobnego jawnego opt-in;
+test obrazów musi tę zgodę ustawić lokalnie dla fikcyjnego fixture.
 
 Bilans dnia opiera się na zapisanych posiłkach i `kalorie_dzienne`
 (`bmrKilocalories` + `activeKilocalories`), bez ponownego dodawania treningów.
@@ -112,6 +131,12 @@ Agent przez `get_daily_metrics` i panel korzystają z tych samych danych.
   odświeżyć summary przez model, jeśli wykryto zmiany Garmin.
 
 ## Bezpieczny rozwój i weryfikacja
+
+- Autonomiczne zlecenie ma jednego zapisującego. Przed zmianami sprawdzić status
+  `docs/STATUS.md` i blokadę `/opt/data/jobs/k90-autonomy/worker.lock` (flock).
+  Jeśli jest zajęta, inna sesja ma tylko odczytywać status, nie uruchamiać drugiego
+  implementatora. Samo istnienie pliku lock nie oznacza aktywnej blokady.
+- Mandat autonomicznej kontynuacji i checkpointów Git: `docs/IMPLEMENTATION_PLAN.md`.
 
 - `dev.py` domyślnie uruchamia demonstracyjny chat na fikcyjnych danych.
   Telegram i sync są wyłączone. `--live-agent` świadomie włącza model.

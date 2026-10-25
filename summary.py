@@ -11,6 +11,7 @@ from pathlib import Path
 import litellm
 
 from responses_api import ResponsesConversation, uses_responses
+from outbound_policy import chat_completion, model_policy
 
 from tools.db import get_conn
 from tools.time_utils import APP_TIMEZONE, now_local
@@ -50,12 +51,14 @@ def _collapse_text(text: str, limit: int = 180) -> str:
 
 
 def _load_patient_parts() -> tuple[list[str], dict[str, str]]:
+    from patient_documents import get_document
+
     parts: list[str] = []
     contents: dict[str, str] = {}
     for fname in PATIENT_FILES:
-        path = DATA_DIR / fname
-        if path.exists():
-            text = path.read_text(encoding="utf-8")
+        document = get_document(fname, data_dir=DATA_DIR)
+        if document is not None:
+            text = document["content"]
             contents[fname] = text
             parts.append(f"=== {fname} ===\n{text}")
     return parts, contents
@@ -118,7 +121,19 @@ def _generate_summary(combined: str) -> tuple[str, str | None, int]:
     last_finish_reason = None
     for attempt, compact in enumerate((False, True), start=1):
         messages = [{"role": "user", "content": _build_summary_prompt(combined, compact=compact)}]
-        if uses_responses(SUMMARY_MODEL):
+        auth_mode = os.getenv('K90_SUMMARY_AUTH', os.getenv('K90_AGENT_AUTH', 'api')).strip().casefold()
+        if auth_mode == 'chatgpt':
+            from subscription_api import SubscriptionConversation
+            from subscription_auth import TokenStore
+            from subscription_login import default_state_directory
+            turn = SubscriptionConversation(SUMMARY_MODEL, messages,
+                token_store=TokenStore(default_state_directory()), policy=model_policy(),
+                reasoning_effort=os.getenv('SUMMARY_REASONING_EFFORT', 'low')).complete()
+            finish_reason = 'stop' if turn.complete else 'length'
+            summary = turn.text.strip()
+        elif auth_mode != 'api':
+            raise ValueError('invalid_summary_auth_mode')
+        elif uses_responses(SUMMARY_MODEL):
             turn = ResponsesConversation(
                 SUMMARY_MODEL, messages,
                 reasoning_effort=os.getenv("SUMMARY_REASONING_EFFORT", "low"),
@@ -127,7 +142,7 @@ def _generate_summary(combined: str) -> tuple[str, str | None, int]:
             finish_reason = "stop" if turn.complete else "length"
             summary = turn.text.strip()
         else:
-            response = litellm.completion(
+            response = chat_completion(litellm.completion,
                 model=SUMMARY_MODEL,
                 messages=messages,
                 max_tokens=SUMMARY_MAX_TOKENS,

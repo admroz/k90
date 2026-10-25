@@ -7,6 +7,7 @@ from datetime import date, timedelta
 from tools.db import get_conn, get_data_dir
 from tools.patient import ALLOWED_FILES
 from tools.time_utils import now_local
+from patient_documents import get_document
 
 TABLES = (
     "waga",
@@ -85,14 +86,11 @@ def document(name):
         }
     if name not in ALLOWED_FILES:
         raise ValueError("Nieznany dokument")
-    root = get_data_dir().resolve()
-    path = root / name
-    if path.is_symlink() or path.resolve().parent != root:
-        raise ValueError("Niedozwolona ścieżka dokumentu")
+    stored = get_document(name, data_dir=get_data_dir())
     return {
         "name": name,
-        "content": path.read_text() if path.exists() else "",
-        "updated_at": path.stat().st_mtime if path.exists() else None,
+        "content": stored["content"] if stored else "",
+        "updated_at": stored["updated_at"] if stored else None,
     }
 
 

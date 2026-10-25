@@ -154,9 +154,11 @@ def create_app(*, start_worker=True, processor=None):
                     "Ta baza ma już uruchomiony backend. Użyj jednego workera."
                 ) from None
             init_runtime()
+            import memory_runtime
             worker = ConversationWorker(processor)
             app.state.worker = worker
             if start_worker:
+                memory_runtime.start_worker()
                 worker.start()
             try:
                 yield
@@ -164,6 +166,7 @@ def create_app(*, start_worker=True, processor=None):
                 worker.stop.set()
                 if start_worker:
                     worker.thread.join(timeout=5)
+                    memory_runtime.stop_worker()
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(BodyLimitMiddleware)
