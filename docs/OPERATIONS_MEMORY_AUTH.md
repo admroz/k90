@@ -23,6 +23,17 @@ Nie uruchamiać migracji/testów na produkcji bez własnego backupu i przeglądu
 
 ## Bezpieczne ustawienia domyślne
 
+Compose przekazuje konfigurację aplikacji z `env_file: .env`; dodanie opcji
+`K90_*` nie wymaga dopisywania jej do YAML. Uruchamiać z katalogu projektu
+(`docker compose up -d`); przy niestandardowym pliku interpolacji pamiętać,
+że `--env-file` nie zastępuje service `env_file: .env`.
+Jawne nadpisania runtime to `DATA_DIR=/data`, `DB_PATH=/data/k90.db`, wymagane
+`WEB_PASSWORD` oraz `TZ` (jawne TZ, następnie APP_TIMEZONE, następnie Europe/Warsaw).
+Hasło musi mieć minimum 12 znaków; Compose wymaga niepustej wartości, a aplikacja
+sprawdza długość. Nie drukować `docker compose config` z prawdziwymi sekretami.
+Przykładowy `.env.example` nie zawiera danych produkcji; skopiować go do prywatnego
+`.env` i ustawić własne wartości. Obraz pozostaje wyborem operatora.
+
 ```dotenv
 K90_MEMORY_BACKEND=local
 K90_AGENT_AUTH=api

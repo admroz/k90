@@ -1,5 +1,34 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+## Wznowienie 14:15–14:22 UTC — revised scope, Compose WIP
+
+OWNER_ACCEPTANCE.md odczytano jako pierwszy i zachowano w checkpoint commit
+`e910dd9fbfcd5d8d0ae59f161c3007d1bf1ffb06`; push oraz ls-remote zgodne.
+Jedyną zastaną pracą był ten nowy dokument właściciela. Pełny odczyt, skan
+jednego kandydata i diff checks PASS; hooks tylko sample, workflow nie publikuje
+na feature, upstream push DISABLED. Lock PID187532 to rodzic tej sesji,
+nie obcy writer. Pierwsza komenda rozpoznania z Python -c zablokowana przed
+wykonaniem; ponowiono bez niej i bez zmiany ustawień bezpieczeństwa.
+
+Szczegółowy nowy dowód: review-evidence/compose_checkpoint_20261025.md.
+TDD 2 failed → 2 passed; koordynator pełna regresja 406 passed / 1 skipped
+(84.51s), frontend 21 passed, syntax OK. Rzeczywisty standalone Compose
+na skopiowanym YAML i syntetycznym env: passthrough/password/volume PASS.
+Brak kontenera/CI/HS restart proof; niezależny review nowych zmian nieukończony.
+Obie delegowane role zakończone. Brak zapisu main/upstream i dostępu do produkcji.
+
+O 14:23 UTC git diff ujawnił obcą zmianę OWNER_ACCEPTANCE.md: dopisek
+„Later owner clarification” odracza rozbudowane HS testy do wdrożenia. Nie był
+to zapis koordynatora ani jego dzieci. Zachowano cały dopisek; przerwano dalszą
+implementację zgodnie z zasadą jednego writera. Tylko bezpieczny WIP checkpoint
+i status; kolejna sesja potwierdzi wyłączność. Odczyt quota 14:23:02Z 79%/25%.
+
+Quota usage_api 14:15:03Z 71%/24%, 14:17:05Z i 14:18:16Z 75%/25%,
+14:19:36Z 76%/25%, 14:21:52Z 78%/25%; resety 16:33:40Z / Nov 1 06:22Z.
+Bez resetów, fallbacku, zmian kont/providerów. Następny etap dopiero po świeżym
+odczycie wszystkich okien <80%. Historyczne BLOCKED_OWNER poniżej jest zastąpione
+nową zgodą właściciela: nie żądać Docker dostępu ani live OAuth przed odbiorem.
+
 ## Zamknięcie tej sesji — BLOCKED_OWNER, 12:45 UTC
 
 Checkpoint dowodów `e31a42754fa181accf2fc0f7a698afaae0996117` wypchnięty

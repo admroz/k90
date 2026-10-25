@@ -5,6 +5,21 @@ OAuth and local Docker access before a final delivery. It does NOT authorize
 production access, deployments, main/upstream writes, secrets, extra costs,
 removing privacy checks, or calling synthetic tests full live integration.
 
+## Later owner clarification — reduce Hindsight testing
+
+The owner explicitly drops extensive HS infrastructure testing as a delivery
+blocker and accepts checking real HS operation at deployment. Do not spend time
+building a large HS CI/model-fixture test system or IAM infrastructure. Keep
+existing useful adapter/error/fallback/privacy tests, document a short synthetic
+retain/recall deployment smoke check, and preserve honest unverified status.
+The ordinary k90 CI/container smoke remains useful. HS topology is currently a
+proposal, NOT deployment authorization: k90 remains a separate application;
+shared existing HS vs a dedicated instance is under owner discussion. Do not
+move existing HS data, change its credentials/configuration, restart it, add k90
+to Hermes stack, or provision a new production HS autonomously.
+
+These later instructions override the extensive HS test requirements below.
+
 ## Test infrastructure
 
 - Do not request or obtain Docker daemon/socket privileges on the Hermes host.

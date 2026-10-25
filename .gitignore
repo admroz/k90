@@ -1,4 +1,8 @@
 .env
+.env.*
+!.env.example
+chatgpt-auth/
+credentials.json
 .env.synology
 __pycache__/
 *.pyc

@@ -15,6 +15,17 @@ Nie dodajemy płatnego fallbacku ani wspólnego magazynu OAuth.
 
 ## Kolejność i odbiór
 
+Aktualizacja zakresu 2026-10-25: OWNER_ACCEPTANCE.md ma pierwszeństwo nad
+historycznymi bramkami poniżej. Live OAuth/inference jest odroczone do wdrożenia,
+nie blokuje przygotowania. CI/container i izolowany HS mają działać na standardowym
+GitHub-hosted Linux we własnym forku, bez sekretów i publikacji. Brak bank ACL
+w wybranej wersji należy zweryfikować i opisać jako ograniczenie zaufanej sieci.
+Nie żądać lokalnego demona Docker. Bieżący postęp: STATUS.md.
+Późniejszy dopisek właściciela „Later owner clarification” w OWNER_ACCEPTANCE
+odracza rozbudowane HS testy do wdrożenia; ma pierwszeństwo również nad powyższym
+wymogiem izolowanego HS CI. Zachować testy adaptera/prywatności i krótki deployment
+smoke, nie budować dodatkowej infrastruktury HS/IAM.
+
 1. **Dokumenty pacjenta w SQLite**: pięć dotychczasowych dokumentów, aktualna treść,
    trwałe wersje i daty, bez utraty interfejsu panelu/narzędzi. Jednorazowy,
    idempotentny import Markdown; bez usuwania oryginałów i bez dual-write jako
