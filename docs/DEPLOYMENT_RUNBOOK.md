@@ -407,10 +407,13 @@ Jeśli recall zawiedzie, nie wpisuj PASS: sprawdź wersję API, zasoby/limit mod
 uprawnienia i logi prywatnie. Nie restartuj wspólnego HS. Zachowaj `local` dla k90.
 Nie traktuj tej próby jako ACL/restart-persistence ani testu modelowej jakości.
 
-Właściciel tworzy produkcyjny PUSTY `k90-owner` przez istniejący admin/proxy HS,
-z własną zatwierdzoną polityką/auth. Adapter k90 nie tworzy banków automatycznie.
-Dopiero wtedy ustaw końcowe opcje hindsight z sekcji 3. Nie importuj całej starej
-historii; ewentualny backfill jest osobną świadomą operacją z OPERATIONS_MEMORY_AUTH.
+Nie musisz ręcznie tworzyć produkcyjnego `k90-owner`: ustaw jego nazwę w sekcji 3,
+a HS tworzy brakujący bank z ustawieniami domyślnymi przy pierwszym zapisie (retain),
+o ile wdrożona wersja i uprawnienia pozwalają na taki zapis. Sam odczyt/podłączenie
+nie tworzy banku. Adapter k90 nie wysyła osobnego żądania utworzenia banku.
+Jeśli istniejący admin/proxy wymaga wcześniejszego provisioningu lub własnej
+polityki banku, wykonuje go właściciel — bez osłabiania uprawnień. Nie importuj całej
+starej historii; backfill jest osobną świadomą operacją z OPERATIONS_MEMORY_AUTH.
 
 ## 8. Rollout k90 i minimalna kontrola
 
