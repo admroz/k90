@@ -1,6 +1,6 @@
 # k90 — bieżący status zadania
 
-Stan: CONTINUE — checkpoint WIP; przerwano implementację po wykryciu zewnętrznej zmiany dokumentu właściciela.
+Stan: PAUSED_FOR_QUOTA — checkpoint WIP; również wykryto zewnętrzną zmianę dokumentu właściciela.
 
 Aktualizacja 2026-10-25 14:24 UTC. Branch feat/long-term-memory, fork
 hermesinski/k90, upstream push DISABLED. Bez PR/main/merge/deploy/produkcji.
@@ -29,11 +29,12 @@ Otwarte:
   założenia jednego writera. Kolejny nadzorowany etap musi potwierdzić wyłączność
   i odczytać pełny nowy mandat; nie budować rozbudowanego HS fixture systemu.
 
-Limity: usage_api 14:23:02Z Session 79%, Weekly 25%; resety
+Limity: usage_api 14:24:21Z Session 82%, Weekly 26%; resety
 2026-10-25T16:33:40Z / 2026-11-01T06:22:00Z. Bez reset/fallback/account switch.
 Kolejny duży etap tylko przy świeżym <80% we wszystkich oknach.
 
 Dowody: review-evidence/compose_checkpoint_20261025.md i VERIFICATION.md.
 Manifesty historyczne BLOCKED nie zostały zastąpione PASS. Nie READY.
-Checkpoint commit i remote: końcowy git HEAD/ls-remote (dokładny SHA w prywatnym
-outcome.json); po e910dd9 zawiera jawnie opisane WIP konfiguracji i dokumentację.
+Checkpoint źródeł i origin: c3b00f64db2472864e8a35869c5669e856ef47ce,
+ls-remote zgodny, checkout czysty po push. Po nim tylko docs status/quota.
+Końcowy dokumentacyjny SHA w prywatnym outcome.json i git HEAD/ls-remote.

@@ -1,5 +1,13 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+Końcowy WIP checkpoint `c3b00f64db2472864e8a35869c5669e856ef47ce`
+wypchnięto wyłącznie do origin feature, ls-remote zgodny, checkout czysty.
+Przed push jawny skan 10 przejrzanych kandydatów bez trafień i diff checks PASS;
+ograniczona heurystyka, nie gwarancja pełnego wykrycia sekretów. Utrwalono też
+zewnętrzny dopisek właściciela bez ingerencji w treść. Odczyt po push
+14:24:21Z Session 82%, Weekly 26% wymusza PAUSED_FOR_QUOTA. Resety
+16:33:40Z / Nov 1 06:22Z. Po źródłach tylko docs. Brak działających dzieci.
+
 ## Wznowienie 14:15–14:22 UTC — revised scope, Compose WIP
 
 OWNER_ACCEPTANCE.md odczytano jako pierwszy i zachowano w checkpoint commit
