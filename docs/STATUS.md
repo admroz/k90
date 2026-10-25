@@ -1,6 +1,15 @@
 # k90 — bieżący status zadania
 
-## Stan: PAUSED_FOR_QUOTA — próg 80%, niezależny review nadal oczekuje
+## Stan: WIP — niezależny review FAIL, odtworzone trzy luki privacy
+
+Aktualizacja 2026-10-25 11:41 UTC: checkout przy wejściu czysty, HEAD i remote
+`86c88080594be42c982c6c8d6af8748c72d3cf69`. Nowy read-only review wykrył JSON
+w kluczach, duplikaty local_only oraz utratę restrykcji dokumentu w summary.
+Prowadzący odtworzył wszystkie trzy przepływy: 3 failed in 3.16s na syntetykach.
+Następny krok: TDD implementatora, kontrola źródeł przed formatowaniem,
+ponowna niezależna weryfikacja. Quota 7%/14%, resety 16:33:40Z / 2026-11-01
+06:22:00Z. Real HS/OAuth/container/CI niezaliczone; PR niegotowy.
+Poniższe wyniki są historyczne; nie zastępują nowej bramki.
 
 - Repo: `/opt/data/projects/k90`, fork `hermesinski/k90`, gałąź `feat/long-term-memory`.
 - Uzgodniony zakres i lista odbioru: `IMPLEMENTATION_PLAN.md`.

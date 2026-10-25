@@ -1,5 +1,34 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+## Wznowienie 11:33–11:41 UTC — niezależny review FAIL
+
+Czysty checkout, HEAD i origin/feat/long-term-memory zgodne:
+`86c88080594be42c982c6c8d6af8748c72d3cf69`. Brak zastanej pracy do ratowania.
+Lock worker.lock trzyma nadzorca PID 167165, rodzic bieżącego procesu 167177;
+nie wykryto drugiego implementatora. Odczytano cały ten dokument, plan,
+architekturę, operacje i AGENTS.md. Hooks tylko sample, core.hooksPath brak;
+workflow push feature nie uruchamia publikacji obrazu, upstream push DISABLED.
+
+Osobno zadany read-only reviewer wykonał świeży adversarial review źródeł
+6a3b306 (HEAD różni się tylko docs). Wynik: FAIL. Historyczny probe 13 passed;
+ograniczona regresja 100 passed, ale nowa macierz 23 failed/60 passed i trzy
+lokalne przepływy 3 failed. Wykryto: encoded JSON w kluczach pomija recursive
+decode; duplikat local_only usuwa wcześniejsze true; summary skleja dokument
+z prozą przed kontrolą źródła i traci rozpoznanie strukturalnej restrykcji.
+
+Prowadzący odczytał oba nowe testy, raport i bezpieczny harness; wykonał:
+`bash /opt/data/cache/scratch/k90-review-20261025-new/run-review.sh parent-flows /opt/data/cache/scratch/k90-review-20261025-new/test_flow_confirmations.py`
+Wynik rzeczywisty: 3 failed in 3.16s; marker dociera do atrap retain/summary.
+To syntetyczne lokalne SQLite i odbiorniki, bez real HS/modeli/poświadczeń.
+Szczegółowy tymczasowy raport: scratch k90-review-20261025-new/REPORT.md;
+nowe trwałe regresje i skrócony bezpieczny dowód muszą wejść z poprawką.
+Nie uznawać review poprzedniej poprawki za PASS. Następny etap: implementator
+TDD, wspólny ograniczony decode bez utraty par oraz kontrola źródeł przed kompozycją.
+
+Quota usage_api 11:33:46 UTC 1%/13%, 11:41:05 UTC 7%/14% (Session/Weekly),
+resety 2026-10-25T16:33:40Z / 2026-11-01T06:22:00Z. Bez reset/fallback.
+Real HS/OAuth/container/CI nadal pending. Checkpoint WIP, nie gotowość PR.
+
 ## Pauza quota przy wejściu — 08:21 UTC
 
 `/opt/hermes/.venv/bin/hermes usage --json`: usage_api, fetched_at
