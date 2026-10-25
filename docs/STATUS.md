@@ -1,8 +1,8 @@
 # k90 — bieżący status zadania
 
-## Stan: CONTINUE — niezależny review offline PASS; zapis dowodów przed końcowym BLOCKED_OWNER
+## Stan: BLOCKED_OWNER — niezależny review offline PASS; brakuje dostępu do bramek integracji
 
-Aktualizacja 2026-10-25 12:43 UTC. Gałąź `feat/long-term-memory` w forku
+Aktualizacja 2026-10-25 12:45 UTC. Gałąź `feat/long-term-memory` w forku
 `hermesinski/k90`; upstream push DISABLED. Bez PR, main writes, merge/deploy
 ani migracji produkcji. Odbiór integracji nadal nieukończony.
 
@@ -33,18 +33,26 @@ ani migracji produkcji. Odbiór integracji nadal nieukończony.
    Historyczny realny test retain/recall/retry/rebuild/cleanup jest częściowy;
    nie potwierdza ACL ani trwałości po restarcie usługi. Nie restartować wspólnego HS.
 3. CI/container: świeżo 12:32 UTC Docker bez demona; GitHub API enabled=true,
-   workflows total_count=0, feature runs puste. Potrzebna aktywacja/diagnoza
+   workflows total_count=0, feature runs puste także po push o 12:45 UTC.
+   Potrzebna aktywacja/diagnoza
    workflow forka przez właściciela i autoryzowany runner z Dockerem.
    Przyczyna niepotwierdzona. Pipeline ma build/smoke bez publikacji na feature.
 
 ### Limity i checkpoint
 
-usage_api 2026-10-25T12:42:59Z: Session 62%, Weekly 23%.
+usage_api 2026-10-25T12:45:05Z: Session 63%, Weekly 23%.
 Resety: 2026-10-25T16:33:40Z / 2026-11-01T06:22:00Z.
 Bez resetów, paid fallbacku i zmian konta/providera. Próg >=80%/unknown pauza.
 
-Następny krok: przejrzany checkpoint dowodów, skan i push do origin feature,
-potwierdzenie SHA; następnie końcowy BLOCKED_OWNER z powyższymi wymaganiami.
-Dokładny commit tego dokumentacyjnego checkpointu będzie zapisany przy zamknięciu;
-nie traktować dotychczasowego HEAD jako SHA jeszcze nieutworzonego commita.
+Checkpoint dowodów lokalnie/zdalnie potwierdzony ls-remote:
+`e31a42754fa181accf2fc0f7a698afaae0996117`; po push checkout był czysty.
+Ten końcowy wpis i manifest BLOCKED są wyłącznie docs; ich zamykający commit
+identyfikuje HEAD i zdalne refs/heads/feat/long-term-memory (SHA po końcowym push
+także w prywatnym outcome.json). To nie nowy commit testowanych źródeł.
+
+Następny krok zależy od powyższych trzech działań właściciela. Po zapewnieniu
+dostępu wykonać rzeczywiste próby na syntetykach i niezależnie sprawdzić dowody.
+`review-evidence/acceptance.json`: BLOCKED, niepuste remaining_gates; bez
+READY/PR do zamknięcia całości. Nie powtarzać automatycznie tych samych testów
+w zastępstwie brakującego OAuth/HS ACL/restart/container/CI.
 Dowody poleceń i ograniczenia: VERIFICATION.md; pełny zakres: IMPLEMENTATION_PLAN.md.

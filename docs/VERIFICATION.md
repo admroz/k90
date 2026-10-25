@@ -1,5 +1,48 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+## Zamknięcie tej sesji — BLOCKED_OWNER, 12:45 UTC
+
+Checkpoint dowodów `e31a42754fa181accf2fc0f7a698afaae0996117` wypchnięty
+wyłącznie do origin/feat/long-term-memory; HEAD i ls-remote zgodne, checkout
+czysty po push. Przed push pełny odczyt nowych syntetycznych plików i diff,
+scan_delivery.py (7 jawnych kandydatów, zero trafień), diff checks PASS.
+Skan ograniczony heurystycznie; nie oznacza wykrycia każdego możliwego sekretu.
+Hooks/workflow sprawdzone przed push: bez aktywnych hooks, brak publikacji na feature.
+
+Ponowny odczyt GitHub API 12:45 UTC po push: runs nadal [], workflows nadal []
+(HTTP 200). Wraz z wcześniejszym enabled=true i brakiem lokalnego demona oznacza
+brak dostępnego runnera/container proof. Nie deklarujemy przyczyny ani CI PASS.
+Właściciel musi aktywować/zdiagnozować workflow forka i zapewnić autoryzowany
+test-only runner z Dockerem. Istniejący workflow buduje i wykonuje smoke na feature
+bez publikacji. Nie jest potrzebny main write, wczesny PR ani deploy.
+
+Pozostałe minimalne działania właściciela:
+
+1. Odrębnie zalogować finalną aplikację k90 (`subscription_login`, instrukcja
+   OPERATIONS_MEMORY_AUTH.md), potwierdzić wyłączone dodatkowe kredyty i zapewnić
+   kontrolowany test realnego katalogu/refresh/streamingu/narzędzi/obrazu na
+   syntetykach. Tokeny wyłącznie prywatną ścieżką opisanej obsługi sesji; nie
+   z Hermesa, Git ani czatu. Historyczny tester wykonalności nie zastępuje tej bramki.
+2. Zapewnić izolowany restartowalny HS (lub własne okno restartu) i ograniczony
+   endpoint/tożsamości testowe allowed/denied, aby zweryfikować bank ACL oraz
+   trwałość po rzeczywistym restarcie. Nie restartować wspólnego serwisu bez zgody
+   ani nie badać istniejących banków. Real retain/recall/retry/rebuild/cleanup ma
+   już częściowy dowód; nie jest dowodem ACL/restartu.
+
+Acceptance manifest obejmuje wszystkie osiem obszarów i ma verdict BLOCKED;
+remaining_gates nie jest puste. Nie ma obietnicy gotowości PR. Niezależny
+offline security/source review PASS pozostaje ograniczony do badanego źródła,
+syntetyków i lokalnych odbiorników. Nowe zmiany wyłącznie dokumentacyjne.
+Przed zamykającym push validate_delivery.py potwierdził: wspólny testowany
+source commit obu manifestów, osiem obszarów, cztery otwarte bramki, istnienie
+wszystkich wskazanych dowodów, właściwą gałąź/remotes oraz wyłącznie docs od
+testowanego źródła. Scan czterech jawnych kandydatów bez trafień; diff checks
+PASS. To kontrola spójności dowodów/BLOCKED, nie wynik testów integracji.
+Obie role zakończone, brak pozostawionego implementatora. Stan nie jest skutkiem
+quota: usage_api 12:45:05Z Session 63%, Weekly 23%; resety 16:33:40Z / Nov 1
+06:22:00Z. Nie użyto reset/fallback ani nowych kont. Finalny dokumentacyjny SHA
+zostanie potwierdzony ls-remote po push i zapisany w prywatnym outcome.json.
+
 ## Wznowienie 12:21–12:43 UTC — niezależny review offline PASS, integracje nadal otwarte
 
 Przed zmianami checkout był czysty; HEAD i zdalne origin feature wskazywały

@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "commit": "f39ad1fd54674f78be6a4ca35a1064fdc39a37a2",
+  "verdict": "BLOCKED",
+  "state": "BLOCKED_OWNER",
+  "checked_at": "2026-10-25T12:45:06Z",
+  "scope": [
+    "documents_sqlite",
+    "local_memory",
+    "outbound_privacy",
+    "hindsight_integration",
+    "subscription_adapter",
+    "regression",
+    "container",
+    "ci"
+  ],
+  "independent_review": "docs/review-evidence/independent-review.json",
+  "independent_review_scope": "Scoped offline security/source PASS only; not integration or complete anonymization approval.",
+  "scope_results": {
+    "documents_sqlite": "Synthetic document/revision/import/export/backup/restore tests in fresh complete regression; no production migration.",
+    "local_memory": "Synthetic SQLite source versions/FTS/outbox/retry/rebuild/E2E verified; offline independent review found no blocking defect in examined scope.",
+    "outbound_privacy": "Fresh coordinator regression plus 153 probes passed; independent reviewer executed 202 existing and 140 new cases including local HTTP wire receivers. Heuristic limits remain documented; not complete anonymization.",
+    "hindsight_integration": "Partial historical live k90-test-* retain/recall/retry/replay/correction/rebuild/cleanup evidence exists; actual service restart persistence and restricted bank authorization unverified.",
+    "subscription_adapter": "Synthetic OAuth/auth refresh recovery/protocol/streaming/transport/no-paid-fallback tests passed; final real k90-only session, catalog, refresh and integrated provider behavior unverified.",
+    "regression": "Fresh 404 passed / 1 skipped (unselected local import), frontend 21 passed and syntax OK; explicit probes 153 passed / 1 LiteLLM warning.",
+    "container": "Local client available but no Docker daemon; no real build/smoke proof.",
+    "ci": "Authenticated Actions permissions enabled=true but workflows total_count=0; feature runs still empty after evidence push. Cause unconfirmed; no CI PASS."
+  },
+  "tests": [
+    {
+      "command": "bash /opt/data/cache/scratch/k90-verification-20261025/run-fixes.sh coordinator-1239-full",
+      "exit_code": 0,
+      "result": "404 passed, 1 skipped in 84.17s; skip tests/test_imported_data.py:17 No local import selected",
+      "evidence": "docs/VERIFICATION.md"
+    },
+    {
+      "command": "node --check web/app.js",
+      "exit_code": 0,
+      "result": "JavaScript syntax OK",
+      "evidence": "docs/VERIFICATION.md"
+    },
+    {
+      "command": "node --test tests/web_*.test.mjs",
+      "exit_code": 0,
+      "result": "21 passed, 0 failed",
+      "evidence": "docs/VERIFICATION.md"
+    },
+    {
+      "command": "bash /opt/data/cache/scratch/k90-verification-20261025/run-fixes.sh coordinator-1239-probes docs/review-evidence/privacy_boundary_probe.py docs/review-evidence/independent_final_adversarial.py docs/review-evidence/independent_final_flows.py docs/review-evidence/independent_final_wire.py -p no:cacheprovider",
+      "exit_code": 0,
+      "result": "153 passed, 1 warning in 17.73s; LiteLLM DeprecationWarning about event loop",
+      "evidence": "docs/VERIFICATION.md"
+    }
+  ],
+  "remaining_gates": [
+    {
+      "id": "subscription_live",
+      "scope": "subscription_adapter",
+      "prerequisite": "Owner logs into the final k90 application using a separate k90-only session and confirms extra credits disabled; credentials handled only through private documented session flow, never Hermes/Git/chat.",
+      "verification_after_access": "Real catalog, refresh, streaming, tools and image on synthetic inputs with final adapter; independently inspect evidence."
+    },
+    {
+      "id": "hindsight_restart_and_acl",
+      "scope": "hindsight_integration",
+      "prerequisite": "Isolated restartable HS instance or owner-managed restart window, plus bank-restricted test endpoint and allowed/denied identities; only new k90-test-* banks.",
+      "verification_after_access": "Actual restart persistence and allowed/denied authorization checks without accessing existing banks or changing shared configuration."
+    },
+    {
+      "id": "container_runner",
+      "scope": "container",
+      "prerequisite": "Authorized isolated runner with Docker daemon, not production service access.",
+      "verification_after_access": "Build image and execute scripts/smoke_container.py using existing feature workflow; no publication/deployment."
+    },
+    {
+      "id": "ci_execution",
+      "scope": "ci",
+      "prerequisite": "Owner activates/diagnoses fork Actions workflow registration and authorizes test-only feature run; no main write or early PR.",
+      "verification_after_access": "Read back completed feature run/job and actual source SHA; require tests/container smoke success and no publish job."
+    }
+  ],
+  "historical_partial_integration_evidence": [
+    "docs/review-evidence/integration_checkpoint_20261025.md",
+    "docs/review-evidence/hindsight_live_probe.json"
+  ],
+  "environment": "Sanitized env -i, synthetic SQLite/HOME/DATA_DIR/auth and inspected offline audit guard; local HTTP receivers allowed, not an OS sandbox.",
+  "full_acceptance": false,
+  "ready_for_review": false,
+  "pr_created": false,
+  "merge_or_deployment_approved": false
+}
