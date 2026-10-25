@@ -10,9 +10,12 @@
 - Nowa konfiguracja wymaga `WEB_PASSWORD` (minimum 12 znaków). Przygotowanie i testy: [WEB.md](WEB.md).
 
 Dokument opisuje docelową konfigurację z repozytorium, nie jest raportem stanu
-serwera. Frontend i adapter są już częścią `main`. Plan integracji Hindsight
-opisany w [Pamięć k90](docs/MEMORY_ARCHITECTURE.md) nie jest jeszcze wdrożony
-w kodzie ani skonfigurowany w tym Compose.
+serwera. Frontend i adapter są już częścią `main`. Gałąź pamięci implementuje
+lokalne źródła SQLite i opcjonalny adapter Hindsight; nie oznacza to wdrożenia.
+Nowe wdrożenie dwóch stacków z istniejącym HS i subskrypcją opisuje
+[runbook właściciela](docs/DEPLOYMENT_RUNBOOK.md). Poniżej zachowano starsze
+instrukcje ogólne/migracyjne; nie wykonuj migracji Synology, jeśli tylko
+aktualizujesz istniejący osobny stack k90. Wyniki: [STATUS.md](docs/STATUS.md).
 
 Konfiguracja ARM64 dla Synology pozostaje zakomentowana w macierzach `test` i `build`
 w `.github/workflows/docker.yml`. Aby ją przywrócić, odkomentuj oba wpisy. ARM otrzyma
@@ -97,7 +100,9 @@ docker compose pull agent && docker compose up -d --remove-orphans
 - Zmiana `system_prompt.md` — edytuj `data/system_prompt.md` i `docker compose restart agent`
 - Zmiana modelu (`AGENT_MODEL`, `SUMMARY_MODEL`) lub `OPENAI_API_KEY` — edytuj `.env` i `docker compose up -d agent`
 - Zmiana tokenu lub whitelisty Telegrama — edytuj `.env` i `docker compose up -d agent`
-- Zmiana plików pacjenta (`pacjent.md`, `dieta.md` itp.) — edytuj w `data/`, restart opcjonalny
+- Zmiana dokumentów pacjenta — edytuj w panelu/narzędziach; canonical treść i rewizje
+  są w SQLite. Stare Markdown w `data/` są tylko importem dla brakujących dokumentów,
+  nie aktywnym dual-write. Przed downgrade użyj jawnego eksportu z runbooka.
 
 ## Zmienne środowiskowe
 
