@@ -26,10 +26,13 @@ wykonanie i ograniczenia: VERIFICATION.md.
   jego exact SHA ustala git HEAD i odczyt ls-remote po push.
 - Następny krok: niezależny adversarial review finalnych źródeł, następnie
   rzeczywiste bramki HS/OAuth/container/CI. Zielone testy nie zastępują review.
-- Docker ponownie niedostępny (brak demona). Real HS: potrzebne oddzielne
-  bezpieczne ustawienia testowe `k90-test-*` i dowód ACL/persistence.
+- Docker lokalnie niedostępny (brak demona). Real HS adapter przeszedł syntetyczne
+  retain/recall, retry, replay, korektę i rebuild w nowym `k90-test-*` banku;
+  cleanup potwierdzony odczytem 404. Nadal brak dowodu ACL i restartu usługi.
 - Real OAuth wymaga osobnej sesji k90 właściciela; nie używać tokenów Hermesa.
-- CI jeszcze bez świeżego wyniku tej gałęzi; planowany odczyt API, bez wczesnego PR.
+- GitHub API: workflow list pusta, dispatch 404, Actions enabled. Dodano push
+  testów na tę feature branch (job publikacji nadal tylko main), bez wczesnego PR.
+  Wynik nowego push CI oczekuje; konfiguracja zmienia wyłącznie trigger testów.
 
 ### Limity i zasady
 

@@ -1,5 +1,45 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+## Dostępne integracje — real HS i uruchomienie feature CI
+
+Źródła poprawki `289d3ffd918a066fdf9a8dc9d0cda24c8fd8d585` wypchnięte;
+SHA origin potwierdzony przez ls-remote, checkout czysty. Przed push skan
+12 jawnie wybranych kandydatów: zero trafień sekretów/znanych real PII/binariów
+i baz/cache; odczyt diff i oba diff checks PASS. To ograniczony skan, nie gwarancja.
+
+Trzecia delegacja (read-only final review) odrzucona: oneshot_max_children=2.
+Obie wcześniejsze role zakończone. To bramka następnej sesji, nie zgoda security.
+Nie obchodzono limitu instalacją CLI ani zmianami konfiguracji Hermesa.
+
+GitHub API: GET actions/runs dla gałęzi i actions/workflows 200 z pustymi listami;
+credential-helper/API fallback użyty bez drukowania tokenów. Dispatch docker.yml
+na feature ref zwrócił 404. Diagnoza: actions/permissions 200 enabled=true,
+workflows total_count=0; plik docker.yml istnieje na main. Zamiast zmiany main
+lub wczesnego PR dodano dokładnie tę feature branch do triggera push testów.
+Job build/publish nadal wymaga refs/heads/main; na tej gałęzi nie publikuje obrazu.
+Nowy push ma dać rzeczywisty wynik testów i container smoke na zdalnym runnerze.
+
+DNS hindsight oraz GET health/openapi: HTTP 200, healthy, API 1.1.0. Realny test
+adaptera wykonano bez tokenów, wyłącznie w losowym nowym `k90-test-delivery-*`:
+SQLite retry po symulowanej awarii przed siecią, nowy Worker, real retain i odczyt
+zdalnego dokumentu (e-mail syntetyczny zredagowany), recall do lokalnych refs,
+filtr owner tag, replay bez duplikatu (total=1), korekta z usunięciem rev1,
+recall rev2 oraz rebuild do nowego pustego banku z lokalnych źródeł. Exit 0.
+Cleanup DELETE banku 200 success=true, dokładny readback documents 404.
+To nie dowód ACL (usługa przyjęła brak credentials) ani restartu wspólnej usługi.
+Nie czytano/zmieniano żadnego istniejącego banku, w szczególności banku Hermesa.
+
+Pierwszy harness miał błąd readback: deprecated /profile daje 410, a handler
+błędu próbował czytać jeszcze nieutworzoną tabelę. Pierwszy pusty bank usunięto
+osobnym kontrolowanym cleanup (200 success, potem 404); poprawiono tylko scratch
+harness (readback documents i cleanup także po niepełnym create). Kolejny pełny
+przebieg powyżej PASS częściowy, bez ukrywania pierwszego harness FAIL.
+Scratch polecenia: hs_discover.py, hs_schema.py, hs_live.py i github_ci.py w
+/opt/data/cache/scratch/k90-verification-20261025; trwały raport zostanie zapisany
+w review-evidence. Środowisko real HS: env -i, PYTHONPATH wyłącznie repo,
+PYTHON_DOTENV_DISABLED=1, osobny HOME/TMPDIR, syntetyczna nowa SQLite; offline
+guard świadomie nieużyty tylko w tym jawnym teście sieciowym HS.
+
 ## Poprawki kompozycji i kluczy — 12:02 UTC, WIP
 
 Implementator TDD naprawił trzy klasy i wspólne parsowanie argumentów narzędzi.
