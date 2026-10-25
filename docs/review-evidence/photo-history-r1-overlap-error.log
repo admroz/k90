@@ -1,0 +1,73 @@
+..........................................E............................. [ 40%]
+........................................................................ [ 80%]
+..................................                                       [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_real_agent_upload_then_text_followup[true-local-chatgpt] _
+
+tmp_path = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_real_agent_upload_then_te8')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x728133fac210>
+
+    @pytest.fixture()
+    def temp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        db_path = tmp_path / "test.db"
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+    
+        monkeypatch.setenv("DB_PATH", str(db_path))
+        monkeypatch.setenv("DATA_DIR", str(data_dir))
+        monkeypatch.setattr(db_module, "_DB_PATH", str(db_path), raising=False)
+    
+>       db_module.init_db()
+
+tests/conftest.py:26: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def init_db():
+        """Tworzy tabele agenta oraz podstawowy schemat danych zdrowotnych jeśli nie istnieją."""
+        conn = get_conn()
+        try:
+            from migrate_csv_to_sqlite import create_schema
+            create_schema(conn)
+        except Exception:
+            pass
+>       conn.executescript("""
+            CREATE TABLE IF NOT EXISTS conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS patient_summary (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                content TEXT NOT NULL,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                trigger TEXT
+            );
+            CREATE TABLE IF NOT EXISTS usage_stats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                model TEXT,
+                prompt_tokens INTEGER,
+                completion_tokens INTEGER
+            );
+            CREATE TABLE IF NOT EXISTS sync_status (
+                source TEXT PRIMARY KEY,
+                last_started_at DATETIME,
+                last_success_at DATETIME,
+                last_success_date TEXT,
+                last_status TEXT,
+                last_error TEXT,
+                last_fetched INTEGER DEFAULT 0,
+                last_inserted INTEGER DEFAULT 0,
+                last_updated INTEGER DEFAULT 0,
+                last_unchanged INTEGER DEFAULT 0,
+                last_summary_refresh_at DATETIME
+            );
+        """)
+E       sqlite3.OperationalError: attempt to write a readonly database
+
+tools/db.py:133: OperationalError
+=========================== short test summary info ============================
+ERROR tests/test_photo_history.py::test_real_agent_upload_then_text_followup[true-local-chatgpt]
+177 passed, 1 error in 30.48s

@@ -56,7 +56,13 @@ def project_history(raw):
         return policy.sanitize_text(inspected)
     projected = []
     for part in parsed:
-        if isinstance(part, dict) and part.get('type') == 'image_url':
+        if type(part) is not dict:
+            raise PrivacyError()
+        if part.get('type') == 'text':
+            if set(part) != {'type', 'text'} or type(part['text']) is not str:
+                raise PrivacyError()
+            projected.append(part)
+        elif part.get('type') == 'image_url':
             image = part.get('image_url')
             if (set(part) != {'type', 'image_url'} or type(image) is not dict
                     or not {'url'} <= set(image) <= {'url', 'detail'}
@@ -66,7 +72,7 @@ def project_history(raw):
             _validate_historical_image_url(image['url'])
             projected.append({'type': 'text', 'text': '[Historical image omitted]'})
         else:
-            projected.append(part)
+            raise PrivacyError()
     return policy.sanitize(projected)
 
 

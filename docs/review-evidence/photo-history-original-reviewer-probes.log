@@ -1,0 +1,126 @@
+[92m23:17:29 - LiteLLM:WARNING[0m: get_model_cost_map.py:271 - LiteLLM: Failed to fetch remote model cost map from https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json: Offline verification blocked non-loopback network. Falling back to local backup.
+FFFFObserved result: ('Synthetic answer', False)
+Intercepted outbound historical content: [{"type": "text", "text": "Synthetic meal"}, {"type": "text", "text": "[Historical image omitted]"}, {"type": "file_url", "file_url": {"url": "https://synthetic.invalid/private.pdf"}}]
+F
+=================================== FAILURES ===================================
+________ test_malformed_or_unknown_historical_parts_fail_closed[parts0] ________
+
+parts = [{'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/private.pdf'}}]
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7cf008deac40>
+
+    @pytest.mark.parametrize('parts', [
+        [{'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/private.pdf'}}],
+        [{'type': 'text', 'text': 123}],
+        [None],
+        [{'type': 'unrecognized_attachment', 'payload': 'synthetic binary reference'}],
+    ])
+    def test_malformed_or_unknown_historical_parts_fail_closed(parts, monkeypatch):
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+>       with pytest.raises(PrivacyError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE PrivacyError
+
+../../jobs/k90-photo-history/review-original-probes.py:20: Failed
+________ test_malformed_or_unknown_historical_parts_fail_closed[parts1] ________
+
+parts = [{'type': 'text', 'text': 123}]
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7cf0019c63f0>
+
+    @pytest.mark.parametrize('parts', [
+        [{'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/private.pdf'}}],
+        [{'type': 'text', 'text': 123}],
+        [None],
+        [{'type': 'unrecognized_attachment', 'payload': 'synthetic binary reference'}],
+    ])
+    def test_malformed_or_unknown_historical_parts_fail_closed(parts, monkeypatch):
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+>       with pytest.raises(PrivacyError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE PrivacyError
+
+../../jobs/k90-photo-history/review-original-probes.py:20: Failed
+________ test_malformed_or_unknown_historical_parts_fail_closed[parts2] ________
+
+parts = [None]
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7cf00196b530>
+
+    @pytest.mark.parametrize('parts', [
+        [{'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/private.pdf'}}],
+        [{'type': 'text', 'text': 123}],
+        [None],
+        [{'type': 'unrecognized_attachment', 'payload': 'synthetic binary reference'}],
+    ])
+    def test_malformed_or_unknown_historical_parts_fail_closed(parts, monkeypatch):
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+>       with pytest.raises(PrivacyError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE PrivacyError
+
+../../jobs/k90-photo-history/review-original-probes.py:20: Failed
+________ test_malformed_or_unknown_historical_parts_fail_closed[parts3] ________
+
+parts = [{'type': 'unrecognized_attachment', 'payload': 'synthetic binary reference'}]
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7cf001993570>
+
+    @pytest.mark.parametrize('parts', [
+        [{'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/private.pdf'}}],
+        [{'type': 'text', 'text': 123}],
+        [None],
+        [{'type': 'unrecognized_attachment', 'payload': 'synthetic binary reference'}],
+    ])
+    def test_malformed_or_unknown_historical_parts_fail_closed(parts, monkeypatch):
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+>       with pytest.raises(PrivacyError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE PrivacyError
+
+../../jobs/k90-photo-history/review-original-probes.py:20: Failed
+_________ test_actual_chat_unknown_attachment_must_not_reach_provider __________
+
+tmp_path = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/reviewer-probe-pytest/test_actual_chat_unknown_attac0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7cf001993240>
+
+    def test_actual_chat_unknown_attachment_must_not_reach_provider(tmp_path, monkeypatch):
+        data = tmp_path / 'data'
+        data.mkdir()
+        monkeypatch.setenv('DATA_DIR', str(data))
+        monkeypatch.setenv('DB_PATH', str(data / 'test.db'))
+        monkeypatch.setattr(db, '_DB_PATH', str(data / 'test.db'))
+        monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+        monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+        db.init_db()
+        with db.get_conn() as conn:
+            create_schema(conn)
+            original = json.dumps([
+                {'type': 'text', 'text': 'Synthetic meal'},
+                {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,c3ludGhldGlj'}},
+                {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/private.pdf'}},
+            ])
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)', ('reviewer', 'user', original))
+        monkeypatch.setattr(agent, 'MODEL', 'synthetic')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        monkeypatch.setattr(memory_runtime, 'start_worker', lambda: None)
+        sent = []
+        def completion(**payload):
+            sent.append(payload)
+            msg = SimpleNamespace(content='Synthetic answer', tool_calls=[], model_dump=lambda **kw: {'role': 'assistant', 'content': 'Synthetic answer'})
+            return SimpleNamespace(choices=[SimpleNamespace(message=msg)], usage=None)
+        monkeypatch.setattr(agent.litellm, 'completion', completion)
+        result = agent.run_agent('Synthetic followup', 'reviewer')
+        with db.get_conn() as conn:
+            assert conn.execute('SELECT content FROM conversations ORDER BY id LIMIT 1').fetchone()[0] == original
+        print('Observed result:', result)
+        print('Intercepted outbound historical content:', json.dumps(sent[0]['messages'][1]['content']))
+>       assert not sent, 'Unknown attachment crossed the provider boundary instead of failing closed'
+E       AssertionError: Unknown attachment crossed the provider boundary instead of failing closed
+E       assert not [{'model': 'synthetic', 'messages': [{'role': 'system', 'content': 'Synthetic system'}, {'role': 'user', 'content': [{...y z Garmina z ostatnich N dni.', 'parameters': {'type': 'object', 'properties': {...}}}}, ...], 'tool_choice': 'auto'}]
+
+../../jobs/k90-photo-history/review-original-probes.py:55: AssertionError
+=========================== short test summary info ============================
+FAILED ../../jobs/k90-photo-history/review-original-probes.py::test_malformed_or_unknown_historical_parts_fail_closed[parts0]
+FAILED ../../jobs/k90-photo-history/review-original-probes.py::test_malformed_or_unknown_historical_parts_fail_closed[parts1]
+FAILED ../../jobs/k90-photo-history/review-original-probes.py::test_malformed_or_unknown_historical_parts_fail_closed[parts2]
+FAILED ../../jobs/k90-photo-history/review-original-probes.py::test_malformed_or_unknown_historical_parts_fail_closed[parts3]
+FAILED ../../jobs/k90-photo-history/review-original-probes.py::test_actual_chat_unknown_attachment_must_not_reach_provider
+5 failed in 3.63s

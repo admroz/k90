@@ -1,0 +1,49 @@
+{
+  "verdict": "FAIL",
+  "commit": "1b031e8653b43cdecde444d716fac5ec751385ae",
+  "base_commit": "17beba2353cbc1e1a2d39d71bc9b5a78f11a2ed4",
+  "reviewer": "Independent fresh Hermes subagent; not implementer",
+  "scope": "Read-only source/security/functional review; synthetic offline execution only",
+  "findings": [
+    {
+      "id": "R1",
+      "severity": "MEDIUM",
+      "file": "outbound_policy.py",
+      "line_start": 68,
+      "line_end": 70,
+      "title": "Unknown attachments and malformed historical content parts are forwarded rather than rejected",
+      "description": "The projection validates only exact image_url parts. Every other item is appended without a content-part schema check. PrivacyPolicy.sanitize is a generic tree/denylist filter, not a message-schema validator: file_url, unrecognized_attachment, text with a numeric value, and null all pass. A real agent.run_agent synthetic conversation containing text + recognized image_url + file_url reaches the intercepted Chat Completions provider with file_url intact even when K90_ALLOW_MODEL_IMAGES=false. The image is omitted, but its accompanying arbitrary attachment is now allowed out. Under the previous image-disabled history path the same mixed record was blocked by the historical image. This violates the required fail-closed malformed/ambiguous/arbitrary-attachment contract and the documentation claim.",
+      "probe": "review-original-probes.py::test_actual_chat_unknown_attachment_must_not_reach_provider; review-original-probes.py::test_malformed_or_unknown_historical_parts_fail_closed",
+      "evidence": "review-original-probes.log:2-3,19-21,115-126",
+      "recommendation": "Validate the complete historical multipart schema before discarding any image: allow only explicitly supported text parts with string text and recognized validated image_url parts; reject unknown types, non-object parts and malformed fields. Keep original full-tree secret/local-only checks first and preserve all existing restrictions. Add actual-agent regression proving an unknown attachment accompanying an image never reaches any provider."
+    }
+  ],
+  "verified": {
+    "existing_targeted_tests": "283 passed in 42.61s; exit 0; review-original-tests.log",
+    "independent_adversarial_tests": "5 failed in 3.63s; exit 1; four missing fail-closed exceptions plus one actual provider-boundary violation; review-original-probes.log",
+    "host_identity": "No blocking finding: new stable UUIDv4 URN; narrow canonical bare UUIDv4 migration only for host_id-only registration without credentials filesystem entry; bindings/credential presence and symlinks protected; shared authorize initializer and relevant tests exercised.",
+    "photo_happy_paths": "Existing tests exercise actual agent across Chat Completions, Responses and subscription, local and synthetic Hindsight adapter, both follow-up flags, unchanged local originals, preserved assistant interpretation, no meal auto-write, denied new upload without consent.",
+    "hindsight_boundary": "Worker outbound_document and HindsightBackend retain/recall each apply a baseline image-denying PrivacyPolicy independently of model consent.",
+    "source_unchanged": true,
+    "end_head": "1b031e8653b43cdecde444d716fac5ec751385ae",
+    "clean_worktree": true,
+    "diff_check_excluding_raw_evidence_logs": "exit 0"
+  },
+  "quota": {
+    "initial_session_percent": 82.0,
+    "initial_weekly_percent": 47.0,
+    "before_targeted_session_percent": 84.0,
+    "before_probes_session_percent": 84.0,
+    "final_session_percent": 85.0,
+    "final_weekly_percent": 47.0,
+    "evidence": "review-original-quota.json"
+  },
+  "limitations": [
+    "No production, private files, credential stores, live model/OAuth/HS, deployment or external service access.",
+    "LiteLLM attempted remote cost-map retrieval during probe import; the existing offline audit guard blocked it and the library used its local backup. No network request succeeded.",
+    "Full regression is independently owned by the coordinator; this review reran the targeted 283-test group and its own adversarial probes, not the full suite or frontend suite.",
+    "Live owner-topology integration and deployment remain deferred, not certified by synthetic results."
+  ],
+  "report": "review-original.md",
+  "artifacts": ["review-original-tests.log", "review-original-probes.py", "review-original-probes.log", "review-original-git.log", "review-original-quota.json"]
+}

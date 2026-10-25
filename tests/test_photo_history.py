@@ -13,6 +13,34 @@ PHOTO = [{'type': 'text', 'text': 'Synthetic millet lunch'},
          {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,c3ludGhldGlj'}}]
 
 
+@pytest.mark.parametrize('part', [
+    None, 123, 'text', [], [PHOTO[0]], {},
+    {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/file'}},
+    {'type': 'unrecognized_attachment', 'payload': 'synthetic'},
+    {'type': 'text', 'text': 123}, {'type': 'text', 'text': None},
+    {'type': 'text', 'text': ['nested']}, {'type': 'text'},
+    {'type': 'text', 'text': 'safe', 'extra': 'ambiguous'},
+    {'type': ['text'], 'text': 'safe'},
+    {'type': 'image_url', 'image_url': {'url': 'https://synthetic.invalid/image', 'detail': []}},
+])
+def test_invalid_history_part_never_reaches_provider(temp_db, monkeypatch, part):
+    monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+    monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+    monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+    monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+    original = json.dumps([*PHOTO, part])
+    with get_conn() as conn:
+        conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                     ('synthetic-owner', 'user', original))
+    def forbidden(**payload):
+        pytest.fail('Malformed historical part reached provider')
+    monkeypatch.setattr(agent.litellm, 'completion', forbidden)
+    with pytest.raises(PrivacyError):
+        agent.run_agent('Synthetic followup', 'synthetic-owner')
+    with get_conn() as conn:
+        assert conn.execute('SELECT content FROM conversations ORDER BY id LIMIT 1').fetchone()[0] == original
+
+
 @pytest.mark.parametrize('consent', ['false', 'true'])
 def test_history_projects_photo_without_rewriting_original(temp_db, monkeypatch, consent):
     monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', consent)
