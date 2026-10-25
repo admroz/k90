@@ -229,14 +229,14 @@ zawiera tę gałąź. HOST/właściciel: ustaw `K90_SOURCE` na dokładny `commit
 acceptance.json. W checkout źródeł sprawdź zgodność; nie buduj z prywatnymi plikami.
 
 ```sh
-export K90_SOURCE='<TESTED_SOURCE_COMMIT_FROM_ACCEPTANCE_JSON>'
+export K90_SOURCE='ef87b75e102f661bc35eaec383ddd2a284f5be8d'
 ```
 
 HOST/właściciel: dopuszczalne są tylko późniejsze różnice `docs/` względem tego
 commita; poniższe celowo wymaga dokładnego checkout źródłowego i czystego tracked tree.
 
 ```sh
-test "$(git -C "$K90_SOURCE_DIR" rev-parse HEAD)" = "$K90_SOURCE" && git -C "$K90_SOURCE_DIR" diff --exit-code && docker build -t k90-local:memory-reviewed "$K90_SOURCE_DIR"
+test "$(git -C "$K90_SOURCE_DIR" rev-parse HEAD)" = "$K90_SOURCE" && git -C "$K90_SOURCE_DIR" diff --quiet HEAD -- && docker build -t k90-local:memory-reviewed "$K90_SOURCE_DIR"
 ```
 
 Jeżeli checkout jest nowszym dokumentacyjnym HEAD, przygotuj osobny czysty checkout

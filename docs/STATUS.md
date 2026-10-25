@@ -1,32 +1,49 @@
 # k90 — bieżący status zadania
 
-Stan: CONTINUE — wznowienie po resecie, końcowe przygotowanie personal self-hosted.
-Aktualizacja: 2026-10-25 16:52 UTC. Feature fork, bez PR/main/upstream/deploy.
+Stan: READY_FOR_REVIEW — revised personal self-hosted preparation PASS.
+Aktualizacja: 2026-10-25 17:10 UTC. Branch feat/long-term-memory, fork hermesinski/k90.
+Nie jest to full live acceptance, zgoda na merge ani wdrożenie. PR nie utworzony;
+finalne omówienie/utworzenie PR pozostaje z właścicielem.
 
-Zachowano i wypchnięto dopisek właściciela o dwóch stackach w 0a7939a;
-remote SHA zgodny. Jedyny lock writer: nadzorca PID212009, rodzic tej sesji.
-Quota 16:45:57Z: Session 8%, Weekly 28%, resety 21:37:40Z / Nov 1 06:22Z.
-Nowa polityka >=90% pauza; 80% ostrzeżenie, unknown fail-closed. Bez reset/fallbacku.
+Testowane źródło i potwierdzony origin:
+ef87b75e102f661bc35eaec383ddd2a284f5be8d. Po nim wyłącznie docs/.
+Końcowy dokumentacyjny HEAD/remote SHA potwierdzany w prywatnym outcome.json
+oraz git HEAD/ls-remote; manifesty celowo wskazują wspólne TESTOWANE źródło.
 
 Zweryfikowane:
-- Zdiagnozowano Actions: zalogowana strona pokazała oddzielną blokadę workflow
-  odziedziczonych przy forkowaniu, mimo REST enabled=true. Włączono przejrzane
-  workflows przez dostępne konto; odczyt strony „Actions Enabled” i REST active.
-- Rzeczywisty test-only workflow_dispatch na 0a7939a: run 40213398796 SUCCESS.
-  Python 406 passed / 1 skip, frontend 21 PASS, Docker build i network-none smoke
-  z restartem adaptera Telegram PASS. Job publikacji skipped. Bez sekretów/LLM.
-- Niezależny scoped review: Compose/OAuth offline funkcjonalnie PASS, 26+8 testów
-  i rzeczywista walidacja Compose PASS; brak high/critical. Zalecono rekurencyjne
-  Docker ignore i pełny runbook. Live OAuth/HS nadal owner-deferred.
-- Nowy ignore contract TDD: 1 failed/2 passed → 3 passed. Dodano mały CI smoke
-  prawdziwej semantyki Docker na wyłącznie syntetycznym kontekście.
+- Dokumenty SQLite/rewizje, autorytatywna pamięć lokalna/FTS/outbox, polityka
+  outbound, wymienny adapter HS i opcjonalna osobna subskrypcja w aktualnym kodzie.
+- Koordynator na ef87b75: 407 Python passed / 1 jawny skip niewybranego importu,
+  153 privacy probes PASS / 1 LiteLLM warning, frontend 21 PASS, JS syntax OK.
+- GitHub-hosted run 40214045103 SUCCESS na dokładnym ef87b75: 407/1 skip,
+  frontend 21, rzeczywisty Docker build, secret-context smoke i network-none
+  HTTP/chat + izolowany restart Telegrama PASS. Publikacja obrazu skipped.
+- Niezależny finalny read-only reviewer: source/configuration i CI/container PASS,
+  własne 19+34 testy i rzeczywista syntetyczna walidacja Compose PASS. Historyczny
+  security PASS f39ad1f zachowany. Dwie wskazane korekty docs zamknięte przez
+  koordynatora: guard staged/unstaged i aktualizacja manifestów/statusu; bez
+  udawania ponownego niezależnego review przyszłych edycji.
+- Pełny runbook: docs/DEPLOYMENT_RUNBOOK.md. Dwa osobne stacki, minimalne patche
+  dla istniejącego HS bez migracji/restartu, shared network/alias, prywatny .env,
+  Mac-local OAuth → SSH → trwały k90-only store, backup/smoke/rollback.
+  39 jednoliniowych komend sprawdzono składniowo, obydwa fragmenty Compose
+  rzeczywistym config na syntetykach; guard odmawia staged i unstaged zmian.
 
-Otwarte:
-- Pełna regresja i CI/container na nowym źródle oraz niezależny review nowego smoke.
-- Finalny runbook dwóch osobnych stacków, Mac-local OAuth/private SSH import,
-  backup, rollout i rollback; bez wymyślania ścieżek istniejącego stacka.
-- Odświeżyć manifesty do wspólnego testowanego source SHA po rzeczywistych dowodach.
+Brak otwartych bramek PRZYGOTOWANIA według OWNER_ACCEPTANCE. Odroczone do
+właściciela: live OAuth/catalog/refresh/provider inference i kredyty, rzeczywiste
+ścieżki/DNS/HS API/auth/trusted-network, bank k90 i deployment retain/recall/cleanup.
+HS bank ACL i restart-persistence niepotwierdzone; rozbudowany projekt HS testów
+nie jest wymagany. Nie twierdzimy pełnej anonimizacji ani produkcyjnej integracji.
 
-Nie READY. Historyczne BLOCKED manifesty nie są aktualnym zakresem właściciela;
-realne logowanie/inference i topology-specific HS smoke są odroczone do wdrożenia.
-Źródłowy checkpoint po tym wpisie: git HEAD; exact remote przez ls-remote.
+Dowody: review-evidence/acceptance.json i independent-review.json (PASS, wspólny
+source), independent_preparation_ef87b75.md (oryginalny niezależny raport z jawnie
+zachowanymi ustaleniami D1/D2), preparation_delivery_ef87b75.md (ich zamknięcie).
+Historyczne manifesty/raporty/partial HS zachowane bez zmiany pomiarów.
+
+Quota: 17:09:47Z Session 25%, Weekly 31%; resety 21:37:40Z / Nov 1 06:22Z.
+Obowiązuje >=90% pauza, 80 warning, unknown fail-closed. Obie delegowane role
+zakończone, pojedynczy writer pod lockiem nadzorcy. Bez resetów/fallbacku,
+main/upstream writes, produkcji, zmian Hermesa/HS lub cudzych tokenów.
+
+Następny krok: właściciel przegląda gałąź i runbook; PR dopiero na końcu z nim,
+bez automatycznego merge/deploy. Powiadomienie Telegram przekazuje nadzorca.

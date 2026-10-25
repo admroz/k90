@@ -1,5 +1,54 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+## Końcowy odbiór revised preparation — 2026-10-25 17:10 UTC
+
+Koordynator wykonał validate_preparation.py: PASS — wspólny source/PASS obu
+manifestów, osiem obszarów, remaining_gates=0, full_live_acceptance=false,
+wszystkie evidence paths istnieją, hash niezależnego raportu i historyczne kopie
+zgodne byte-for-byte, tylko docs/ po source. Ponowny runbook_check.py PASS.
+Skan dziesięciu jawnie przejrzanych kandydatów bez trafień; oba diff checks PASS.
+To ograniczony skan, nie gwarancja braku dowolnego sekretu. Quota17:09:47Z
+25%/31%, resety21:37:40Z/Nov1 06:22Z. Final clean+remote gate po push.
+
+READY_FOR_REVIEW, nie full-live/merge/deploy. Testowany source
+`ef87b75e102f661bc35eaec383ddd2a284f5be8d`; po nim wyłącznie docs/.
+Szczegółowe wykonane polecenia, real CI/run/jobs i zamknięcie dokumentacyjne:
+[preparation_delivery_ef87b75.md](review-evidence/preparation_delivery_ef87b75.md).
+Oryginalny niezależny raport zachowano byte-for-byte w
+[independent_preparation_ef87b75.md](review-evidence/independent_preparation_ef87b75.md),
+cmp exit0, SHA256 909e5dbc6408769562157335db748cc7009be53bca32b6c527e6ebbd27bc1dea.
+
+Koordynator na exact source: full407 PASS/1 skip (83.03s), probes153 PASS/
+1 warning (17.44s), frontend21 PASS, JS syntaxOK. Skip tylko niewybranego
+lokalnego importu; ostrzeżenie LiteLLM o event loop. Inspected env-i/offline guard,
+syntetyczne dane i loopback receivers, bez modelu/HS/produkcji.
+
+GitHub run40214045103 na ef87b75 SUCCESS, exact jobs/steps/logs odczytali
+niezależnie reviewer i koordynator. Test job121231213864 PASS: Python407/1skip
+(12.49s), frontend21, Docker image build i oba real smoke PASS. Secret-context:
+12 fikcyjnych prywatnych ścieżek root/dwie głębokości i positive control;
+runtime --network none/preview: HTTP/chat i izolowany restart Telegrama, backend
+PID zachowany. Publish job121231505502 skipped, bez publikacji/deploy.
+
+Finalny niezależny reviewer source/configuration+CI PASS, własne 19+34 testy
+PASS, Compose probe PASS. Jego dokładny dokumentacyjny verdict na source
+był FAIL_PENDING_D1_D2: guard pomijał staged i aktualne manifesty były stare.
+Zgodnie z jego precyzyjną ścieżką zamknięcia koordynator poprawił wyłącznie
+docs: dokładny diff --quiet HEAD --, aktualne evidence/manifests/status i
+zachowanie historycznych kopii. Nie udajemy niezależnego review tych przyszłych
+edycji. Koordynator uruchomił runbook_check.py: 39 jednoliniowych shell komend
+parse PASS, clean/unstaged/staged guard PASS, obydwa wstawiane fragmenty sieci
+rzeczywistym Compose config na syntetykach PASS; base compose_probe.py PASS.
+Bez prawdziwego env/host Compose/Docker daemon/infra zmian/logowania.
+
+Aktualne manifesty wspólnego source mają verdict PASS i remaining_gates=[]
+w ramach OWNER_ACCEPTANCE; full_live_acceptance=false, live OAuth/provider
+i topology-specific HS smoke/auth/trust pozostają w deferred_live_checks.
+Nie testowano live finalnego OAuth ani ACL/restart-persistence HS. Historyczne
+partial HS i f39ad1f security PASS zachowane bez relabelowania.
+Obie role zakończone. Quota 17:04:12Z 21%/30%, resety 21:37:40Z / Nov1 06:22Z;
+bez reset/fallback/account switch, main/upstream writes, merge/deploy/produkcji.
+
 ## Wznowienie po resecie 16:37 UTC — Actions uruchomione
 
 OWNER_ACCEPTANCE odczytano jako pierwszy, potem całe VERIFICATION, AGENTS, plan,

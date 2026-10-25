@@ -19,6 +19,30 @@ Nie dodajemy płatnego fallbacku ani wspólnego magazynu OAuth.
 
 ## Kolejność i odbiór
 
+### Aktualny odbiór przygotowania — 2026-10-25 17:10 UTC
+
+READY_FOR_REVIEW dla revised personal self-hosted scope właściciela.
+Wspólne testowane źródło: `ef87b75e102f661bc35eaec383ddd2a284f5be8d`;
+po nim tylko docs/. Aktualne PASS manifesty: review-evidence/acceptance.json
+i independent-review.json. Obejmują documents_sqlite, local_memory,
+outbound_privacy, hindsight_integration, subscription_adapter, regression,
+container i ci. Runbook dwóch osobnych stacków: DEPLOYMENT_RUNBOOK.md.
+
+Pełna regresja koordynatora 407 passed / 1 jawny skip, probes153/1 warning,
+frontend21. Niezależny source/config/CI PASS, własne testy19+34. Rzeczywisty
+hosted run40214045103 na tym źródle SUCCESS: image build i dwa smoke PASS,
+publikacja skipped. D1/D2 końcowego review były wyłącznie dokumentacyjne;
+koordynator zastosował dokładną korektę i sprawdził guard staged/unstaged,
+39 jednoliniowych komend i dwa fragmenty Compose na syntetykach. Oryginalny
+raport niezależny zachowany, nie przypisujemy reviewerowi przyszłych edycji.
+
+remaining_gates=[] dotyczy PRZYGOTOWANIA, nie pełnej live integracji.
+Live OAuth/provider/kredyty i rzeczywista topologia/auth/smoke HS są
+deferred_live_checks, full_live_acceptance=false. Bank ACL/restart HS nadal
+niepotwierdzone; brak rozbudowanych HS testów nie blokuje tego odbioru.
+Historyczne BLOCKED sekcje poniżej są dowodami historycznymi, nie bieżącymi
+przeszkodami. Nie ma zgody na merge, deployment ani produkcyjną migrację.
+
 Aktualizacja zakresu 2026-10-25: OWNER_ACCEPTANCE.md ma pierwszeństwo nad
 historycznymi bramkami poniżej. Live OAuth/inference jest odroczone do wdrożenia,
 nie blokuje przygotowania. CI/container i izolowany HS mają działać na standardowym
