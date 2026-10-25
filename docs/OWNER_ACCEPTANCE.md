@@ -5,6 +5,20 @@ OAuth and local Docker access before a final delivery. It does NOT authorize
 production access, deployments, main/upstream writes, secrets, extra costs,
 removing privacy checks, or calling synthetic tests full live integration.
 
+## Final delivery: two-stack deployment instructions
+
+The owner selected preparation for reusing the existing HS in the Hermes stack,
+with k90 in a separate stack and a shared Docker network. Prepare the complete
+runbook as part of final delivery: minimal insertion-ready changes to both
+Compose files, one-time network creation, service alias/HS URL, dedicated k90
+bank, .env/env_file, OAuth CLI for actual Mac-browser/container topology and
+persistent private auth, backup, rollout checks and rollback. Label host vs
+container and user for each one-line command. Do not invent unavailable host
+paths; use explicit placeholders/minimal patches when the original stack file
+is unavailable. This selects documentation topology, not permission to restart,
+migrate or deploy production services. Existing HS data/auth remain untouched.
+Notify the owner when implementation and revised acceptance are ready.
+
 ## Later owner clarification — reduce Hindsight testing
 
 The owner explicitly drops extensive HS infrastructure testing as a delivery
