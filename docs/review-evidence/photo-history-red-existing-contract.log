@@ -1,0 +1,34 @@
+........................................................................ [ 28%]
+........................................................................ [ 56%]
+........................................................................ [ 84%]
+............................F............                                [100%]
+=================================== FAILURES ===================================
+__________ test_images_and_existing_history_work_with_prefixed_model ___________
+
+mock_api = <function mock_api.<locals>.install at 0x72bc104bf100>
+agent_context = None
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x72bc10f939a0>
+
+    def test_images_and_existing_history_work_with_prefixed_model(mock_api, agent_context, monkeypatch):
+        # Synthetic images are explicitly permitted; production now requires this consent.
+        monkeypatch.setenv("K90_ALLOW_MODEL_IMAGES", "true")
+        monkeypatch.setattr(agent, "MODEL", "openai/gpt-6.1-sol")
+        image = [{"type": "text", "text": "Posiłek"},
+                 {"type": "image_url", "image_url": {"url": "data:image/png;base64,dGVzdA==", "detail": "low"}}]
+        original = deepcopy(image)
+        agent.save_history("test", image, "Poprzedni posiłek.")
+        requests = mock_api([response([message()])])
+    
+        assert agent.run_agent(image, "test") == ("Gotowe.", False)
+        expected = [{"type": "input_text", "text": "Posiłek"},
+                    {"type": "input_image", "image_url": "data:image/png;base64,dGVzdA==", "detail": "low"}]
+>       assert requests[0]["input"][1]["content"] == expected
+E       AssertionError: assert [{'type': 'in...ge omitted]'}] == [{'type': 'in...tail': 'low'}]
+E         
+E         At index 1 diff: {'type': 'input_text', 'text': '[Historical image omitted]'} != {'type': 'input_image', 'image_url': 'data:image/png;base64,dGVzdA==', 'detail': 'low'}
+E         Use -v to get more diff
+
+tests/test_responses_api.py:129: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_responses_api.py::test_images_and_existing_history_work_with_prefixed_model
+1 failed, 256 passed in 37.91s

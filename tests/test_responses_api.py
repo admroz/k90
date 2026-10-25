@@ -126,10 +126,16 @@ def test_images_and_existing_history_work_with_prefixed_model(mock_api, agent_co
     assert agent.run_agent(image, "test") == ("Gotowe.", False)
     expected = [{"type": "input_text", "text": "Posiłek"},
                 {"type": "input_image", "image_url": "data:image/png;base64,dGVzdA==", "detail": "low"}]
-    assert requests[0]["input"][1]["content"] == expected
+    # Live consent never grants historical replay; only the current upload is sent.
+    projected = [image[0], {"type": "text", "text": "[Historical image omitted]"}]
+    assert requests[0]["input"][1]["content"] == [
+        {"type": "input_text", "text": part["text"]} for part in projected]
     assert requests[0]["input"][-1]["content"] == expected
     assert image == original
-    assert agent.load_history("test")[-2]["content"] == original
+    assert agent.load_history("test")[-2]["content"] == projected
+    with get_conn() as conn:
+        originals = conn.execute("SELECT content FROM conversations WHERE role='user' ORDER BY id").fetchall()
+    assert [json.loads(row[0]) for row in originals] == [original, original]
 
 
 def test_incomplete_response_never_executes_tools_or_saves_partial_history(mock_api, agent_context, monkeypatch):

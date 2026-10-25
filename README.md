@@ -130,6 +130,11 @@ LIBRE_ENABLED=true                     # false wyłącza pobieranie danych Libre
 ```
 
 GPT-6.1 Sol automatycznie korzysta z Responses API, z obsługą narzędzi i zdjęć.
+Właściciel włącza przesyłanie NOWYCH zdjęć posiłków przez
+`K90_ALLOW_MODEL_IMAGES=true` (domyślnie `false`). Historyczne zdjęcia nigdy nie są
+ponownie przesyłane: kontekst zachowuje tekst i analizę asystenta oraz znacznik
+pominięcia obrazu. Zgoda nie obejmuje obrazów w HS ani anonimizacji obrazu/EXIF;
+szczegóły: [polityka zdjęć](docs/OPERATIONS_MEMORY_AUTH.md).
 Starsze modele oraz pozostali dostawcy zachowują dotychczasową obsługę przez
 LiteLLM / Chat Completions; GPT-5.6 nadal używa `reasoning_effort=none`.
 Model rozmowy i podsumowania wybierasz niezależnie, np.:

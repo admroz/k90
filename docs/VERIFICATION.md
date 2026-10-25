@@ -922,3 +922,10 @@ płatnego fallbacku.
 3. Bez commita/stage/pusha/deploy. To ostatni automatyczny fix cycle; dalsze
    odtworzone blokery wymagają checkpointu i decyzji prowadzącego/użytkownika,
    nie kolejnych automatycznych cykli.
+
+# Partia historii zdjęć 2026-10-25 — implementacja do niezależnego review
+
+Dowody RED/GREEN, dokładne polecenia i ograniczenia:
+[photo-history-implementation.md](review-evidence/photo-history-implementation.md).
+Nie jest to niezależny przegląd ani końcowy odbiór; pełne suite i PR prowadzi
+koordynator. Baza zawiera zachowaną poprawkę host ID `9e02ab0`.
