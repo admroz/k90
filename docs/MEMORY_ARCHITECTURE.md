@@ -1,6 +1,9 @@
 # Pamięć k90 — kierunek rozwoju
 
-**Status: uzgodniony kierunek, projekt do doprecyzowania; nie jest zaimplementowany.**
+**Status: uzgodnione wymagania i kierunek; bieżący odbiór w [STATUS.md](STATUS.md).**
+Opis problemu i proponowanych warstw poniżej zachowuje punkt wyjścia projektu,
+nie jest aktualnym raportem braku kodu. Implementację opisuje AGENTS.md,
+a wykonane testy i niewykonane bramki — VERIFICATION.md.
 Ten dokument zapisuje założenia pamięci długoterminowej. Nie uruchamia Hindsight,
 nie migruje danych ani nie zmienia konfiguracji produkcyjnej. Zadania realizacyjne
 pozostają w [TODO.md](../TODO.md), a bieżąca architektura w [AGENTS.md](../AGENTS.md).

@@ -39,6 +39,28 @@ Nie dodajemy płatnego fallbacku ani wspólnego magazynu OAuth.
    bank HS, restart/retry/korekta/odbudowa indeksu, niezależny krytyczny review,
    pełna regresja, dokumentacja uruchomienia/backup/rollback, PR i odczyt stanu CI.
 
+## Checkpoint odbioru 2026-10-25 — nie READY
+
+Najnowsze testowane źródła: `f39ad1fd54674f78be6a4ca35a1064fdc39a37a2`.
+Stan bramek i następny krok mają pierwszeństwo w STATUS.md; dowody w
+VERIFICATION.md i review-evidence/integration_checkpoint_20261025.md.
+
+| Zakres | Rzeczywisty dowód / brakująca bramka |
+| --- | --- |
+| documents_sqlite | Syntetyczne testy dokumentów/rewizji/backup/restore i panelu w pełnej regresji; bez migracji produkcji. |
+| local_memory | Syntetyczne trwałe źródła, FTS/outbox/retry/rebuild i lokalny E2E; końcowy niezależny review nadal wymagany. |
+| outbound_privacy | Odtworzone niezależne FAIL naprawione TDD; 106 trwałych testów kompozycji, probe 13 PASS; niezależna akceptacja finalnego źródła pending. |
+| hindsight_integration | Realny nowy bank testowy: retain/recall/retry/replay/korekta/rebuild/cleanup; brak dowodu restartu usługi i ograniczonej autoryzacji. |
+| subscription_adapter | Testy syntetyczne, bez fallbacku; realny finalny adapter/OAuth/refresh/katalog wymaga odrębnej sesji k90 właściciela. |
+| regression | Prowadzący na f39ad1f: 404 passed / 1 jawny skip importu, frontend 21 passed, JS syntax OK. |
+| container | Brak lokalnego demona; rzeczywisty build/smoke pending. |
+| ci | Push trigger testów dla feature, bez publikacji; API nadal nie pokazuje workflow/run, brak PASS. |
+
+Najpierw kolejna sesja wykonuje niezależny adversarial review, nie powtarza tylko
+historycznych greens. Dopiero potem ocenia rzeczywiste pozostałe wymagania
+właściciela (osobne OAuth, izolowane HS restart/ACL, runner/aktywacja CI).
+Nie tworzyć manifestów PASS ani PR przed zamknięciem wszystkich bramek.
+
 ## Załączniki i pliki konfiguracyjne
 
 SQLite zostaje źródłem prawdy dla treści pięciu dokumentów pacjenta. Markdown jest

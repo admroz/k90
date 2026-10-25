@@ -1,5 +1,40 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+## Końcowy checkpoint tej sesji — CONTINUE, 12:16 UTC
+
+Najnowsze testowane źródła `f39ad1fd54674f78be6a4ca35a1064fdc39a37a2` zawierają
+poprawkę aplikacji 289d3ff i bezpieczny feature-only trigger testów CI. Push/SHA
+obu source checkpointów potwierdzone ls-remote. Prowadzący na f39ad1f uruchomił:
+
+```sh
+bash /opt/data/cache/scratch/k90-verification-20261025/run-fixes.sh source-f39ad1f-full
+node --check web/app.js
+node --test tests/web_*.test.mjs
+git diff --check
+```
+
+Rzeczywisty wynik: exit 0, 404 passed / 1 skipped in 84.41s, jawny skip
+test_imported_data (brak wybranego lokalnego importu); JS syntax OK, frontend
+21 passed. Późniejsze zmiany tylko docs. Bez końcowej niezależnej akceptacji.
+Read-only końcowy reviewer musi dostać ten source commit, nie tylko stare FAIL.
+Obie delegowane role zakończone; trzecia została odrzucona przez limit sesji 2/2.
+Następna sesja ma zacząć od tego review, wykorzystując pierwszy slot dziecka.
+
+Trwałe bezpieczne dowody integracji: review-evidence/hindsight_live_probe.json
+oraz review-evidence/integration_checkpoint_20261025.md (komendy, wyniki,
+ograniczenia i wymagania właściciela). Powtórny API odczyt po feature push nadal
+200 z pustymi workflow/runs, permissions enabled=true; brak CI/container PASS.
+Nie zgadujemy przyczyny. HS adapter realnie częściowo sprawdzony; brak ACL
+i restart-persistence. OAuth bez osobnego logowania właściciela niezweryfikowany.
+
+Nie ustawiamy READY_FOR_REVIEW, nie tworzymy manifestów PASS/PR. CONTINUE wynika
+z nieukończonego lokalnego niezależnego review; dopiero po jego zamknięciu ocenić
+BLOCKED_OWNER dla rzeczywistego dostępu do OAuth/HS ACL+restart/CI+Docker.
+Quota usage_api 12:11:00 UTC 44%/20%, 12:13:39 UTC 45%/20%,
+12:16:30 UTC 47%/20%; resety 2026-10-25T16:33:40Z / 2026-11-01T06:22:00Z.
+Bez reset/fallback. Końcowy push obejmuje wyłącznie jawnie przejrzane docs,
+po skanie kandydatów i diff checks; exact final SHA przez HEAD i ls-remote.
+
 ## Dostępne integracje — real HS i uruchomienie feature CI
 
 Źródła poprawki `289d3ffd918a066fdf9a8dc9d0cda24c8fd8d585` wypchnięte;

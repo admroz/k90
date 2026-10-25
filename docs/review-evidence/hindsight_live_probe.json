@@ -1,0 +1,19 @@
+{
+  "commit": "289d3ffd918a066fdf9a8dc9d0cda24c8fd8d585",
+  "bank_id": "k90-test-delivery-9fe52ed09eee4c6c99fb8b010b52003d",
+  "synthetic_only": true,
+  "steps": [
+    {"step": "create_and_readback", "http": 200},
+    {"step": "outage_retry_persisted", "queue": [{"status": "retry", "operation": "retain", "revision": 1, "attempts": 1, "error": "backend_unavailable"}]},
+    {"step": "real_retain_readback_redaction", "http": 200, "memory_units": 1, "revision": 1},
+    {"step": "real_recall_and_owner_tag_filter", "refs": [{"source_id": "synthetic-live-source", "revision": 1}], "authorization_proven": false},
+    {"step": "replay_no_duplicate", "document_total": 1},
+    {"step": "correction_old_revision_deleted", "revision": 2, "recall_revisions": [2]},
+    {"step": "create_and_readback", "http": 200},
+    {"step": "rebuild_from_local_sources_new_empty_bank", "revision": 2, "http": 200},
+    {"step": "cleanup_new_bank_only", "delete_http": 200, "readback_http": 404, "verified": true}
+  ],
+  "remaining_gates": ["service_restart_persistence", "restricted_bank_authorization", "subscription_owner_oauth", "container", "ci", "independent_final_review"],
+  "verdict": "PARTIAL_PASS",
+  "cleanup_verified": true
+}
