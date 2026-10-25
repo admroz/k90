@@ -1,0 +1,20 @@
+Parent execution, 2026-10-25, synthetic offline environment.
+Working directory: /opt/data/projects/k90
+Tested source: checkpoint a3d54da8c2d20173b1e2a2ae082195039e5e36fa plus privacy.py change and tests/test_privacy_json_boundary.py (recorded in next source commit).
+
+Command: bash /opt/data/cache/scratch/k90-verification-20261025/run-fixes.sh privacy-parent-full
+298 passed, 1 skipped in 79.66s (0:01:19)
+SKIPPED [1] tests/test_imported_data.py:17: No local import selected
+Exit code: 0
+
+Command: bash /opt/data/cache/scratch/k90-verification-20261025/run-fixes.sh privacy-parent-probe docs/review-evidence/privacy_boundary_probe.py
+13 passed in 1.51s
+Exit code: 0
+
+Command: node --check web/app.js && node --test tests/web_*.test.mjs
+Syntax check: PASS
+Tests 21; pass 21; fail 0; skipped 0.
+Exit code: 0
+
+External receivers were synthetic. No real OAuth/HS/container/CI proof.
+Independent adversarial review of this patch remains pending, not PASS.

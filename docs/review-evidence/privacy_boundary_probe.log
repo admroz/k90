@@ -1,0 +1,33 @@
+FFFFFF.......                                                            [100%]
+=================================== FAILURES ===================================
+_ test_denied_text_never_reaches_actual_model_receiver[malformed_unquoted_prefix-api] _
+../../cache/scratch/k90-verification-20261025/test_independent_boundary_probe.py:49: in test_denied_text_never_reaches_actual_model_receiver
+    assert not escaped, f'{adapter}/{variant}: synthetic escaped-key secret reached model receiver'
+E   AssertionError: api/malformed_unquoted_prefix: synthetic escaped-key secret reached model receiver
+E   assert not True
+_ test_denied_text_never_reaches_actual_model_receiver[malformed_unquoted_prefix-subscription] _
+../../cache/scratch/k90-verification-20261025/test_independent_boundary_probe.py:49: in test_denied_text_never_reaches_actual_model_receiver
+    assert not escaped, f'{adapter}/{variant}: synthetic escaped-key secret reached model receiver'
+E   AssertionError: subscription/malformed_unquoted_prefix: synthetic escaped-key secret reached model receiver
+E   assert not True
+_ test_denied_text_never_reaches_actual_model_receiver[malformed_comment_prefix-api] _
+../../cache/scratch/k90-verification-20261025/test_independent_boundary_probe.py:49: in test_denied_text_never_reaches_actual_model_receiver
+    assert not escaped, f'{adapter}/{variant}: synthetic escaped-key secret reached model receiver'
+E   AssertionError: api/malformed_comment_prefix: synthetic escaped-key secret reached model receiver
+E   assert not True
+_ test_denied_text_never_reaches_actual_model_receiver[malformed_comment_prefix-subscription] _
+../../cache/scratch/k90-verification-20261025/test_independent_boundary_probe.py:49: in test_denied_text_never_reaches_actual_model_receiver
+    assert not escaped, f'{adapter}/{variant}: synthetic escaped-key secret reached model receiver'
+E   AssertionError: subscription/malformed_comment_prefix: synthetic escaped-key secret reached model receiver
+E   assert not True
+_ test_denied_text_never_reaches_actual_model_receiver[json_string_encoded-api] _
+../../cache/scratch/k90-verification-20261025/test_independent_boundary_probe.py:49: in test_denied_text_never_reaches_actual_model_receiver
+    assert not escaped, f'{adapter}/{variant}: synthetic escaped-key secret reached model receiver'
+E   AssertionError: api/json_string_encoded: synthetic escaped-key secret reached model receiver
+E   assert not True
+_ test_denied_text_never_reaches_actual_model_receiver[json_string_encoded-subscription] _
+../../cache/scratch/k90-verification-20261025/test_independent_boundary_probe.py:49: in test_denied_text_never_reaches_actual_model_receiver
+    assert not escaped, f'{adapter}/{variant}: synthetic escaped-key secret reached model receiver'
+E   AssertionError: subscription/json_string_encoded: synthetic escaped-key secret reached model receiver
+E   assert not True
+6 failed, 7 passed in 1.61s

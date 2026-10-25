@@ -6,11 +6,13 @@ from datetime import timedelta
 
 from tools.db import get_conn, get_data_dir, init_db
 from tools.time_utils import now_local
+from patient_documents import get_document, import_markdown, write_document
 
 
 def seed():
     init_db()
     with closing(get_conn()) as conn, conn:
+        import_markdown(conn, get_data_dir())
         if conn.execute("SELECT COUNT(*) FROM waga").fetchone()[0]:
             return
         for i in range(90):
@@ -76,9 +78,13 @@ def seed():
             "INSERT INTO sync_status (source,last_success_at,last_status) VALUES ('demo', ?, 'dane demonstracyjne')",
             (now_local().isoformat(),),
         )
-    (get_data_dir() / "pacjent.md").write_text(
-        "# Profil demonstracyjny\n\nTo fikcyjny zestaw danych do przeglądania aplikacji.\n\n## Cele\n\n- Regularny ruch\n- Obserwacja snu i regeneracji\n- Spokojna rozmowa o trendach\n\n**Żadna z tych wartości nie opisuje rzeczywistego pacjenta.**\n"
-    )
-    (get_data_dir() / "analiza.md").write_text(
-        "# Obserwacje\n\nDane służą do sprawdzenia wykresów, tabel i dokumentów.\n\n## Co można sprawdzić\n\n- Zmiana okresu wykresu\n- Przejście z wykresu do rozmowy\n- Podgląd surowych rekordów\n"
-    )
+    if get_document("pacjent.md") is None:
+        write_document(
+            "pacjent.md",
+            "# Profil demonstracyjny\n\nTo fikcyjny zestaw danych do przeglądania aplikacji.\n\n## Cele\n\n- Regularny ruch\n- Obserwacja snu i regeneracji\n- Spokojna rozmowa o trendach\n\n**Żadna z tych wartości nie opisuje rzeczywistego pacjenta.**\n",
+        )
+    if get_document("analiza.md") is None:
+        write_document(
+            "analiza.md",
+            "# Obserwacje\n\nDane służą do sprawdzenia wykresów, tabel i dokumentów.\n\n## Co można sprawdzić\n\n- Zmiana okresu wykresu\n- Przejście z wykresu do rozmowy\n- Podgląd surowych rekordów\n",
+        )

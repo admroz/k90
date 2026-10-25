@@ -1,14 +1,11 @@
 """Narzędzia do odczytu i aktualizacji plików danych pacjenta."""
 
-import os
-from pathlib import Path
+from patient_documents import DOCUMENT_NAMES, get_document, write_document
 
-DATA_DIR = Path(os.getenv("DATA_DIR", Path(__file__).parent.parent / "data"))
+# Optional explicit override retained for callers/tests; default is dynamic config.
+DATA_DIR = None
 
-ALLOWED_FILES = {
-    "pacjent.md", "wywiad.md", "analiza.md",
-    "dieta.md", "tydzien.md",
-}
+ALLOWED_FILES = set(DOCUMENT_NAMES)
 FORBIDDEN = {"system_prompt.md"}
 
 
@@ -35,10 +32,13 @@ def read_patient_file(filename: str) -> dict:
     error = _validate_filename(filename)
     if error:
         return {"error": error}
-    path = DATA_DIR / filename
-    if not path.exists():
+    try:
+        document = get_document(filename, data_dir=DATA_DIR)
+    except (ValueError, OSError) as exc:
+        return {"error": str(exc)}
+    if document is None:
         return {"error": f"Plik {filename} nie istnieje."}
-    return {"filename": filename, "content": path.read_text(encoding="utf-8")}
+    return {"filename": filename, "content": document["content"]}
 
 
 def update_patient_file(filename: str, content: str) -> dict:
@@ -58,6 +58,8 @@ def update_patient_file(filename: str, content: str) -> dict:
     error = _validate_filename(filename)
     if error:
         return {"error": error}
-    path = DATA_DIR / filename
-    path.write_text(content, encoding="utf-8")
+    try:
+        write_document(filename, content, data_dir=DATA_DIR)
+    except (ValueError, OSError) as exc:
+        return {"error": str(exc)}
     return {"ok": True, "filename": filename}

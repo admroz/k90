@@ -1,0 +1,60 @@
+{
+  "schema_version": 2,
+  "commit": "ef87b75e102f661bc35eaec383ddd2a284f5be8d",
+  "reviewed_commit": "ef87b75e102f661bc35eaec383ddd2a284f5be8d",
+  "verdict": "PASS",
+  "scope": "Independent source/configuration security review of the delta from historical reviewed f39ad1f, focused offline tests, real hosted CI/container read-back and full owner deployment runbook review. Personal self-hosted preparation only.",
+  "report": "docs/review-evidence/independent_preparation_ef87b75.md",
+  "report_sha256": "909e5dbc6408769562157335db748cc7009be53bca32b6c527e6ebbd27bc1dea",
+  "source_review_verdict": "PASS",
+  "original_exact_source_documentation_verdict": "FAIL_PENDING_D1_D2",
+  "documentation_closure": {
+    "performed_by": "coordinator, not another independent reviewer",
+    "reviewer_authorized_bounded_closure": true,
+    "evidence": "docs/review-evidence/preparation_delivery_ef87b75.md",
+    "D1": "Applied exact reviewer-proposed build guard; synthetic Git check rejects both unstaged and staged changes.",
+    "D2": "Historical manifests preserved; current acceptance/status refreshed to tested source and revised owner scope; coordinator consistency/read-back gate required before final READY."
+  },
+  "tests": [
+    {
+      "command": ".venv/bin/python -m pytest tests/test_compose_contract.py tests/test_subscription_login.py tests/test_subscription_auth.py -p no:cacheprovider -q -rs --tb=short --basetemp=/opt/data/cache/scratch/k90-verification-20261025/pytest-final-independent-ef87b75",
+      "exit_code": 0,
+      "result": "Independent reviewer: 19 passed in 0.43s; exact expanded command in report.",
+      "evidence": "docs/review-evidence/independent_preparation_ef87b75.md"
+    },
+    {
+      "command": ".venv/bin/python -m pytest tests/test_subscription_protocol.py tests/test_subscription_api.py tests/test_patient_documents.py -p no:cacheprovider -q -rs --tb=short --basetemp=/opt/data/cache/scratch/k90-verification-20261025/pytest-final-independent-ef87b75-protocol",
+      "exit_code": 0,
+      "result": "Independent reviewer: 34 passed in 17.07s; exact environment in report.",
+      "evidence": "docs/review-evidence/independent_preparation_ef87b75.md"
+    },
+    {
+      "command": "python /opt/data/cache/scratch/k90-verification-20261025/ci_evidence.py 40214045103",
+      "exit_code": 0,
+      "result": "Independent exact-source run/jobs/logs verification: SUCCESS; image build and both smokes PASS, publication skipped.",
+      "evidence": "docs/review-evidence/independent_preparation_ef87b75.md"
+    }
+  ],
+  "historical_security_review": {
+    "commit": "f39ad1fd54674f78be6a4ca35a1064fdc39a37a2",
+    "manifest": "docs/review-evidence/historical-independent-review-f39ad1f.json",
+    "report": "docs/review-evidence/independent_final_review.md",
+    "note": "Original independent security PASS/probes retained, not relabeled as current execution; application/privacy/OAuth sources unchanged in reviewed delta."
+  },
+  "full_live_acceptance": false,
+  "complete_anonymization_proven": false,
+  "merge_approval": false,
+  "deployment_approval": false,
+  "remaining_source_gates": [],
+  "deferred_live_checks": [
+    "Owner k90-only OAuth/provider/catalog/refresh/inference/account credits",
+    "Owner two-stack HS topology/auth/trust/retain-recall/cleanup; actual HS restart persistence and bank ACL unproven"
+  ],
+  "limitations": [
+    "Original report distinguishes source PASS from pending documentation closure; no future reviewer rerun claimed.",
+    "Synthetic tests and network-none runtime do not prove provider or production integration.",
+    "Privacy masking is heuristic; image consent is not anonymization; same-UID/root and eventual HS deletion limits remain.",
+    "Only coordinator documentation corrections and evidence may follow the tested source."
+  ],
+  "children_finished": true
+}

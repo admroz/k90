@@ -7,6 +7,12 @@ data/
 tests/
 .git/
 .env.*
+chatgpt-auth/
+credentials.json
+**/.env
+**/.env.*
+**/chatgpt-auth/
+**/credentials.json
 prywatne/
 __pycache__/
 *.pyc

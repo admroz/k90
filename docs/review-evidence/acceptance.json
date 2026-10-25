@@ -1,0 +1,75 @@
+{
+  "schema_version": 2,
+  "commit": "ef87b75e102f661bc35eaec383ddd2a284f5be8d",
+  "verdict": "PASS",
+  "state": "READY_FOR_REVIEW",
+  "scope_basis": "docs/OWNER_ACCEPTANCE.md: revised personal self-hosted preparation, including two-stack operator runbook; not full live or production acceptance.",
+  "scope": ["documents_sqlite", "local_memory", "outbound_privacy", "hindsight_integration", "subscription_adapter", "regression", "container", "ci"],
+  "scope_results": {
+    "documents_sqlite": "Synthetic documents/revisions/import/export/backup/restore and panel tests pass in exact-source regression; independent focused document tests pass. No production migration.",
+    "local_memory": "Authoritative SQLite sources/versions/FTS/outbox/retry/rebuild/hydration and local end-to-end tests pass; original independent security review retained, no application change in current delta.",
+    "outbound_privacy": "Historical independent f39ad1f security PASS preserved; current coordinator 153 probes pass. Recursive Docker exclusions independently reviewed and real Docker tested. Heuristic limits retained; not complete anonymization.",
+    "hindsight_integration": "Useful adapter/error/fallback/privacy tests pass; historical partial live retain/recall/retry/correction/rebuild/cleanup preserved without promotion. Short synthetic deployment smoke documented and reviewed. Owner-topology checks deferred; extensive HS infrastructure/ACL project not a preparation gate.",
+    "subscription_adapter": "Synthetic OAuth/protocol/refresh/storage/no-fallback tests pass; independent Mac browser/headless container/private import/status/logout topology review completed. Actual owner login/provider behavior deferred.",
+    "regression": "Coordinator exact-source 407 passed / 1 unselected-import skip, 153 probes / 1 LiteLLM warning, frontend 21 passed and syntax OK; independent focused tests 19+34 pass.",
+    "container": "Exact-source real amd64 image build, recursive secret-context smoke and network-none HTTP/chat/isolated Telegram restart smoke pass on GitHub-hosted Linux. No publication or production startup.",
+    "ci": "Run 40214045103 source ef87b75 completed/success; exact jobs/steps/logs independently and coordinator read back; publication job skipped."
+  },
+  "independent_review": "docs/review-evidence/independent-review.json",
+  "documentation_closure": "docs/review-evidence/preparation_delivery_ef87b75.md",
+  "deployment_runbook": "docs/DEPLOYMENT_RUNBOOK.md",
+  "historical_acceptance": "docs/review-evidence/historical-acceptance-f39ad1f.json",
+  "tests": [
+    {
+      "command": "bash /opt/data/cache/scratch/k90-verification-20261025/run-fixes.sh final-ef87b75-full",
+      "exit_code": 0,
+      "result": "407 passed, 1 skipped in 83.03s; skip tests/test_imported_data.py:17 No local import selected",
+      "evidence": "docs/review-evidence/preparation_delivery_ef87b75.md"
+    },
+    {
+      "command": "bash /opt/data/cache/scratch/k90-verification-20261025/run-fixes.sh final-ef87b75-probes docs/review-evidence/privacy_boundary_probe.py docs/review-evidence/independent_final_adversarial.py docs/review-evidence/independent_final_flows.py docs/review-evidence/independent_final_wire.py -p no:cacheprovider",
+      "exit_code": 0,
+      "result": "153 passed, 1 LiteLLM DeprecationWarning in 17.44s",
+      "evidence": "docs/review-evidence/preparation_delivery_ef87b75.md"
+    },
+    {
+      "command": "node --check web/app.js && node --test tests/web_*.test.mjs",
+      "exit_code": 0,
+      "result": "Syntax OK, 21 passed / 0 failed",
+      "evidence": "docs/review-evidence/preparation_delivery_ef87b75.md"
+    },
+    {
+      "command": "docker build -t k90:test .\npython scripts/smoke_build_context.py k90:test\npython scripts/smoke_container.py k90:test",
+      "exit_code": 0,
+      "result": "407 passed / 1 skipped, frontend 21, image build and both real smokes PASS, publication skipped",
+      "evidence": "docs/review-evidence/preparation_delivery_ef87b75.md"
+    },
+    {
+      "command": ".venv/bin/python /opt/data/cache/scratch/k90-verification-20261025/runbook_check.py && .venv/bin/python /opt/data/cache/scratch/k90-verification-20261025/compose_probe.py",
+      "exit_code": 0,
+      "result": "39 one-line shell commands parsed; staged/unstaged guard, both synthetic Compose topology fragments, base passthrough/password/volume PASS; no daemon/real env",
+      "evidence": "docs/review-evidence/preparation_delivery_ef87b75.md"
+    }
+  ],
+  "ci": {
+    "run_id": 40214045103,
+    "url": "https://github.com/hermesinski/k90/actions/runs/40214045103",
+    "head_sha": "ef87b75e102f661bc35eaec383ddd2a284f5be8d",
+    "conclusion": "success",
+    "test_job_id": 121231213864,
+    "publication_job_id": 121231505502,
+    "publication_conclusion": "skipped"
+  },
+  "remaining_gates": [],
+  "deferred_live_checks": [
+    "Owner performs k90-only OAuth login/import, actual catalog/refresh/stream/text/tools/images/inference and confirms extra credits disabled; no borrowed/shared OAuth stores.",
+    "Owner validates exact host paths, two-stack network/DNS/API version/auth/trusted-network decision, provisions only k90 bank, runs short synthetic retain/recall/cleanup and private backup/rollout/rollback checks.",
+    "Actual Hindsight restart persistence and bank-level ACL remain unproven; no extensive HS infrastructure project is required by revised preparation scope."
+  ],
+  "historical_partial_hindsight_evidence": ["docs/review-evidence/hindsight_live_probe.json", "docs/review-evidence/integration_checkpoint_20261025.md"],
+  "full_live_acceptance": false,
+  "ready_for_review": true,
+  "pr_created": false,
+  "merge_or_deployment_approved": false,
+  "children_finished": true
+}

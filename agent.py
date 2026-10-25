@@ -14,10 +14,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+from contextlib import closing
 import litellm
 from dotenv import load_dotenv
 
 from responses_api import FunctionCall, ResponsesConversation, uses_responses
+import memory_runtime
+from k90_memory.privacy import strict_json_loads
+from outbound_policy import chat_completion, model_policy
 
 from system_prompt import SYSTEM_PROMPT
 from tools import TOOLS, execute_tool
@@ -72,12 +76,12 @@ def load_history(user_id: str) -> list[dict]:
     conn.close()
     result = []
     for row in reversed(rows):
-        content = row["content"]
+        content = model_policy().sanitize_text(row["content"])
         try:
-            parsed = json.loads(content)
+            parsed = strict_json_loads(content)
             if isinstance(parsed, list):
                 content = parsed
-        except (json.JSONDecodeError, TypeError):
+        except (ValueError, TypeError):
             pass
         result.append({"role": row["role"], "content": content})
     return result
@@ -89,18 +93,21 @@ def save_history(user_id: str, user_content, assistant_content: str) -> None:
         user_text = json.dumps(user_content, ensure_ascii=False)
     else:
         user_text = user_content
-    conn = get_conn()
     context = MESSAGE_CONTEXT.get()
-    conn.execute(
-        "INSERT INTO conversations (user_id, role, content, channel, request_id) VALUES (?, 'user', ?, ?, ?)",
-        (user_id, user_text, context.get("channel"), context.get("request_id")),
-    )
-    conn.execute(
-        "INSERT INTO conversations (user_id, role, content, channel, request_id) VALUES (?, 'assistant', ?, ?, ?)",
-        (user_id, assistant_content, context.get("channel"), context.get("request_id")),
-    )
-    conn.commit()
-    conn.close()
+    turn = memory_runtime.TURN_CONTEXT.get() or {}
+    request_id = context.get("request_id") or turn.get("request_id")
+    with closing(get_conn()) as conn, conn:
+        user_row = conn.execute(
+            "INSERT INTO conversations (user_id, role, content, channel, request_id) VALUES (?, 'user', ?, ?, ?)",
+            (user_id, user_text, context.get("channel"), request_id),
+        )
+        assistant_row = conn.execute(
+            "INSERT INTO conversations (user_id, role, content, channel, request_id) VALUES (?, 'assistant', ?, ?, ?)",
+            (user_id, assistant_content, context.get("channel"), request_id),
+        )
+        memory_runtime.record_pair(conn, user_id, user_content, assistant_content,
+                                   user_conversation_id=user_row.lastrowid,
+                                   assistant_conversation_id=assistant_row.lastrowid)
 
 
 def _build_system_message() -> tuple[str, dict]:
@@ -108,11 +115,13 @@ def _build_system_message() -> tuple[str, dict]:
 
     patient_summary = load_patient_summary()
     operational_context, context_stats = build_operational_context()
+    prompt, patient_summary, operational_context = model_policy().sanitize(
+        [SYSTEM_PROMPT, patient_summary, operational_context])
 
     now = now_local()
     date_context = f"Dzisiaj jest {now.strftime('%A, %d.%m.%Y')}, godzina {now.strftime('%H:%M')}."
 
-    parts = [SYSTEM_PROMPT, date_context]
+    parts = [prompt, date_context]
     if patient_summary:
         parts.append(f"Trwała pamięć pacjenta:\n{patient_summary}")
     if operational_context:
@@ -130,9 +139,33 @@ def _message_kind(user_message: str | list) -> str:
 
 
 def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool]:
+    """Capture originals durably before any outbound work, even if a provider fails."""
+    turn = memory_runtime.begin_turn(user_id, user_message)
+    token = memory_runtime.TURN_CONTEXT.set(turn)
+    try:
+        memory_runtime.start_worker()
+        return _run_agent(user_message, user_id)
+    except BaseException as exc:
+        try:
+            memory_runtime.record_failure(type(exc).__name__)
+        except Exception:
+            log.warning("agent.failure_record.unavailable")
+        raise
+    finally:
+        memory_runtime.TURN_CONTEXT.reset(token)
+
+
+def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool]:
     """Uruchamia agenta i zwraca (odpowiedź, czy_odświeżyć_podsumowanie)."""
     history = load_history(user_id)
     system, context_stats = _build_system_message()
+    turn = memory_runtime.TURN_CONTEXT.get() or {}
+    recalled, memory_stats = memory_runtime.recall_context(user_id, user_message,
+                                                        exclude=[turn.get('source_id')])
+    context_stats.update(memory_stats)
+    if recalled:
+        system += "\n\n" + recalled
+    log_user = "event:" + str(turn.get('user_event_id', 'unknown'))
 
     messages = [{"role": "system", "content": system}] + history
     messages.append({"role": "user", "content": user_message})
@@ -140,7 +173,7 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
     completion_options = _completion_options(MODEL)
     log.info(
         "agent.start user=%s model=%s reasoning_effort=%s input=%s history_records=%d context_sections=%d context_chars=%d summary_chars=%d",
-        user_id,
+        log_user,
         MODEL,
         (os.getenv("AGENT_REASONING_EFFORT", "low") if uses_responses(MODEL)
          else completion_options.get("reasoning_effort", "default")),
@@ -153,7 +186,17 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
 
     should_refresh = False
     responses = None
-    if uses_responses(MODEL):
+    auth_mode = os.getenv('K90_AGENT_AUTH', 'api').strip().casefold()
+    if auth_mode == 'chatgpt':
+        from subscription_api import SubscriptionConversation
+        from subscription_auth import TokenStore
+        from subscription_login import default_state_directory
+        responses = SubscriptionConversation(MODEL, messages, TOOLS,
+            token_store=TokenStore(default_state_directory()), policy=model_policy(),
+            reasoning_effort=os.getenv('AGENT_REASONING_EFFORT', 'low'))
+    elif auth_mode != 'api':
+        raise ValueError('invalid_agent_auth_mode')
+    elif uses_responses(MODEL):
         responses = ResponsesConversation(
             MODEL, messages, TOOLS,
             reasoning_effort=os.getenv("AGENT_REASONING_EFFORT", "low"),
@@ -170,7 +213,7 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
             calls, answer = turn.calls, turn.text
             prompt_tokens, completion_tokens = turn.input_tokens, turn.output_tokens
         else:
-            response = litellm.completion(
+            response = chat_completion(litellm.completion,
                 model=MODEL,
                 messages=messages,
                 tools=TOOLS,
@@ -189,7 +232,7 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
             _save_usage(MODEL, prompt_tokens, completion_tokens)
             log.info(
                 "agent.usage user=%s round=%d prompt_tokens=%s completion_tokens=%s",
-                user_id,
+                log_user,
                 round_index,
                 prompt_tokens,
                 completion_tokens,
@@ -201,7 +244,7 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
             save_history(user_id, user_message, answer)
             log.info(
                 "agent.finish user=%s round=%d response_chars=%d refresh=%s",
-                user_id,
+                log_user,
                 round_index,
                 len(answer),
                 should_refresh,
@@ -209,16 +252,17 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
             return answer, should_refresh
 
         tool_names = [tool_call.name for tool_call in calls]
-        log.info("agent.tools user=%s round=%d tool_calls=%s", user_id, round_index, ",".join(tool_names))
+        log.info("agent.tools user=%s round=%d tool_calls=%s", log_user, round_index, ",".join(tool_names))
 
         for tool_call in calls:
             if tool_call.name in SUMMARY_REFRESH_TRIGGERS:
                 should_refresh = True
-            args = json.loads(tool_call.arguments or "{}")
+            args = strict_json_loads(tool_call.arguments or "{}")
             result = execute_tool(tool_call.name, args)
+            memory_runtime.record_tool(tool_call.name, args, result)
             log.info(
                 "agent.tool_result user=%s tool=%s ok=%s",
-                user_id,
+                log_user,
                 tool_call.name,
                 "error" not in result,
             )
@@ -233,7 +277,7 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
 
     answer = "Przepraszam, nie mogłem przetworzyć Twojego zapytania."
     save_history(user_id, user_message, answer)
-    log.warning("agent.max_rounds user=%s rounds=%d", user_id, MAX_TOOL_ROUNDS)
+    log.warning("agent.max_rounds user=%s rounds=%d", log_user, MAX_TOOL_ROUNDS)
     return answer, should_refresh
 
 

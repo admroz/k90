@@ -169,5 +169,18 @@ def init_db():
     for name in ("channel", "request_id"):
         if name not in columns:
             conn.execute(f"ALTER TABLE conversations ADD COLUMN {name} TEXT")
-    conn.commit()
+    # Complete the one-time import before a database backup can be requested.
+    # Original Markdown stays untouched; existing SQLite rows always win.
+    from patient_documents import import_markdown
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        from memory_runtime import initialize as initialize_memory, snapshot_documents
+        initialize_memory(conn)
+        import_markdown(conn, get_data_dir())
+        snapshot_documents(conn)
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        conn.close()
+        raise
     conn.close()
