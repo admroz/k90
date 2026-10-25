@@ -10,13 +10,14 @@ from pathlib import Path
 
 from k90_memory import rebuild_queue, upsert_source
 from k90_memory.store import current
+from k90_memory.privacy import strict_json_loads
 import memory_runtime
 from tools.db import get_conn, get_db_path
 
 
 def _legacy_text(raw):
     try:
-        parts=json.loads(raw)
+        parts=strict_json_loads(raw)
     except (ValueError,TypeError):
         return raw
     if isinstance(parts,list) and all(isinstance(p,dict) and p.get('type') in ('text','image_url') for p in parts):
@@ -66,11 +67,7 @@ def main(argv=None):
                     for row in rows:
                         source_id='conversation:'+str(row['id'])
                         text=_legacy_text(row['content'])
-                        try:
-                            original=json.loads(row['content'])
-                        except (ValueError,TypeError):
-                            original=row['content']
-                        local_only=memory_runtime._local_only(original)
+                        local_only=memory_runtime._local_only(row['content'])
                         if not text:
                             continue
                         old=current(conn,args.owner,source_id)

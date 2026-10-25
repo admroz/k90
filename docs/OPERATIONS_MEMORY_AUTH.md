@@ -43,6 +43,19 @@ Maskowanie obejmuje rozpoznawane e-maile, PESEL, telefony i lokalnie skonfigurow
 frazy. Sekrety, jawne `local-only`, błędna polityka i niedozwolone załączniki blokują
 wyjście. Nie używamy modelu chmurowego do filtrowania surowych danych.
 
+Kontrola źródeł następuje także przed kompozycją promptu: osobno dokumenty summary
+(również fallback), prompt/profile, pola rekordów kontekstu i metadane recall.
+Nagłówek lub data nie mogą ukryć strukturalnego `local_only`. JSON w kluczach
+podlega tym samym limitom co wartości; duplikaty kluczy, także po dekodowaniu
+Unicode, i stałe niefinitywne są odrzucane. To nie jest wyszukiwanie dowolnego
+JSON-u wewnątrz prozy. Niejednoznaczne lub odrzucone oryginały wejść/backfill
+zostają lokalnie z zachowawczym `Source.local_only`; nie zmienia to ich treści.
+Taką flagę otrzymują także dokumenty przy zapisie/importowaniu lub snapshot przy
+inicjalizacji. Ponowny jawny backfill naprawia flagę starszego źródła o tej samej
+treści. Nie naprawia to dowolnych dawniej spłaszczonych danych bez oryginału ani
+nie usuwa danych już wysłanych do zewnętrznego indeksu. Testy i ograniczenia:
+[privacy_composition_fix.md](review-evidence/privacy_composition_fix.md).
+
 **To heurystyka, nie pełna anonimizacja.** Przed danymi rzeczywistymi właściciel
 ustala nazwy, adresy i pozostałe identyfikatory w JSON-owej liście
 `K90_PRIVACY_REDACT_TERMS`, np. `["Fikcyjne Nazwisko","ul. Przykładowa 1"]`.

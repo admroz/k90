@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 
 from responses_api import FunctionCall, ResponsesConversation, uses_responses
 import memory_runtime
+from k90_memory.privacy import strict_json_loads
 from outbound_policy import chat_completion, model_policy
 
 from system_prompt import SYSTEM_PROMPT
@@ -75,12 +76,12 @@ def load_history(user_id: str) -> list[dict]:
     conn.close()
     result = []
     for row in reversed(rows):
-        content = row["content"]
+        content = model_policy().sanitize_text(row["content"])
         try:
-            parsed = json.loads(content)
+            parsed = strict_json_loads(content)
             if isinstance(parsed, list):
                 content = parsed
-        except (json.JSONDecodeError, TypeError):
+        except (ValueError, TypeError):
             pass
         result.append({"role": row["role"], "content": content})
     return result
@@ -114,11 +115,13 @@ def _build_system_message() -> tuple[str, dict]:
 
     patient_summary = load_patient_summary()
     operational_context, context_stats = build_operational_context()
+    prompt, patient_summary, operational_context = model_policy().sanitize(
+        [SYSTEM_PROMPT, patient_summary, operational_context])
 
     now = now_local()
     date_context = f"Dzisiaj jest {now.strftime('%A, %d.%m.%Y')}, godzina {now.strftime('%H:%M')}."
 
-    parts = [SYSTEM_PROMPT, date_context]
+    parts = [prompt, date_context]
     if patient_summary:
         parts.append(f"Trwała pamięć pacjenta:\n{patient_summary}")
     if operational_context:
@@ -254,7 +257,7 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
         for tool_call in calls:
             if tool_call.name in SUMMARY_REFRESH_TRIGGERS:
                 should_refresh = True
-            args = json.loads(tool_call.arguments or "{}")
+            args = strict_json_loads(tool_call.arguments or "{}")
             result = execute_tool(tool_call.name, args)
             memory_runtime.record_tool(tool_call.name, args, result)
             log.info(

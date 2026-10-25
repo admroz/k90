@@ -53,18 +53,20 @@ def _collapse_text(text: str, limit: int = 180) -> str:
 def _load_patient_parts() -> tuple[list[str], dict[str, str]]:
     from patient_documents import get_document
 
-    parts: list[str] = []
     contents: dict[str, str] = {}
     for fname in PATIENT_FILES:
         document = get_document(fname, data_dir=DATA_DIR)
         if document is not None:
-            text = document["content"]
-            contents[fname] = text
-            parts.append(f"=== {fname} ===\n{text}")
+            contents[fname] = document["content"]
+    # Check each original document, with shared budgets, BEFORE adding headings.
+    # The fallback consumes the same safe copies; SQLite originals are untouched.
+    contents = model_policy().sanitize(contents)
+    parts = [f"=== {fname} ===\n{text}" for fname, text in contents.items()]
     return parts, contents
 
 
 def _build_summary_prompt(combined: str, compact: bool = False) -> str:
+    combined = model_policy().sanitize_text(combined)
     style = (
         "Każda linia ma mieć maksymalnie około 160 znaków. Pisz bardzo skrótowo, bez markdownu, bez wstępów, bez zakończeń."
         if compact
@@ -101,6 +103,7 @@ def _is_summary_complete(summary: str, finish_reason: str | None) -> bool:
 
 
 def _fallback_summary(contents: dict[str, str]) -> str:
+    contents = model_policy().sanitize(contents)
     pacjent = _collapse_text(contents.get("pacjent.md", "brak danych"), 200)
     wywiad = _collapse_text(contents.get("wywiad.md", "brak danych"), 200)
     analiza = _collapse_text(contents.get("analiza.md", "brak danych"), 200)

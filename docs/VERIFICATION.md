@@ -1,5 +1,25 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+## Poprawki kompozycji i kluczy — 12:02 UTC, WIP
+
+Implementator TDD naprawił trzy klasy i wspólne parsowanie argumentów narzędzi.
+Dokładny ślad RED/GREEN oraz ograniczenia: `review-evidence/privacy_composition_fix.md`.
+Prowadzący odczytał cały diff źródeł, testy i raport, ponowił offline regresję:
+384 passed / 1 skipped in 88.06s; historyczny probe 13 passed in 1.49s;
+JS syntax OK i 21 passed. Własny dodatkowy receiver-level RED ujawnił escaped
+aliasy skalarnych nazw kluczy; 20 failed. Odrzucanie encoded reserved names
+dało GREEN 140 passed, następnie pełna regresja 404 passed / 1 skipped in 105.83s.
+Oba wykonania pełnej regresji używały odczytanego env -i/guard/run-fixes.sh,
+wyłącznie syntetyków; brak realnych HS/OAuth/model calls. Nowe testy nie zależą
+od scratch. Nie twierdzimy, że implementator jest niezależnym reviewerem poprawki.
+
+Niezależny read-only adversarial review końcowych źródeł nadal potrzebny.
+Docker ponownie: klient dostępny, daemon unix:///var/run/docker.sock niedostępny
+(komunikat mimo exit 0); brak container PASS. CLI gh/codex nie znaleziono w PATH,
+/opt/data/.local/bin/gh nie istnieje. Dalszy odczyt CI przez API dopuszczony.
+Odczyt quota 11:56:14 UTC 29%/18%, 12:02:09 UTC 35%/19%; resety
+2026-10-25T16:33:40Z / 2026-11-01T06:22:00Z. Bez reset/fallback.
+
 ## Wznowienie 11:33–11:41 UTC — niezależny review FAIL
 
 Czysty checkout, HEAD i origin/feat/long-term-memory zgodne:

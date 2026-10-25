@@ -14,6 +14,10 @@ Both model adapters use this shared policy before their receiver boundaries.
 
 The new contract:
 
+Update 2026-10-25: the independent review found further key/duplicate/composition
+failures. The original execution below is historical, not approval. Current fixes
+and RED/GREEN evidence are in [privacy_composition_fix.md](privacy_composition_fix.md).
+
 - A string beginning (after whitespace) with `{`, `[`, or `"` is decoded as a
   complete JSON value. Successful decoding recursively uses the same depth,
   node and aggregate character budgets; serialization retains encoding layers.
@@ -25,6 +29,19 @@ The new contract:
   It still passes the existing text restrictions/redaction. This preserves plain
   links, bracket labels, checklists and the redaction marker.
 - Tool `arguments` still require complete JSON, with no Markdown fallback.
+- All privacy decoding uses `strict_json_loads`: duplicate object keys (also
+  decoded-equivalent Unicode escapes) and non-finite constants are rejected before
+  a dict can discard pairs. This also covers history restoration, explicit
+  backfill parsing and model tool-argument execution.
+- Mapping names use the same recursive walk and shared budgets as values.
+  JSON-looking names are inspected but never canonicalized/renamed: if inspection
+  requires changing their decoded contents, reject the mapping. Ordinary protocol
+  names remain unchanged; existing plain-key redaction collision checks remain.
+- Trusted builders inspect original source values before headings, dates,
+  truncation or concatenation. The leading-only parser is NOT a substitute for
+  maintaining these boundaries. Summary/fallback, system prompt/profile,
+  operational rows and recall metadata now do this explicitly. Ingestion and
+  backfill persist a conservative `local_only` flag before multipart extraction.
 - Original input trees remain unchanged. Rejected input is not logged by the
   policy; errors retain the fixed diagnostic.
 

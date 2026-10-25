@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 from k90_memory import (BackendError, HindsightBackend, PrivacyError, Worker,
                         initialize as initialize_ledger, retrieve, upsert_source)
 from k90_memory.store import current
+from k90_memory.privacy import PrivacyPolicy
 from outbound_policy import model_policy
 from tools.db import MESSAGE_CONTEXT, get_conn
 
@@ -41,22 +42,15 @@ def _key(conn):
     return bytes(conn.execute("SELECT value FROM memory_settings WHERE name='pseudonym_key'").fetchone()[0])
 
 
-def _local_only(value, depth=0):
-    # Inspect before text extraction discards multipart metadata. Excess depth
-    # is conservatively local-only, without changing the original event payload.
-    if depth > 40:
+def _local_only(value):
+    # One bounded parser for outbound and pre-composition capture. Persist a
+    # conservative restriction on ANY rejected original, not just a visible flag.
+    # Image permission here only avoids classifying images as text restrictions;
+    # the Worker still independently forbids images in the memory index.
+    try:
+        PrivacyPolicy(allow_images=True).sanitize(value)
+    except Exception:
         return True
-    if isinstance(value, str) and value.lstrip().startswith(('{', '[', '"')):
-        try:
-            parsed = json.loads(value)
-        except (ValueError, RecursionError):
-            return False
-        return _local_only(parsed, depth + 1)
-    if isinstance(value, dict):
-        return any((''.join(c for c in key.casefold() if c.isalnum()) == 'localonly' and item is not False)
-                   or _local_only(item, depth + 1) for key, item in value.items())
-    if isinstance(value, (list, tuple)):
-        return any(_local_only(item, depth + 1) for item in value)
     return False
 
 
@@ -138,9 +132,10 @@ def document_changed(conn,filename,content,revision,occurred_at):
     owner=os.getenv('CONVERSATION_USER_ID','owner')
     source_id='document:'+filename
     old=current(conn,owner,source_id)
-    if old and not old.deleted and old.content==content and old.occurred_at==occurred_at:
+    local_only=_local_only(content)
+    if old and not old.deleted and old.content==content and old.occurred_at==occurred_at and old.local_only==local_only:
         return
-    upsert_source(conn,source_id,owner,'document',content,occurred_at,kind='document')
+    upsert_source(conn,source_id,owner,'document',content,occurred_at,kind='document',local_only=local_only)
 
 
 def snapshot_documents(conn):
@@ -228,11 +223,13 @@ def recall_context(owner,question,*,exclude=()):
             if source.local_only:
                 raise PrivacyError()
             safe=policy.sanitize_text(source.content)
+            record_data=policy.sanitize({'source_id':source.source_id,'revision':source.revision,'role':source.role,
+                                         'occurred_at':source.occurred_at,'content':safe})
         except Exception:
             stats['memory_blocked']+=1
             continue
-        record=json.dumps({'source_id':source.source_id,'revision':source.revision,'role':source.role,
-                           'occurred_at':source.occurred_at,'content':safe[:1500]},ensure_ascii=False)
+        record_data['content']=record_data['content'][:1500]
+        record=json.dumps(record_data,ensure_ascii=False)
         if sum(len(r) for r in records)+len(record)>6000:
             break
         records.append(record)

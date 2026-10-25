@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .db import get_conn
 from .time_utils import date_days_ago
+from outbound_policy import model_policy
 
 MEAL_DAYS = 3
 ACTIVITY_DAYS = 3
@@ -115,6 +116,14 @@ def build_operational_context() -> tuple[str, dict]:
             (date_days_ago(GLUCOSE_DAYS),),
         ).fetchall()
 
+    # Preserve source boundaries before dates/labels turn JSON into ordinary prose.
+    (meals, activities, weights, blood_pressure, sleep, recovery,
+     latest_glucose, glucose_history) = model_policy().sanitize([
+        [dict(row) for row in meals], [dict(row) for row in activities],
+        [dict(row) for row in weights], [dict(row) for row in blood_pressure],
+        [dict(row) for row in sleep], [dict(row) for row in recovery],
+        dict(latest_glucose) if latest_glucose is not None else None,
+        [dict(row) for row in glucose_history]])
     sections: list[str] = []
     stats = {
         "meals": len(meals),

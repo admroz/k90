@@ -30,6 +30,24 @@ def _key(key):
     return re.sub(r'[^a-z0-9]', '', key.casefold())
 
 
+def strict_json_loads(raw):
+    """Decode without discarding ambiguous pairs (including escaped-equal keys).
+
+    Privacy callers bound the input and decoded walk separately. Syntax errors
+    remain ValueError; duplicate/non-finite input is a fixed PrivacyError.
+    """
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise PrivacyError()
+            result[key] = value
+        return result
+    def constant(_):
+        raise PrivacyError()
+    return json.loads(raw, object_pairs_hook=pairs, parse_constant=constant)
+
+
 @dataclass(frozen=True)
 class PrivacyPolicy:
     redact_terms: tuple[str, ...] = ()
@@ -75,7 +93,7 @@ class PrivacyPolicy:
         a model boundary, NEVER permission for the memory backend to index images.
         """
         budget = [0, 0]
-        def walk(obj, depth, required_json=False):
+        def walk(obj, depth, required_json=False, preserve_json=False):
             budget[0] += 1
             if depth > self.max_depth or budget[0] > 100_000:
                 raise PrivacyError()
@@ -86,7 +104,9 @@ class PrivacyPolicy:
                 stripped = obj.lstrip()
                 if required_json or stripped.startswith(('{', '[', '"')):
                     try:
-                        parsed = json.loads(obj)
+                        parsed = strict_json_loads(obj)
+                    except PrivacyError:
+                        raise
                     except (ValueError, RecursionError):
                         # Object-like and quoted encodings are always fail-closed.
                         # Only a complete, plain Markdown label can disambiguate
@@ -103,7 +123,23 @@ class PrivacyPolicy:
                         return self._text(obj)
                     # Reuse this walk's depth/node/character budgets for every
                     # decoded layer, and retain the original number of encodings.
-                    return json.dumps(walk(parsed, depth + 1), ensure_ascii=False, separators=(',', ':'))
+                    clean = walk(parsed, depth + 1)
+                    if preserve_json:
+                        # Names cannot be canonicalized or partially redacted:
+                        # that could rename a protocol field or create a collision.
+                        # A decoded scalar name has no enclosing value here, so
+                        # it cannot safely inherit field-specific restrictions.
+                        # Reject encoded reserved names rather than accepting
+                        # escaped aliases of e.g. api_key/local_only/type/phone.
+                        reserved = (_SECRET_KEYS | _IDENTIFIER_KEYS | _IMAGE_KEYS |
+                                    {'localonly', 'type', 'role', 'mimetype', 'mediatype',
+                                     'arguments', 'toolcallid', 'callid'})
+                        if type(parsed) is str and _key(parsed) in reserved:
+                            raise PrivacyError()
+                        if clean != parsed:
+                            raise PrivacyError()
+                        return obj
+                    return json.dumps(clean, ensure_ascii=False, separators=(',', ':'))
                 return self._text(obj)
             if obj is None or type(obj) is bool:
                 return obj
@@ -129,8 +165,7 @@ class PrivacyPolicy:
                             (canonical == 'type' and type(item) is str and _key(item) in _IMAGE_KEYS) or
                             (canonical in ('mimetype', 'mediatype') and type(item) is str and re.match(r'(?i)(?:image|video|audio|application)/', item))):
                         raise PrivacyError()
-                    clean_key = self._text(key)
-                    budget[1] += len(key)
+                    clean_key = walk(key, depth + 1, preserve_json=True)
                     if clean_key in out or budget[1] > self.max_chars:
                         raise PrivacyError()
                     clean_item = walk(item, depth + 1, required_json=canonical == 'arguments')
