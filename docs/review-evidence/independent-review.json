@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "commit": "f39ad1fd54674f78be6a4ca35a1064fdc39a37a2",
+  "reviewed_commit": "f39ad1fd54674f78be6a4ca35a1064fdc39a37a2",
+  "observed_checkout_head": "8133b1bbd1488ef8747095fb39a5bfd9f098e1b7",
+  "verdict": "PASS",
+  "scope": "Independent bounded offline security/source review using synthetic fixtures and loopback HTTP receivers only; no blocking receiver-level privacy bypass or subscription-safety defect reproduced in the examined source.",
+  "full_acceptance": false,
+  "merge_approval": false,
+  "deployment_approval": false,
+  "complete_anonymization_proven": false,
+  "review_date": "2026-10-25",
+  "role_provenance": {
+    "original_review": "Previously completed independent read-only adversarial reviewer; original report preserved verbatim at the beginning of independent_final_review.md.",
+    "preservation_and_rerun": "Delegated implementation/evidence-preservation writer; not a second independent reviewer or independent approval."
+  },
+  "report": "docs/review-evidence/independent_final_review.md",
+  "synthetic_artifacts_reviewed_for_secrets_and_pii_before_copy": true,
+  "probe_behavior_preserved": "All three probe copies compared byte-for-byte with the original scratch files using cmp, exit 0.",
+  "probes": [
+    {
+      "path": "docs/review-evidence/independent_final_adversarial.py",
+      "original_name": "test_adversarial_final.py",
+      "sha256": "e25c29d50cf47f7aa2ed29ef0721f957b9e7c9c3242ab94d4536d5b014fa2219",
+      "original_independent_run_passed": 112
+    },
+    {
+      "path": "docs/review-evidence/independent_final_flows.py",
+      "original_name": "test_actual_flows.py",
+      "sha256": "fca10825ea03ea70232ba63855f6804fcfe67344d5acac974c9bd045934623e1",
+      "original_independent_run_passed": 18
+    },
+    {
+      "path": "docs/review-evidence/independent_final_wire.py",
+      "original_name": "test_wire_receivers.py",
+      "sha256": "81723fe541b9d10ac0b947b6cd97ccb7b01ce4798c6a965453ec189b6865a56b",
+      "original_independent_run_passed": 10
+    }
+  ],
+  "original_independent_execution": {
+    "existing_targeted_regressions_passed": 202,
+    "new_probes_combined_passed": 140,
+    "new_probes_combined_warnings": 1,
+    "new_probes_combined_seconds": 17.15,
+    "existing_regressions_rerun_by_preservation_writer": false,
+    "initial_guard_failure": "First focused run: 201 passed, 1 failed due to scratch write guard misresolving dir_fd-relative registration.json cleanup. Only scratch guard corrected; identical selection then passed 202/202. No source fix or hidden skip. Original logs remain scratch, not claimed durable."
+  },
+  "durable_probe_rerun": {
+    "working_directory": "/opt/data/projects/k90",
+    "command": "bash /opt/data/cache/scratch/k90-verification-20261025/run-fixes.sh independent-durable-final docs/review-evidence/independent_final_adversarial.py docs/review-evidence/independent_final_flows.py docs/review-evidence/independent_final_wire.py -p no:cacheprovider",
+    "exit_code": 0,
+    "passed": 140,
+    "failed": 0,
+    "skipped": 0,
+    "warnings": 1,
+    "seconds": 16.89,
+    "expanded_safe_environment_rerun": "140 passed, 1 warning in 16.88s; exact expanded command preserved in report.",
+    "warning": "LiteLLM _service_logger.py:59 DeprecationWarning: There is no current event loop",
+    "guard": "Inspected coordinator sitecustomize.py rejects non-loopback network and private-file access; env -i uses synthetic HOME/DB/data/auth, dotenv disabled, local memory. Loopback HTTP is allowed; not an OS sandbox.",
+    "reproduction_dependency": "No scratch probe files needed. Existing run-fixes.sh and its inspected offline guard remain prerequisites; report preserves fixed safe environment expansion and points to docs/VERIFICATION.md for harness reconstruction."
+  },
+  "existing_durable_evidence": [
+    "docs/review-evidence/privacy_composition_fix.md",
+    "docs/review-evidence/privacy_json_contract.md",
+    "docs/review-evidence/privacy_boundary_probe.py",
+    "docs/review-evidence/privacy_boundary_probe.log",
+    "docs/review-evidence/privacy_parent_regression.txt",
+    "docs/review-evidence/integration_checkpoint_20261025.md",
+    "docs/review-evidence/hindsight_live_probe.json"
+  ],
+  "unclosed_external_gates": [
+    "Real final k90-only OAuth/login/refresh/catalog/billing and integrated provider behavior",
+    "Hindsight service ACL/bank authorization and persistence across actual service restart",
+    "Real container build/smoke and CI"
+  ],
+  "limitations": [
+    "Synthetic fixtures and local receiver serialization do not establish TLS/provider authentication, actual external model behavior, deployment, or full acceptance.",
+    "Policy does not locate arbitrary JSON embedded in prose or fully anonymize unconfigured names/addresses; image consent is not EXIF anonymization.",
+    "No retraction of prior external disclosures; in-flight Hindsight changes are eventual. Same-UID/root and slow-stream deadline limits remain.",
+    "Prior real Hindsight partial evidence was not independently reexecuted by this review or preservation writer."
+  ],
+  "application_or_existing_tests_changed": false,
+  "status_verification_plan_changed": false,
+  "commit_or_push_performed": false,
+  "acceptance_manifest_created": false
+}

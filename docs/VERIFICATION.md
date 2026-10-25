@@ -1,5 +1,59 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+## Wznowienie 12:21–12:43 UTC — niezależny review offline PASS, integracje nadal otwarte
+
+Przed zmianami checkout był czysty; HEAD i zdalne origin feature wskazywały
+`8133b1bbd1488ef8747095fb39a5bfd9f098e1b7`. Nie było pracy do ratowania.
+Lock worker.lock trzymał nadzorca PID 177930, rodzic bieżącego Hermesa 177942;
+brak drugiego implementatora. Odczytano cały ten dokument, AGENTS, plan,
+architekturę i operacje. Hooks wyłącznie sample, core.hooksPath nieustawiony;
+workflow feature uruchamia testy, publikacja nadal wyłącznie main. Upstream
+push DISABLED. Pierwsza łączona komenda rozpoznania została zablokowana przed
+wykonaniem przez unattended policy (Python -c); powtórzono bez tego fragmentu,
+bez zmian ustawień lub obejścia ochrony.
+
+Osobna read-only rola niezależna: scoped PASS na źródle
+`f39ad1fd54674f78be6a4ca35a1064fdc39a37a2`; HEAD różni się wyłącznie docs.
+202 istniejące testy + 140 nowych probe cases, w tym rzeczywiste lokalne
+odbiorniki HTTP trzech ścieżek modelu i obu transportów HS. Brak odtworzonej
+blokującej luki; bez akceptacji prawdziwego OAuth/HS ACL/restart/container/CI.
+Pełny raport i trzy syntetyczne probe pliki utrwalono w review-evidence jako
+independent_final_*. Osobna rola implementacyjna zachowała je bez zmiany
+zachowania (cmp i SHA256 potwierdzone przez prowadzącego) i wykonała dwa
+przebiegi 140 PASS. To nie druga niezależna akceptacja. Obie role zakończone.
+Manifest independent-review.json zawiera PASS tylko w zakresie offline review.
+
+Prowadzący odczytał cały raport, guard, harness i wszystkie trzy probe pliki,
+po czym sam uruchomił (repo cwd, poprzednio opisane env -i i guard):
+
+```sh
+bash /opt/data/cache/scratch/k90-verification-20261025/run-fixes.sh coordinator-1239-full
+node --check web/app.js
+node --test tests/web_*.test.mjs
+bash /opt/data/cache/scratch/k90-verification-20261025/run-fixes.sh coordinator-1239-probes docs/review-evidence/privacy_boundary_probe.py docs/review-evidence/independent_final_adversarial.py docs/review-evidence/independent_final_flows.py docs/review-evidence/independent_final_wire.py -p no:cacheprovider
+```
+
+Wyniki: pełna regresja 404 passed / 1 skipped in 84.17s (exit 0); jedyny skip
+test_imported_data: brak jawnie wybranego lokalnego importu. JS syntax OK,
+frontend 21 passed / 0 failed. Probe 153 passed / 1 warning in 17.73s (exit 0):
+historyczne 13 + niezależne 140. Warning LiteLLM dotyczy braku bieżącej event loop;
+nie oznacza porażki asercji ani realnego wywołania providera. Lokalne oryginały
+zachowane. Testy offline nie dowodzą poprawności integracji zewnętrznej.
+
+Świeży odczyt dostępu 12:32 UTC: Docker nadal bez demona (mimo exit 0 klienta),
+GitHub Actions API authenticated GET permissions enabled=true, workflows
+total_count=0; runs dla feature puste. Nie ponawiano bezcelowo dispatch 404,
+nie zmieniano main/ustawień GitHub ani nie tworzono wczesnego PR. Przyczyna
+braku rejestracji workflow niepotwierdzona. Brak własnej sesji OAuth k90 oraz
+izolowanego restartowalnego HS/ograniczonej tożsamości pozostaje zgodny z
+udokumentowanym stanem; nie odczytywano tokenów ani istniejących banków.
+
+Quota usage_api 12:21:42Z 49%/21%, 12:32:15Z 58%/22%, 12:42:59Z 62%/23%;
+resety 2026-10-25T16:33:40Z / 2026-11-01T06:22:00Z. Bez reset/fallback.
+Pozostały konkretne bramki dostępu właściciela, nie rutynowy błąd implementacji.
+Najpierw checkpoint dowodów i push, następnie końcowy stan BLOCKED_OWNER oraz
+lista minimalnych zewnętrznych działań. Bez acceptance PASS/READY/PR.
+
 ## Końcowy checkpoint tej sesji — CONTINUE, 12:16 UTC
 
 Najnowsze testowane źródła `f39ad1fd54674f78be6a4ca35a1064fdc39a37a2` zawierają
