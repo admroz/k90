@@ -1,6 +1,6 @@
 # k90 — bieżący status zadania
 
-## Stan: CONTINUE — poprawka JSON przechodzi regresję, czeka niezależny review
+## Stan: PAUSED_FOR_QUOTA — próg 80%, niezależny review nadal oczekuje
 
 - Repo: `/opt/data/projects/k90`, fork `hermesinski/k90`, gałąź `feat/long-term-memory`.
 - Uzgodniony zakres i lista odbioru: `IMPLEMENTATION_PLAN.md`.
@@ -31,8 +31,15 @@ Użytkownik zlecił autonomiczną kontynuację 2026-10-25. Rutynowe decyzje tech
 nie wymagają kolejnego potwierdzenia. Nowe logowanie, koszty, zmiana zakresu
 lub osłabienie zabezpieczeń wymagają właściciela.
 
-Odczyt: Session 78%, Weekly 12% (usage API,
-2026-10-25T08:18:27Z). Resety: 2026-10-25T11:22:00Z / 2026-11-01T06:22:00Z.
+Odczyt: Session 80%, Weekly 12% (usage API,
+2026-10-25T08:21:43.825141Z). Resety: 2026-10-25T11:22:00Z / 2026-11-01T06:22:00Z.
+Próg osiągnięty przed rozpoczęciem etapu: bez nowych dzieci i bez nowych testów.
+Zastany checkout czysty, HEAD i zdalna gałąź zgodne:
+`c581ba17280c9cf7d802fbb2a504a5837729a259`. Bieżący checkpoint zmienia tylko docs;
+jego SHA ustala HEAD i potwierdzenie ls-remote po push. Lock należy do nadzorcy
+tej sesji (potwierdzone drzewo procesów); nie wykryto drugiego wykonawcy.
+Następny krok po odczycie wszystkich okien <80%: niezależny adversarial review
+źródeł `6a3b3066653eb08dd519b46e69e0e1ecf33a6661`, potem pozostałe bramki.
 Każdy wykonawca sprawdza quota przed większym etapem i po dłuższej partii.
 80%: nie zaczynać dużego etapu; 90%: checkpoint i pauza. Nieznany odczyt blokuje
 nowy duży etap. Bez banked reset i płatnego fallbacku.

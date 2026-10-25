@@ -1,5 +1,24 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+## Pauza quota przy wejściu — 08:21 UTC
+
+`/opt/hermes/.venv/bin/hermes usage --json`: usage_api, fetched_at
+`2026-10-25T08:21:43.825141+00:00`, Session 80%, Weekly 12%; resety
+`2026-10-25T11:22:00+00:00` / `2026-11-01T06:22:00+00:00`.
+Zgodnie z mandatem nie rozpoczęto review, implementacji ani regresji.
+Nie uruchomiono dzieci, resetów, fallbacku ani nowych integracji.
+
+`git status --short` pusty; gałąź feat/long-term-memory; HEAD i
+`git ls-remote origin refs/heads/feat/long-term-memory` identyczne:
+`c581ba17280c9cf7d802fbb2a504a5837729a259`. Nie było pracy do ratowania.
+`lslocks` i `ps -o pid,ppid,args -p 155429,155445` potwierdziły, że lock
+worker.lock trzyma proces nadzorcy będący rodzicem bieżącego Hermesa.
+Przejrzano workflow: feature push nie publikuje obrazu; core.hooksPath
+nieustawiony, w .git/hooks tylko 14 plików .sample. Upstream push DISABLED.
+Checkpoint obejmuje wyłącznie STATUS.md i ten wpis, bez zmiany źródeł/testów.
+Historyczne wyniki poniżej nie są świeżym dowodem tej sesji. Następne wznowienie
+musi zacząć od quota <80% we wszystkich oknach i niezależnego review poprawki.
+
 ## Redesign granicy JSON — świeża regresja prowadzącego 08:17 UTC
 
 Testowane źródła utrwalono w `6a3b3066653eb08dd519b46e69e0e1ecf33a6661`.
