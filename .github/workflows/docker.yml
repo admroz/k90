@@ -47,6 +47,7 @@ jobs:
       - name: Build and exercise container without external network
         run: |
           docker build -t k90:test .
+          python scripts/smoke_build_context.py k90:test
           python scripts/smoke_container.py k90:test
 
   build:

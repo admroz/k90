@@ -1,5 +1,59 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+## Wznowienie po resecie 16:37 UTC — Actions uruchomione
+
+OWNER_ACCEPTANCE odczytano jako pierwszy, potem całe VERIFICATION, AGENTS, plan,
+architekturę i operacje. Zastany jedyny diff był dopiskiem właściciela o runbooku;
+pełny odczyt, skan jednego kandydata bez trafień, hooks tylko sample i workflow
+feature bez publikacji. Checkpoint 0a7939a8e5897b76138be0b312fccbcd0f598fc4
+push origin feature i ls-remote zgodne. Lock PID212009 jest nadzorcą/rodzicem
+tej sesji; brak obcego writera. Pierwsza łączona komenda z Python -c zablokowana
+przed wykonaniem; ponowiono bez niej. Bez zmian ochrony/konfiguracji Hermesa.
+
+Quota usage_api: 16:37:53Z Session 1%, Weekly 27%; 16:45:57Z 8%/28%; resety
+21:37:40Z / 2026-11-01T06:22:00Z. Reset nastąpił naturalnie; bez banked reset,
+płatnego fallbacku, zmiany kont/providera. Aktualna polityka >=90%, 80 warning.
+
+Niezależny read-only reviewer: scoped Compose/OAuth funkcjonalnie PASS,
+26 testów (1.69s) + 8 no-fallback/refresh tests (3.67s), syntetyczny Compose
+probe PASS, zero zmian checkout. Medium zalecenie: root-only Docker ignore
+nie zapewnia dowolnego zagłębienia. Runbook niekompletny. Żadnego nowego
+audytu naprawionej historycznej luki JSON. Nie jest to finalny PASS nowego source.
+
+Rzeczywista przyczyna pustego Actions: zalogowana strona forka pokazała
+„Workflows aren't being run on this forked repository” i formularz enable,
+chociaż REST actions/permissions enabled=true. Zapisane konto przez vault,
+bez ujawniania hasła; włączono przejrzane workflows. Odczyt strony „Actions
+Enabled”, potem REST workflows total_count=1, docker.yml active. Nie zmieniono
+main ani sekretów/rejestru/produkcji. Jeden błędny selektor JS nie wykonał akcji;
+ponowiona poprawna akcja i readback potwierdziły skutek.
+
+Polecenia koordynatora (scratch helper odczytany przed użyciem):
+
+```sh
+.venv/bin/python /opt/data/cache/scratch/k90-verification-20261025/github_ci.py diagnose
+.venv/bin/python /opt/data/cache/scratch/k90-verification-20261025/github_ci.py dispatch
+.venv/bin/python /opt/data/cache/scratch/k90-verification-20261025/ci_evidence.py 40213398796
+```
+
+Run 40213398796, source 0a7939a8e5897b76138be0b312fccbcd0f598fc4,
+workflow_dispatch SUCCESS, test job 121229276248 SUCCESS. Logi pobrano przez
+authenticated API do prywatnego scratch; przejrzane wyniki: Python 406 passed,
+1 skipped in 14.73s; frontend 21 PASS/0 FAIL; rzeczywisty Docker build i
+scripts/smoke_container.py network-none PASS, w tym izolowany restart Telegrama.
+Job build/publish skipped (121229556194). Bez publikacji, deploymentu i provider calls.
+
+Zalecenie ignore: dodano contract test przed poprawką:
+`bash /opt/data/cache/scratch/k90-verification-20261025/run-fixes.sh recursive-ignore-red tests/test_compose_contract.py`
+— 1 failed / 2 passed, brak czterech recursive patterns. Po dodaniu wzorców
+`**/.env`, `**/.env.*`, `**/chatgpt-auth/`, `**/credentials.json` identyczny
+wybór z label recursive-ignore-green: 3 passed in 0.02s, exit 0.
+Nowy scripts/smoke_build_context.py kopiuje TYLKO ignore do nowego syntetycznego
+kontekstu, testuje 12 fake private paths i publiczny positive control prawdziwym
+Docker COPY/run, sprząta unikatowy obraz. Dalszy CI i niezależny review pending.
+
+Historyczne stany/quota poniżej pozostają dowodami swoich sesji, nie aktualną polityką.
+
 Końcowy WIP checkpoint `c3b00f64db2472864e8a35869c5669e856ef47ce`
 wypchnięto wyłącznie do origin feature, ls-remote zgodny, checkout czysty.
 Przed push jawny skan 10 przejrzanych kandydatów bez trafień i diff checks PASS;

@@ -1,40 +1,32 @@
 # k90 — bieżący status zadania
 
-Stan: PAUSED_FOR_QUOTA — checkpoint WIP; również wykryto zewnętrzną zmianę dokumentu właściciela.
+Stan: CONTINUE — wznowienie po resecie, końcowe przygotowanie personal self-hosted.
+Aktualizacja: 2026-10-25 16:52 UTC. Feature fork, bez PR/main/upstream/deploy.
 
-Aktualizacja 2026-10-25 14:24 UTC. Branch feat/long-term-memory, fork
-hermesinski/k90, upstream push DISABLED. Bez PR/main/merge/deploy/produkcji.
+Zachowano i wypchnięto dopisek właściciela o dwóch stackach w 0a7939a;
+remote SHA zgodny. Jedyny lock writer: nadzorca PID212009, rodzic tej sesji.
+Quota 16:45:57Z: Session 8%, Weekly 28%, resety 21:37:40Z / Nov 1 06:22Z.
+Nowa polityka >=90% pauza; 80% ostrzeżenie, unknown fail-closed. Bez reset/fallbacku.
 
 Zweryfikowane:
-- Zachowano początkowe OWNER_ACCEPTANCE.md w e910dd9; remote SHA potwierdzony.
-- Compose: env_file .env, minimalne runtime overrides; rozszerzone ignore secrets.
-- TDD: 2 failed → 2 passed. Pełna regresja 406 passed / 1 skipped (84.51s),
-  frontend 21 passed, JS syntax OK. Wyłącznie syntetyki i offline guard.
-- Oficjalny standalone Compose v5.6.1, checksum zgodny: rzeczywiste config na
-  syntetycznym env potwierdziło passthrough nowych K90 opcji, TZ, /data i odmowę
-  pustego hasła. Nie testowano uruchomienia kontenera.
-- Nowy niezależny reviewer przeczytał zmiany, ale przerwał przed testami przy
-  niedostępnym odczycie własnej quota. To NIE jest niezależny PASS. Dzieci zakończone.
+- Zdiagnozowano Actions: zalogowana strona pokazała oddzielną blokadę workflow
+  odziedziczonych przy forkowaniu, mimo REST enabled=true. Włączono przejrzane
+  workflows przez dostępne konto; odczyt strony „Actions Enabled” i REST active.
+- Rzeczywisty test-only workflow_dispatch na 0a7939a: run 40213398796 SUCCESS.
+  Python 406 passed / 1 skip, frontend 21 PASS, Docker build i network-none smoke
+  z restartem adaptera Telegram PASS. Job publikacji skipped. Bez sekretów/LLM.
+- Niezależny scoped review: Compose/OAuth offline funkcjonalnie PASS, 26+8 testów
+  i rzeczywista walidacja Compose PASS; brak high/critical. Zalecono rekurencyjne
+  Docker ignore i pełny runbook. Live OAuth/HS nadal owner-deferred.
+- Nowy ignore contract TDD: 1 failed/2 passed → 3 passed. Dodano mały CI smoke
+  prawdziwej semantyki Docker na wyłącznie syntetycznym kontekście.
 
 Otwarte:
-- Dokończyć niezależny review nowej konfiguracji oraz diagnostykę Actions.
-  API: enabled=true, zero workflows, workflow GET i enable PUT 404; odczyt
-  po próbie nadal zero. Przyczyna niepotwierdzona, nie eskalować ogólnej diagnozy.
-- CI/container build/smoke niewykonane. Nie żądać lokalnego Docker dostępu.
-- OAuth usability/topologia wymaga dalszego odczytu kodu. Live login/inference
-  odroczone przez właściciela, NIE blokuje przygotowania.
-- Podczas sesji zewnętrznie dopisano „Later owner clarification” w OWNER_ACCEPTANCE:
-  rozbudowane HS CI/restart/IAM nie jest już bramką, realny HS smoke przy wdrożeniu.
-  Zmianę zachowano, bez nadpisania. Przerwano dalszą implementację wobec naruszenia
-  założenia jednego writera. Kolejny nadzorowany etap musi potwierdzić wyłączność
-  i odczytać pełny nowy mandat; nie budować rozbudowanego HS fixture systemu.
+- Pełna regresja i CI/container na nowym źródle oraz niezależny review nowego smoke.
+- Finalny runbook dwóch osobnych stacków, Mac-local OAuth/private SSH import,
+  backup, rollout i rollback; bez wymyślania ścieżek istniejącego stacka.
+- Odświeżyć manifesty do wspólnego testowanego source SHA po rzeczywistych dowodach.
 
-Limity: usage_api 14:24:21Z Session 82%, Weekly 26%; resety
-2026-10-25T16:33:40Z / 2026-11-01T06:22:00Z. Bez reset/fallback/account switch.
-Kolejny duży etap tylko przy świeżym <80% we wszystkich oknach.
-
-Dowody: review-evidence/compose_checkpoint_20261025.md i VERIFICATION.md.
-Manifesty historyczne BLOCKED nie zostały zastąpione PASS. Nie READY.
-Checkpoint źródeł i origin: c3b00f64db2472864e8a35869c5669e856ef47ce,
-ls-remote zgodny, checkout czysty po push. Po nim tylko docs status/quota.
-Końcowy dokumentacyjny SHA w prywatnym outcome.json i git HEAD/ls-remote.
+Nie READY. Historyczne BLOCKED manifesty nie są aktualnym zakresem właściciela;
+realne logowanie/inference i topology-specific HS smoke są odroczone do wdrożenia.
+Źródłowy checkpoint po tym wpisie: git HEAD; exact remote przez ls-remote.

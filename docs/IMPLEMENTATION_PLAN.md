@@ -2,6 +2,10 @@
 
 ## Zlecenie i granice
 
+Aktualna polityka od wznowienia po resecie 2026-10-25T16:33:40Z: pauza przy
+>=90% DOWOLNEGO okna, 80% to tylko ostrzeżenie i częstsze checkpointy.
+Nieznany odczyt nadal fail-closed. Nie zmieniać historycznych pomiarów poniżej.
+
 Użytkownik zlecił implementację i testowanie uzgodnionego planu pamięci oraz dodanie
 opcjonalnego trybu subskrypcyjnego. Pozostajemy we własnym forku `hermesinski/k90`;
 upstream `admroz/k90` jest tylko do odczytu. PR na końcu, bez samodzielnego scalania
@@ -121,7 +125,7 @@ szczegółowe dowody w `docs/VERIFICATION.md`.
 
 Zewnętrzny nadzorca ma kontrolować możliwość wznowienia co 15 minut bez wywołań
 modelu, blokować równoległe uruchomienia i wznawiać pracę dopiero przy wiarygodnym
-odczycie wszystkich okien poniżej 80%. Gotowość lub rzeczywisty bloker właściciela
+odczycie wszystkich okien poniżej 90%. Gotowość lub rzeczywisty bloker właściciela
 kończy automatyczne uruchamianie. Harmonogram nie znosi wymogu checkpointów ani
 kontroli quota w trakcie etapu. Do działania nadzorcy potrzebny jest działający gateway.
 
@@ -130,9 +134,9 @@ kontroli quota w trakcie etapu. Do działania nadzorcy potrzebny jest działają
 Przed każdym większym etapem i po dłuższej partii testów/poprawek wykonać tylko
 odczyt: `/opt/hermes/.venv/bin/hermes usage --json`. Sprawdzić `used_percent`
 i `resets_at` we wszystkich oknach providera `openai-codex` (Session/Weekly).
-Przy >=80% w dowolnym oknie nie zaczynać kosztownego etapu: przy 80–90% dokończyć
-najwyżej mały krok w toku, zapisać checkpoint i wrócić do użytkownika. Przy >=90%
-natychmiast zapisać stan i zwrócić `PAUSED_FOR_QUOTA`. Brak/nieznany odczyt nie
+Przy 80–90% kontynuować małymi ograniczonymi krokami, częściej kontrolując limity
+i utrwalając checkpointy. Przy >=90% nie zaczynać implementacji/testów/delegacji;
+pozostały zapas tylko na krótki bezpieczny checkpoint i `PAUSED_FOR_QUOTA`. Brak/nieznany odczyt nie
 znaczy 0%: checkpoint i ponowna kontrola przed dalszym większym etapem.
 To współpracująca kontrola na granicach etapów, nie twardy runtime kill ani obietnica
 automatycznego wznowienia. Nie używać banked reset, nie zmieniać konta/providera

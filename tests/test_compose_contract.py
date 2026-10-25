@@ -24,3 +24,8 @@ def test_private_environment_variants_are_ignored():
         assert 'chatgpt-auth/' in lines
         assert 'credentials.json' in lines
     assert '!.env.example' in (ROOT / '.gitignore').read_text().splitlines()
+
+
+def test_docker_excludes_private_files_at_arbitrary_depth():
+    lines = (ROOT / '.dockerignore').read_text().splitlines()
+    assert {'**/.env', '**/.env.*', '**/chatgpt-auth/', '**/credentials.json'} <= set(lines)

@@ -7,6 +7,11 @@ removing privacy checks, or calling synthetic tests full live integration.
 
 ## Final delivery: two-stack deployment instructions
 
+Current quota policy, effective after the 2026-10-25T16:33:40Z reset: pause at
+>=90% in ANY account window; 80% is warning only. Unknown usage fails closed.
+Use the reserve only for checkpoint/report, never new implementation or tests.
+No paid fallback, banked resets or provider/account switching.
+
 The owner selected preparation for reusing the existing HS in the Hermes stack,
 with k90 in a separate stack and a shared Docker network. Prepare the complete
 runbook as part of final delivery: minimal insertion-ready changes to both
