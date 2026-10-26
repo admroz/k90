@@ -1,5 +1,14 @@
 # k90 — bieżący status zadania
 
+## Container photo runtime acceptance — 2026-10-26
+
+Branch fix/image-history-performance, base 6739ffa. Added direct shipped run_agent
+photo/follow-up smoke to CHECK (both existing executions). Synthetic provider/auth
+only; real history/policy/persistence. TDD RED confirmed; packaging + helper 4 PASS,
+photo/history/privacy regressions 240 PASS. Host helper executed twice; actual
+image/restart remains CI confirmation. No push/PR/merge/deployment. Quota 64%/10%.
+Evidence: [image-runtime-smoke.md](review-evidence/image-runtime-smoke.md).
+
 ## Opaque image owner steering — 2026-10-26
 
 Branch fix/image-history-performance, tested source
