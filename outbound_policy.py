@@ -3,13 +3,10 @@ from __future__ import annotations
 
 import json
 import os
-import base64
-import re
 from dataclasses import replace
-from urllib.parse import urlsplit
 
 from k90_memory import PrivacyError, PrivacyPolicy
-from k90_memory.privacy import strict_json_loads
+from k90_memory.privacy import strict_json_loads, validate_image_url
 
 
 class ModelCallError(RuntimeError):
@@ -39,8 +36,8 @@ def sanitize_payload(value):
 def project_history(raw):
     """Validate originals before omitting recognized historical image parts.
 
-    Image permission during the first walk only permits inspection of image
-    fields; all other restrictions and encoded JSON checks still apply. The
+    Image permission during the first walk permits validated opaque image
+    bodies; text restrictions and encoded JSON checks still apply. The
     second walk always forbids images, independently of live-upload consent.
     Never mutate the stored original or infer an image's contents.
     """
@@ -77,21 +74,8 @@ def project_history(raw):
 
 
 def _validate_historical_image_url(url):
-    """Accept the supported URL envelope, without fetching or decoding an image."""
-    try:
-        if url.startswith('data:'):
-            match = re.fullmatch(r'data:image/[A-Za-z0-9.+-]+;base64,([A-Za-z0-9+/]+={0,2})', url)
-            if not match:
-                raise PrivacyError()
-            base64.b64decode(match[1], validate=True)
-        else:
-            parsed = urlsplit(url)
-            if (parsed.scheme not in ('https', 'http') or not parsed.hostname
-                    or parsed.username is not None or parsed.password is not None
-                    or any(c.isspace() or ord(c) < 32 for c in url)):
-                raise PrivacyError()
-    except Exception:
-        raise PrivacyError() from None
+    """Shared envelope validation; never fetch or analyze image contents."""
+    validate_image_url(url)
 
 
 def chat_completion(completion, **payload):

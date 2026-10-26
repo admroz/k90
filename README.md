@@ -133,7 +133,14 @@ GPT-6.1 Sol automatycznie korzysta z Responses API, z obsługą narzędzi i zdj�
 Właściciel włącza przesyłanie NOWYCH zdjęć posiłków przez
 `K90_ALLOW_MODEL_IMAGES=true` (domyślnie `false`). Historyczne zdjęcia nigdy nie są
 ponownie przesyłane: kontekst zachowuje tekst i analizę asystenta oraz znacznik
-pominięcia obrazu. Zgoda nie obejmuje obrazów w HS ani anonimizacji obrazu/EXIF;
+pominięcia obrazu. Nowe zdjęcia są wysyłane bez analizy PII i anonimizacji;
+właściciel odpowiada za widoczną treść. Walidowane dane obrazu nie przechodzą
+tekstowych regexów ani zamian base64; podstawowa ochrona obejmuje tylko tekst.
+Techniczny limit obrazu to 5 000 000 bajtów, łącznie 10 000 000 bajtów na przejście
+polityki. Domyślny budżet tekstu 2 000 000 znaków nie obejmuje zwalidowanych URI
+obrazów. Osobne limity parsowania JSON, węzłów i głębokości nadal obowiązują
+(szczegóły: [OPERATIONS_MEMORY_AUTH](docs/OPERATIONS_MEMORY_AUTH.md)).
+Zgoda nie obejmuje obrazów w HS ani anonimizacji obrazu/EXIF;
 szczegóły: [polityka zdjęć](docs/OPERATIONS_MEMORY_AUTH.md).
 Starsze modele oraz pozostali dostawcy zachowują dotychczasową obsługę przez
 LiteLLM / Chat Completions; GPT-5.6 nadal używa `reasoning_effort=none`.

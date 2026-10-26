@@ -1,5 +1,43 @@
 # k90 — bieżący status zadania
 
+## Container photo runtime acceptance — 2026-10-26
+
+Branch fix/image-history-performance, base 6739ffa. Added direct shipped run_agent
+photo/follow-up smoke to CHECK (both existing executions). Synthetic provider/auth
+only; real history/policy/persistence. TDD RED confirmed; packaging + helper 4 PASS,
+photo/history/privacy regressions 240 PASS. Host helper executed twice; actual
+image/restart remains CI confirmation. No push/PR/merge/deployment. Quota 64%/10%.
+Evidence: [image-runtime-smoke.md](review-evidence/image-runtime-smoke.md).
+
+## Opaque image owner steering — 2026-10-26
+
+Branch fix/image-history-performance, tested source
+fd515d97c0a27b11e46e647e6a69ed5f4842cdc3 (parent 0901b09).
+Owner-approved image bytes bypass text regex scans/substitutions after strict
+envelope/base64/signature/MIME/size/budget validation. No image PII analysis,
+anonymization or OCR; text protection, consent, original persistence, historical
+omission, HS text-only policy, phase logs and UI dismissal preserved.
+534 Python passed / 1 existing skip (129.52s); privacy matrix + extra probes
+166 passed / 1 existing warning (24.53s); adapted photo probes 79 passed (48.96s);
+frontend 24 passed, JS syntax and diff checks PASS. Quota 08:17:07Z 58% / 9%.
+Single writer, synthetic offline verification only; no push/PR/deployment.
+Ready for coordinator's independent review and actual-image CI after exit.
+Evidence: [image-opaque.md](review-evidence/image-opaque.md).
+The older image-performance entry below describes its preserved parent stage.
+
+## Image performance checkout — 2026-10-26
+
+Branch fix/image-history-performance, base 5f90fec (PR13). Local implementation
+ready for independent coordinator review; no push/PR/merge/deployment.
+Linear email scan, content-free preparation/provider phase logs and explicit
+browser-local failure/interruption dismissal. Synthetic verification:
+491 Python passed / 1 existing skip, 153 privacy probes passed / 1 warning,
+24 frontend passed and JS syntax OK. No production/provider/HS access.
+Evidence: [image-history-performance.md](review-evidence/image-history-performance.md).
+Quota 08:02:32Z: session 39%, weekly 6%; not paused.
+The historical status below concerns the previous memory task.
+
+
 Stan: READY_FOR_REVIEW — revised personal self-hosted preparation PASS.
 Aktualizacja: 2026-10-25 17:10 UTC. Branch feat/long-term-memory, fork hermesinski/k90.
 Nie jest to full live acceptance, zgoda na merge ani wdrożenie. PR nie utworzony;

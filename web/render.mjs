@@ -154,3 +154,28 @@ export function chart(rows, key, color = "#9fc7a3", maxGapHours = 48) {
   const dots = points.length < 100 ? points.map(p => `<circle cx="${xpos(p)}" cy="${ypos(p)}" r="2.8" fill="${safeColor}"><title>${escapeHTML(p.date)}: ${number(p.y,1)}</title></circle>`).join("") : "";
   return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Wykres: ${points.length} pomiarów, od ${number(min,1)} do ${number(max,1)}">${grid}<path d="${path}" fill="none" stroke="${safeColor}" stroke-width="2.5" stroke-linejoin="round"/>${dots}<text x="${pad}" y="${h-1}">${escapeHTML(points[0].date.slice(5,10))}</text><text x="${w-10}" y="${h-1}" text-anchor="end">${escapeHTML(points.at(-1).date.slice(5,10))}</text></svg><p class="chart-summary">${points.length} pomiarów · zakres ${number(min,1)}–${number(max,1)}</p>`;
 }
+
+const KEY = "k90.dismissed-jobs.v1";
+const LIMIT = 500;
+const terminal = job => ["failed", "interrupted"].includes(job.state);
+export function createJobDismissals(storage) {
+  let ids = [];
+  try {
+    const saved = JSON.parse(storage?.getItem(KEY) || "[]");
+    if (Array.isArray(saved)) ids = saved.filter(id => typeof id === "string" && id.length <= 200).slice(-LIMIT);
+  } catch {}
+  return {
+    hidden: job => terminal(job) && ids.includes(job.request_id),
+    dismiss(job) {
+      if (!terminal(job) || typeof job.request_id !== "string" || job.request_id.length > 200) return;
+      ids = [...ids.filter(id => id !== job.request_id), job.request_id].slice(-LIMIT);
+      try { storage?.setItem(KEY, JSON.stringify(ids)); } catch {}
+    }
+  };
+}
+
+export function renderJobs(jobs, dismissed) {
+  return jobs.filter(j => j.state !== "done" && !dismissed.hidden(j)).map(j =>
+    `<div class="job ${escapeHTML(j.state)}"><strong>${{queued:"W kolejce",running:"Agent pracuje…",failed:"Błąd odpowiedzi",interrupted:"Przerwana odpowiedź"}[j.state] || escapeHTML(j.state)}</strong> · ${escapeHTML(j.channel || "")} · ${escapeHTML(j.created_at || "")} · ${escapeHTML(j.payload.text.slice(0,100))}${j.response ? `<div>${escapeHTML(j.response)}</div>` : ""}${terminal(j) ? `<button type="button" data-dismiss-job="${escapeHTML(j.request_id)}">Ukryj w tej przeglądarce</button><small>Ukrywa tylko tę kartę. Historia pozostaje; operacja nie zostanie ponowiona.</small>` : ""}</div>`
+  ).join("");
+}

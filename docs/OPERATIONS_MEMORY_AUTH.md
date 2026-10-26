@@ -77,12 +77,36 @@ zablokować. Brak rozpoznania dowolnego nazwiska nie dowodzi braku PII.
 NOWE zdjęcia do modelu wymagają osobnego, jawnego `K90_ALLOW_MODEL_IMAGES=true`
 ustawionego przez właściciela; domyślnie pozostaje `false`. To zgoda na przesłanie,
 NIE anonimizacja obrazu/EXIF. Nie włącza zdjęć w HS.
+Właściciel odpowiada za widoczną treść zdjęcia: obraz jest wysyłany BEZ analizy
+PII i anonimizacji. Nie ma OCR, rozpoznawania danych w obrazie ani usuwania EXIF.
+Tylko tekst podlega podstawowym regułom regex (sekrety, e-mail, telefon, PESEL,
+skonfigurowane redakcje); zwykły kontekst posiłków i zdrowia pozostaje dozwolony.
+Dokładnie rozpoznane koperty `image_url`/`input_image`, po walidacji base64,
+sygnatury PNG/JPEG/WebP, zgodności MIME, rozmiaru i budżetu, zachowują dane
+obrazu bajt w bajt: base64 nie przechodzi tekstowego skanowania ani zamian regex.
+Limit techniczny jednego obrazu wynosi dokładnie 5 000 000 bajtów po rozkodowaniu base64,
+zgodnie z wejściem HTTP/Telegram; suma obrazów w jednym przejściu polityki ma limit
+10 000 000 bajtów (również dla wielokrotnych wystąpień tego samego obrazu).
+Domyślne `K90_OUTBOUND_MAX_CHARS=2000000` dotyczy tekstu, kluczy i metadanych,
+nie poprawnie rozpoznanych URI obrazów. URL zdalny i URI w prozie nadal są tekstem.
+Kodowany JSON zachowuje kumulatywną kontrolę tekstu surowego i rozkodowanego;
+wyłącznie zwalidowane URI obrazów są odejmowane na każdej warstwie kodowania.
+Przed parsowaniem limit pojedynczego surowego JSON wynosi budżet tekstu plus
+13 337 432 znaki przy dozwolonych obrazach (15 337 432 domyślnie), a suma długości
+parsowanych warstw ma niezależny limit 32 000 000 znaków. Dodatkowy zapas nie
+uprawnia do wysłania dużego tekstu ani wadliwego JSON. Pozostają limity 100 000
+węzłów i domyślnie 40 poziomów, zgoda oraz ograniczenia local-only/sekretów.
+Bez zgody na obrazy zapas parsowania nie jest dostępny; HS pozostaje tekstowy.
+Sygnatura to kontrola techniczna, nie pełna walidacja pliku ani jego treści.
+URL zdalny, tekst z URI i inne pola nie otrzymują tego wyjątku. Nieznane koperty,
+dodatkowe pola w części obrazu i niejednoznaczny JSON pozostają blokowane.
 Rozpoznane części `image_url` w krótkiej historii są zawsze zastępowane tekstem
 `[Historical image omitted]`, także przy `true`. Bezpieczny tekst, wcześniejsza
 analiza asystenta i późniejsze doprecyzowania pozostają w kontekście; domyślna
-głębokość `HISTORY_MESSAGES` nie zmienia się. Pełny oryginał przechodzi kontrolę
-sekretów i ograniczeń (także metadanych i kodowanego JSON) przed pominięciem
-obrazu; nieznane załączniki i niejednoznaczne zapisy nadal blokują wysyłkę.
+głębokość `HISTORY_MESSAGES` nie zmienia się. Struktura oryginału i jego pola
+tekstowe przechodzą kontrolę sekretów i ograniczeń (także metadanych i kodowanego
+JSON) przed pominięciem obrazu; rozpoznane dane obrazu nie są skanowane jak tekst.
+Nieznane załączniki i niejednoznaczne zapisy nadal blokują wysyłkę.
 Oryginały lokalne nie są zmieniane. Nie analizujemy automatycznie archiwum ani
 nie wywołujemy dodatkowego modelu. Stare zdjęcie bez opisu pozostaje bez opisu.
 Rozpoznanie posiłku wymaga ustalenia porcji/przygotowania; ta zmiana nie zapisuje

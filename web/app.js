@@ -1,6 +1,8 @@
 "use strict";
 import {
   escapeHTML,
+  createJobDismissals,
+  renderJobs,
   number,
   markdown,
   chart,
@@ -225,6 +227,15 @@ $("#meal-date").onchange = () => {
   if (input.value && input.checkValidity()) loadMeals(input.value);
   else if (mealView) input.value = mealView.date;
 };
+let jobDismissals;
+function getJobDismissals() {
+  if (!jobDismissals) {
+    let storage;
+    try { storage = window.localStorage; } catch {}
+    jobDismissals = createJobDismissals(storage);
+  }
+  return jobDismissals;
+}
 async function loadChat(before = null) {
   const [messages, jobs] = await Promise.all([api(`/api/messages${before?`?before=${before}`:""}`), api("/api/jobs")]);
   if (!session) return;
@@ -240,7 +251,16 @@ async function loadChat(before = null) {
     else if (atBottom) box.scrollTop = box.scrollHeight;
   }
   if (before || history.size <= 50) $("#older-messages").hidden = messages.length < 50;
-  $("#jobs").innerHTML = jobs.map(j => `<div class="job ${j.state}"><strong>${{queued:"W kolejce",running:"Agent pracuje…",failed:"Błąd odpowiedzi",interrupted:"Przerwana odpowiedź"}[j.state]||j.state}</strong> · ${escapeHTML(j.payload.text.slice(0,100))}${j.response?`<div>${escapeHTML(j.response)}</div>`:""}</div>`).join("");
+  const dismissed = getJobDismissals();
+  const render = () => {
+    $("#jobs").innerHTML = renderJobs(jobs, dismissed);
+    $$("[data-dismiss-job]").forEach(button => button.addEventListener("click", () => {
+      const job = jobs.find(j => j.request_id === button.dataset.dismissJob);
+      if (job) dismissed.dismiss(job);
+      render();
+    }));
+  };
+  render();
 }
 async function loadTable() {
   const request = ++tableRequest;

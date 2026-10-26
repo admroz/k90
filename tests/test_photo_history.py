@@ -10,7 +10,7 @@ from tools.db import get_conn
 
 
 PHOTO = [{'type': 'text', 'text': 'Synthetic millet lunch'},
-         {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,c3ludGhldGlj'}}]
+         {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,iVBORw0KGgpzeW50aGV0aWM='}}]
 
 
 @pytest.mark.parametrize('part', [
@@ -93,6 +93,8 @@ def test_ambiguous_or_arbitrary_history_stays_blocked(temp_db, monkeypatch, raw)
 @pytest.mark.parametrize('memory', ['local', 'hindsight'])
 @pytest.mark.parametrize('followup_consent', ['false', 'true'])
 def test_real_agent_upload_then_text_followup(temp_db, monkeypatch, auth, memory, followup_consent):
+    photo = [PHOTO[0], {'type': 'image_url', 'image_url': {
+        'url': 'data:image/png;base64,iVBORw0KGgoA' + '12345678901/' * 43688}}]
     import memory_runtime as runtime
     import subscription_api
     import subscription_auth
@@ -155,8 +157,8 @@ def test_real_agent_upload_then_text_followup(temp_db, monkeypatch, auth, memory
         monkeypatch.setenv('K90_HINDSIGHT_ALLOW_UNAUTHENTICATED', 'true')
         monkeypatch.setattr(runtime, '_transport', lambda token: hs_transport)
 
-    assert agent.run_agent(PHOTO, 'synthetic-owner') == (answer, False)
-    assert 'data:image/png;base64,c3ludGhldGlj' in json.dumps(sent[0])
+    assert agent.run_agent(photo, 'synthetic-owner') == (answer, False)
+    assert photo[1]['image_url']['url'] in json.dumps(sent[0])
     if memory == 'hindsight':
         assert runtime.run_pending(limit=20) == 2
         assert indexed
@@ -169,9 +171,9 @@ def test_real_agent_upload_then_text_followup(temp_db, monkeypatch, auth, memory
     assert 'image_url' not in followup and 'input_image' not in followup and 'base64' not in followup
     assert 'base64' not in json.dumps(hs_sent) and 'image_url' not in json.dumps(hs_sent)
     with get_conn() as conn:
-        assert json.loads(conn.execute('SELECT content FROM conversations ORDER BY id LIMIT 1').fetchone()[0]) == PHOTO
+        assert json.loads(conn.execute('SELECT content FROM conversations ORDER BY id LIMIT 1').fetchone()[0]) == photo
         assert conn.execute('SELECT count(*) FROM posilki').fetchone()[0] == 0
-        assert json.loads(conn.execute("SELECT payload FROM agent_events WHERE kind='incoming' ORDER BY id LIMIT 1").fetchone()[0]) == PHOTO
+        assert json.loads(conn.execute("SELECT payload FROM agent_events WHERE kind='incoming' ORDER BY id LIMIT 1").fetchone()[0]) == photo
 
 
 @pytest.mark.parametrize('auth', ['api', 'responses', 'chatgpt'])
@@ -190,3 +192,21 @@ def test_new_photo_still_requires_consent(temp_db, monkeypatch, auth):
     monkeypatch.setattr(subscription_auth, 'TokenStore', lambda *a: SimpleNamespace(access_token=forbidden))
     with pytest.raises(PrivacyError):
         agent.run_agent(PHOTO, 'synthetic-owner')
+
+
+def test_preparation_and_provider_phase_logs_are_content_free(temp_db, monkeypatch, caplog):
+    import logging
+    import memory_runtime
+    monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+    monkeypatch.setattr(agent, 'MODEL', 'synthetic')
+    monkeypatch.setattr(memory_runtime, 'start_worker', lambda: None)
+    monkeypatch.setattr(agent, '_build_system_message', lambda: ('synthetic-private-system', {}))
+    message = SimpleNamespace(content='ok', tool_calls=[],
+                              model_dump=lambda **kw: {'role': 'assistant', 'content': 'ok'})
+    monkeypatch.setattr(agent.litellm, 'completion',
+                        lambda **kw: SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None))
+    with caplog.at_level(logging.INFO):
+        agent.run_agent('synthetic-private-input', 'synthetic-owner')
+    for stage in ('begin', 'history', 'context', 'recall', 'provider'):
+        assert any(r.getMessage().startswith('agent.phase stage=' + stage + ' ') for r in caplog.records)
+    assert 'synthetic-private' not in caplog.text

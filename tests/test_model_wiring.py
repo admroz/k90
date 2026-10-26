@@ -103,7 +103,7 @@ def test_images_are_blocked_without_explicit_model_consent(monkeypatch):
     import responses_api
     monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES','false')
     monkeypatch.setattr(responses_api,'OpenAI',lambda **kw:pytest.fail('blocked image reached SDK'))
-    image=[{'type':'image_url','image_url':{'url':'data:image/png;base64,c3ludGhldGlj'}}]
+    image=[{'type':'image_url','image_url':{'url':'data:image/png;base64,iVBORw0KGgpzeW50aGV0aWM='}}]
     with pytest.raises(PrivacyError):
         responses_api.ResponsesConversation('gpt-6.1-sol',[{'role':'user','content':image}]).complete()
 
