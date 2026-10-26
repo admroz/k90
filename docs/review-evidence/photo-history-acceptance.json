@@ -1,0 +1,89 @@
+{
+  "commit": "b8091b7a03ac2de7010d7a1408eb44a3f09d24d9",
+  "verdict": "PASS",
+  "scope": [
+    "photo_history",
+    "outbound_privacy",
+    "hindsight_integration",
+    "subscription_adapter",
+    "regression"
+  ],
+  "tests": [
+    {
+      "command": "env -i HOME=/opt/data/cache/scratch/k90-verification-20261025/coordinator-final/home DB_PATH=/opt/data/cache/scratch/k90-verification-20261025/coordinator-final/data/test.db DATA_DIR=/opt/data/cache/scratch/k90-verification-20261025/coordinator-final/data K90_CHATGPT_STATE_DIR=/opt/data/cache/scratch/k90-verification-20261025/coordinator-final/auth PYTHON_DOTENV_DISABLED=1 PYTHONPATH=/opt/data/cache/scratch/k90-verification-20261025:. PATH=/usr/local/bin:/usr/bin:/bin TMPDIR=/opt/data/cache/scratch/k90-verification-20261025/coordinator-final/tmp /opt/data/projects/k90/.venv/bin/python -m pytest -q -ra /opt/data/jobs/k90-photo-history/review-resumed-probes.py tests --basetemp=/opt/data/cache/scratch/k90-verification-20261025/coordinator-final/pytest",
+      "exit_code": 0,
+      "result": "561 passed, 1 skipped; 482 repository tests + 79 independent probes",
+      "evidence": "docs/review-evidence/photo-history-coordinator-final-python.log"
+    },
+    {
+      "command": "node --check web/app.js",
+      "exit_code": 0,
+      "evidence": "docs/review-evidence/photo-history-coordinator-final-node.log"
+    },
+    {
+      "command": "node --test tests/web_*.test.mjs",
+      "exit_code": 0,
+      "result": "21 passed",
+      "evidence": "docs/review-evidence/photo-history-coordinator-final-frontend.log"
+    }
+  ],
+  "remaining_gates": [],
+  "independent_review": "docs/review-evidence/photo-history-independent.json",
+  "independent_original_report": "docs/review-evidence/photo-history-review-resumed.json",
+  "reproducible_probe": "docs/review-evidence/photo-history-review-resumed-probes.py",
+  "reproduction_note": "Run the copied independent probe at its docs path with the same env -i and a fresh scratch basetemp. Historical execution paths in the original report are preserved deliberately. Raw XML includes only synthetic fixture identifiers.",
+  "acceptance_details": {
+    "photo_history": {
+      "status": "PASS",
+      "evidence": [
+        "/opt/data/jobs/k90-photo-history/review-resumed-full.log",
+        "/opt/data/jobs/k90-photo-history/review-resumed-full.xml",
+        "/opt/data/jobs/k90-photo-history/review-resumed-audit.json"
+      ],
+      "observed": "49 photo_history cases passed, including all 12 actual run_agent upload/followup combinations: API/Responses/subscription x local/Hindsight synthetic transport x false/true followup consent. New image sent only with opt-in; old images absent on followup, caption/prior assistant interpretation/correction retained; original conversations and incoming events unchanged; no automatic meal rows. Independent history-window test confirms same bounded ordering for local/disabled/Hindsight."
+    },
+    "outbound_privacy": {
+      "status": "PASS",
+      "evidence": [
+        "/opt/data/jobs/k90-photo-history/review-resumed-full.xml",
+        "/opt/data/jobs/k90-photo-history/review-resumed-probes-final.log",
+        "/opt/data/jobs/k90-photo-history/review-resumed-probes-final.xml"
+      ],
+      "observed": "Full regression includes outbound_policy (3), privacy_composition (106), privacy_json_boundary (20), memory_privacy (14). Added independent actual-agent cases reject unknown attachments, malformed text, local-only/encoded secret metadata, secret URL, invalid image detail, nested encoded local-only, duplicate JSON; no provider/token boundary calls and stored originals preserved. Missing, false or invalid new-image consent rejected in every model mode. Safe projected text is redacted without changing original. Full-original walk precedes omission and final image-denying filter remains in place."
+    },
+    "hindsight_integration": {
+      "status": "PASS",
+      "qualification": "Actual local adapter code and application paths with synthetic transport, NOT live production topology",
+      "evidence": [
+        "/opt/data/jobs/k90-photo-history/review-resumed-full.xml",
+        "/opt/data/jobs/k90-photo-history/review-resumed-probes-final.xml"
+      ],
+      "observed": "Actual HindsightBackend retain/recall invoked by run_agent/memory_runtime matrix, real worker run_pending with synthetic transport and image-free indexed text; backend (10), worker (10), app_memory (7), memory_acceptance (3) passed. Additional independent adapter probe explicitly passes allow_images=True and verifies both retain and recall reject image JSON before transport. Worker and adapter retain independent baseline image denial; local owner/version hydration and privacy guards unchanged."
+    },
+    "subscription_adapter": {
+      "status": "PASS",
+      "evidence": [
+        "/opt/data/jobs/k90-photo-history/review-resumed-full.xml",
+        "/opt/data/jobs/k90-photo-history/review-resumed-probes-final.xml"
+      ],
+      "observed": "Actual SubscriptionConversation photo matrix and adversarial run_agent boundary checks passed; subscription_api (3), auth (11), host_identity (26), login (5), protocol (5) passed. Stable UUIDv4 URN initialization; migration only canonical bare UUIDv4 in host_id-only registration without any credentials filesystem entry, including dangling symlink. Bound/unknown metadata and missing registration with credentials fail closed; no credential content read by initializer. Existing alternate IDs preserved. OAuth validation, explicit credits confirmation, tool namespace/schema and no API fallback guards unchanged."
+    },
+    "regression": {
+      "status": "PASS",
+      "evidence": [
+        "/opt/data/jobs/k90-photo-history/review-resumed-full.log",
+        "/opt/data/jobs/k90-photo-history/review-resumed-full.xml",
+        "/opt/data/jobs/k90-photo-history/review-resumed-frontend.log",
+        "/opt/data/jobs/k90-photo-history/review-resumed-node-check.log"
+      ],
+      "observed": "482 passed, 1 skipped in 111.83s; sole skip tests/test_imported_data.py:17, No local import selected. Frontend 21 passed, zero failures/skips. node syntax check exit 0. Not a claim about a deployed container or live model output."
+    }
+  },
+  "separate_delivery_gates": "Fork container workflow and exact PR read-back are separately recorded in task pr-verification.json and final delivery report. They are not silently covered by this offline acceptance.",
+  "deferred_live_checks": [
+    "Owner-only live new-photo SIWC/model recognition and portion/preparation followup",
+    "Owner-topology live Hindsight retain/recall and authorization",
+    "Owner merge, image publication, backup/deployment/rollback smoke"
+  ],
+  "limitations": "Synthetic transport proves application/adapter integration, not live service or model recognition accuracy. Images remain forbidden to HS; historical originals remain local and unchanged. Privacy filtering is not complete anonymization."
+}

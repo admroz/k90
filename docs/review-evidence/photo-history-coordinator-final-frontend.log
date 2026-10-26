@@ -1,0 +1,29 @@
+✔ Meal navigation defaults to today and retains the selected day when charts refresh (42.046103ms)
+✔ An older response cannot overwrite the most recently requested meal day (5.442443ms)
+✔ Failed navigation preserves the previous day's date and totals and allows retry (3.792916ms)
+✔ Recovery and activity tabs load their functional charts without changing meal dates (4.319213ms)
+✔ Markdown escapes HTML and never activates links or images (5.738186ms)
+✔ Markdown renders tables, numbered lists and closed code fences (0.511704ms)
+✔ Missing measurements are not charted as zero (0.588711ms)
+✔ One point and constant measurements have finite coordinates (21.769617ms)
+✔ Long gaps split the line instead of interpolating absent days (0.805882ms)
+✔ SQLite UTC timestamps and explicit timezone offsets display consistently (5.668426ms)
+✔ Daily meal list includes every meal and escapes descriptions (1.304778ms)
+✔ Meal summary flags partial sums and preserves unknown and zero values (0.632157ms)
+✔ Meal date labels use calendar days across year and daylight-saving boundaries (1.125063ms)
+✔ Energy balance preserves positive, negative, zero and unknown values (1.280871ms)
+✔ Native UUIDs keep the web request namespace (1.165758ms)
+✔ LAN HTTP creates unique UUIDv4 IDs without randomUUID (6.668146ms)
+✔ UUID fallback sets the version and variant for any random bytes (0.332785ms)
+✔ Chat sends over HTTP and retries the same message with the same ID (11.065951ms)
+✔ Garmin button uses the data-only endpoint and refreshes the selected meal day on completion (29.726741ms)
+✔ Retry after an uncertain POST reuses the same sync request ID (4.384288ms)
+✔ A stale status response cannot clear a newly started sync (2.378263ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 215.963585
