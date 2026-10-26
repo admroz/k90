@@ -1,6 +1,13 @@
 # Image history performance and dismissible failure cards
 
 Base: upstream/main at 5f90fec (PR13 included). Branch: fix/image-history-performance.
+
+Owner steering follow-up: the measurements and implementation below describe
+0901b09. Its binary-as-text filtering is superseded by
+[image-opaque.md](image-opaque.md): validated image bytes now bypass all text
+regex scanning/substitution, without image PII analysis or anonymization.
+Text checks, local originals, historical omission, HS text-only behavior,
+phase logs and UI dismissal remain. Original measurements are retained.
 Executor: Codex CLI, source interpreter /opt/data/projects/k90/.venv/bin/python.
 Synthetic data only; no application inference, real images, production reads,
 provider calls, HS writes, Docker access, configuration tuning, push or deployment.

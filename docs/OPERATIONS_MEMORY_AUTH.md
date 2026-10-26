@@ -77,12 +77,23 @@ zablokować. Brak rozpoznania dowolnego nazwiska nie dowodzi braku PII.
 NOWE zdjęcia do modelu wymagają osobnego, jawnego `K90_ALLOW_MODEL_IMAGES=true`
 ustawionego przez właściciela; domyślnie pozostaje `false`. To zgoda na przesłanie,
 NIE anonimizacja obrazu/EXIF. Nie włącza zdjęć w HS.
+Właściciel odpowiada za widoczną treść zdjęcia: obraz jest wysyłany BEZ analizy
+PII i anonimizacji. Nie ma OCR, rozpoznawania danych w obrazie ani usuwania EXIF.
+Tylko tekst podlega podstawowym regułom regex (sekrety, e-mail, telefon, PESEL,
+skonfigurowane redakcje); zwykły kontekst posiłków i zdrowia pozostaje dozwolony.
+Dokładnie rozpoznane koperty `image_url`/`input_image`, po walidacji base64,
+sygnatury PNG/JPEG/WebP, zgodności MIME, rozmiaru i budżetu, zachowują dane
+obrazu bajt w bajt: base64 nie przechodzi tekstowego skanowania ani zamian regex.
+Sygnatura to kontrola techniczna, nie pełna walidacja pliku ani jego treści.
+URL zdalny, tekst z URI i inne pola nie otrzymują tego wyjątku. Nieznane koperty,
+dodatkowe pola w części obrazu i niejednoznaczny JSON pozostają blokowane.
 Rozpoznane części `image_url` w krótkiej historii są zawsze zastępowane tekstem
 `[Historical image omitted]`, także przy `true`. Bezpieczny tekst, wcześniejsza
 analiza asystenta i późniejsze doprecyzowania pozostają w kontekście; domyślna
-głębokość `HISTORY_MESSAGES` nie zmienia się. Pełny oryginał przechodzi kontrolę
-sekretów i ograniczeń (także metadanych i kodowanego JSON) przed pominięciem
-obrazu; nieznane załączniki i niejednoznaczne zapisy nadal blokują wysyłkę.
+głębokość `HISTORY_MESSAGES` nie zmienia się. Struktura oryginału i jego pola
+tekstowe przechodzą kontrolę sekretów i ograniczeń (także metadanych i kodowanego
+JSON) przed pominięciem obrazu; rozpoznane dane obrazu nie są skanowane jak tekst.
+Nieznane załączniki i niejednoznaczne zapisy nadal blokują wysyłkę.
 Oryginały lokalne nie są zmieniane. Nie analizujemy automatycznie archiwum ani
 nie wywołujemy dodatkowego modelu. Stare zdjęcie bez opisu pozostaje bez opisu.
 Rozpoznanie posiłku wymaga ustalenia porcji/przygotowania; ta zmiana nie zapisuje

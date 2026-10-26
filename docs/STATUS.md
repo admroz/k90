@@ -1,5 +1,21 @@
 # k90 — bieżący status zadania
 
+## Opaque image owner steering — 2026-10-26
+
+Branch fix/image-history-performance, tested source
+fd515d97c0a27b11e46e647e6a69ed5f4842cdc3 (parent 0901b09).
+Owner-approved image bytes bypass text regex scans/substitutions after strict
+envelope/base64/signature/MIME/size/budget validation. No image PII analysis,
+anonymization or OCR; text protection, consent, original persistence, historical
+omission, HS text-only policy, phase logs and UI dismissal preserved.
+534 Python passed / 1 existing skip (129.52s); privacy matrix + extra probes
+166 passed / 1 existing warning (24.53s); adapted photo probes 79 passed (48.96s);
+frontend 24 passed, JS syntax and diff checks PASS. Quota 08:17:07Z 58% / 9%.
+Single writer, synthetic offline verification only; no push/PR/deployment.
+Ready for coordinator's independent review and actual-image CI after exit.
+Evidence: [image-opaque.md](review-evidence/image-opaque.md).
+The older image-performance entry below describes its preserved parent stage.
+
 ## Image performance checkout — 2026-10-26
 
 Branch fix/image-history-performance, base 5f90fec (PR13). Local implementation

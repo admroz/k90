@@ -1,5 +1,35 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+## 2026-10-26 — owner-approved opaque image follow-up
+
+Worktree /opt/data/projects/k90-image-performance, branch fix/image-history-performance.
+Tested source fd515d97c0a27b11e46e647e6a69ed5f4842cdc3; parent 0901b09.
+Initial clean worktree and free writer flock confirmed; after capacity interruption
+changes preserved and lock reacquired without conflict. Only this run writes source.
+Implementation: k90_memory/privacy.py, outbound_policy.py, new opaque tests and
+six updated signature-bearing synthetic test fixtures. No old assertions weakened.
+Docs: README, OPERATIONS_MEMORY_AUTH and evidence clarify no image PII analysis,
+no anonymization/OCR/EXIF removal and no binary-as-text scanning/substitution.
+Text basic regex rules and structural/local-only restrictions remain; originals
+local, new vision consent required, history never replays images, HS text-only.
+Prior UI dismissal and phase instrumentation unchanged.
+
+TDD RED: 14 failures / 3 passes before implementation (0.15s); format hardening
+RED: 3 failures / 39 deselected (0.08s). Final full Python 534 passed / 1 existing
+skip (129.52s); privacy matrix + extra probes 166 passed / 1 existing warning
+(24.53s); signature-adapted historical probes 79 passed (48.96s); frontend 24 PASS
+(329.70ms), JS syntax PASS, diff checks PASS. Exact commands, wrapper, logs and
+timings: [image-opaque.md](review-evidence/image-opaque.md).
+All Python uses actual app venv + env -i synthetic HOME/DATA/DB/auth under
+/opt/data/cache/scratch/k90-verification-20261025/image-opaque/, dotenv disabled,
+supplied privacy/network guard enabled. No production data/credentials, provider
+inference, HS writes or local Docker access. Large random signature-bearing
+524288-character base64: current 0.003049–0.003180s, history 0.014817–0.015076s.
+1.5 MiB history intentionally blocked by unchanged cumulative 2M character budget.
+Quota final verification 08:17:07Z: session 58%, weekly 9%, no pause/reset/fallback.
+No source blocker. Coordinator gates after exit: independent review, actual-image
+CI and PR decision. No push/PR/merge/deployment performed.
+
 ## 2026-10-26 — image history performance checkout
 
 Branch fix/image-history-performance, base 5f90fec. Parent regression RED before
