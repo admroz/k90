@@ -1,5 +1,18 @@
 # k90 — bieżący status zadania
 
+## Chat scroll anchor — 2026-10-26
+
+Branch fix/chat-scroll-anchor; author implementation and real Chromium acceptance
+PASS on synthetic desktop/narrow history. Behavioral RED captured before source
+change: Enter exposed older history with10128px bottom gap before animated
+recovery. Instant restoration plus stable visible-message anchor gives0px maximum
+gap across Enter and polling/status frames. Reading/prepend/reload/attachment and
+submission behavior PASS. Frontend23 PASS; offline Python594 PASS/1 existing skip,
+web subset58 PASS. Branch-only WIP checkpoints pushed, no PR/merge/deployment.
+Coordinator independent review and actual image CI remain separate gates.
+Evidence: [chat-scroll-anchor.md](review-evidence/chat-scroll-anchor.md).
+
+
 ## CI SQLite correction — 2026-10-26
 
 Feature branch feat/chat-timeline-profiling, base bd73eb9; uncommitted correction

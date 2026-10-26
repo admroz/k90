@@ -242,14 +242,23 @@ async function loadChat(before = null) {
   }
   const box = $("#messages"),
     atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  const oldTop = box.scrollTop;
+  const anchor = [...box.children].find(node => node.getBoundingClientRect().bottom > box.getBoundingClientRect().top);
+  const anchorId = anchor?.dataset.messageId;
+  const anchorTop = anchor?.getBoundingClientRect().top;
   messages.forEach(m => history.set(m.id, m));
   const sorted = [...history.values()].sort((a, b) => a.id - b.id);
   const html = renderTimeline(sorted, session.timezone);
   if (box.innerHTML !== html) {
     const oldHeight = box.scrollHeight;
     box.innerHTML = html;
-    if (before) box.scrollTop += box.scrollHeight - oldHeight;
-    else if (atBottom) box.scrollTop = box.scrollHeight;
+    const restoredAnchor = anchorId && [...box.children].find(node => node.dataset.messageId === anchorId);
+    // Replacing the list can reset/clamp its scroll offset. Restore within this
+    // layout turn: CSS smooth scrolling would paint the wrong history first.
+    const top = !before && atBottom ? box.scrollHeight : restoredAnchor
+      ? box.scrollTop + restoredAnchor.getBoundingClientRect().top - anchorTop
+      : before ? oldTop + box.scrollHeight - oldHeight : oldTop;
+    box.scrollTo({top, behavior: "instant"});
   }
   if (before || history.size <= 50) $("#older-messages").hidden = messages.length < 50;
   $("#jobs").innerHTML = "";
