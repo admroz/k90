@@ -118,14 +118,14 @@ def test_images_and_existing_history_work_with_prefixed_model(mock_api, agent_co
     monkeypatch.setenv("K90_ALLOW_MODEL_IMAGES", "true")
     monkeypatch.setattr(agent, "MODEL", "openai/gpt-6.1-sol")
     image = [{"type": "text", "text": "Posiłek"},
-             {"type": "image_url", "image_url": {"url": "data:image/png;base64,dGVzdA==", "detail": "low"}}]
+             {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgpzeW50aGV0aWM=", "detail": "low"}}]
     original = deepcopy(image)
     agent.save_history("test", image, "Poprzedni posiłek.")
     requests = mock_api([response([message()])])
 
     assert agent.run_agent(image, "test") == ("Gotowe.", False)
     expected = [{"type": "input_text", "text": "Posiłek"},
-                {"type": "input_image", "image_url": "data:image/png;base64,dGVzdA==", "detail": "low"}]
+                {"type": "input_image", "image_url": "data:image/png;base64,iVBORw0KGgpzeW50aGV0aWM=", "detail": "low"}]
     # Live consent never grants historical replay; only the current upload is sent.
     projected = [image[0], {"type": "text", "text": "[Historical image omitted]"}]
     assert requests[0]["input"][1]["content"] == [

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_historical_image_projection_is_bounded_for_realistic_base64(size):
     program = '''import json
 from outbound_policy import project_history
-raw = json.dumps([{"type":"text","text":"Synthetic meal"}, {"type":"image_url","image_url":{"url":"data:image/png;base64," + "A" * 131072}}])
+raw = json.dumps([{"type":"text","text":"Synthetic meal"}, {"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgoA" + "A" * 131072}}])
 result = project_history(raw)
 assert result == [{"type":"text","text":"Synthetic meal"}, {"type":"text","text":"[Historical image omitted]"}]
 '''

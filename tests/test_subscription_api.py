@@ -84,7 +84,7 @@ def test_subscription_image_parts_and_catalog_allowlist():
         return {'status':'completed','output':[]}
     convo=adapter.SubscriptionConversation('demo-model',[{'role':'user','content':[
         {'type':'text','text':'Synthetic shapes'},
-        {'type':'image_url','image_url':{'url':'data:image/png;base64,c3ludGhldGlj'}}]}],
+        {'type':'image_url','image_url':{'url':'data:image/png;base64,iVBORw0KGgpzeW50aGV0aWM='}}]}],
         token_store=Tokens(),policy=Policy(),request=request)
     convo.complete()
     assert requests[0]['input'][0]['content'][1]['type']=='input_image'

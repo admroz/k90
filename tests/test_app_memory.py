@@ -10,7 +10,7 @@ from tools.db import get_conn
 def test_incoming_original_and_outbox_commit_before_any_model_request(temp_db):
     runtime=importlib.import_module('memory_runtime')
     raw=[{'type':'text','text':'Synthetic grain preference'},
-         {'type':'image_url','image_url':{'url':'data:image/png;base64,c3ludGhldGlj'}}]
+         {'type':'image_url','image_url':{'url':'data:image/png;base64,iVBORw0KGgpzeW50aGV0aWM='}}]
     turn=runtime.begin_turn('synthetic-owner',raw)
     with get_conn() as conn:
         event=conn.execute('SELECT payload FROM agent_events WHERE id=?',(turn['user_event_id'],)).fetchone()

@@ -10,7 +10,7 @@ from tools.db import get_conn
 
 
 PHOTO = [{'type': 'text', 'text': 'Synthetic millet lunch'},
-         {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,c3ludGhldGlj'}}]
+         {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,iVBORw0KGgpzeW50aGV0aWM='}}]
 
 
 @pytest.mark.parametrize('part', [
@@ -94,7 +94,7 @@ def test_ambiguous_or_arbitrary_history_stays_blocked(temp_db, monkeypatch, raw)
 @pytest.mark.parametrize('followup_consent', ['false', 'true'])
 def test_real_agent_upload_then_text_followup(temp_db, monkeypatch, auth, memory, followup_consent):
     photo = [PHOTO[0], {'type': 'image_url', 'image_url': {
-        'url': 'data:image/png;base64,' + 'A' * 524288}}]
+        'url': 'data:image/png;base64,iVBORw0KGgoA' + '12345678901/' * 43688}}]
     import memory_runtime as runtime
     import subscription_api
     import subscription_auth
