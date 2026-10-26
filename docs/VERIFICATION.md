@@ -1067,6 +1067,32 @@ koordynator sprawdza quota, pełną regresję i świeży niezależny review immu
 commita korekty. Brak push/PR, produkcji i testów live; kontroler bez zmian.
 
 
+## Local nutrition catalog — 2026-10-26
+
+Author verification on89467c68238a16e9ba5a0a3df01f9e3db7a012e0:
+643 Python passed/1 existing optional-import skip192.97s; frontend25PASS,
+app.js/catalog.mjs syntaxPASS. Fresh Chromium create/review/confirmation/portion
+96kcal/reload/XSS inert and separate SQLite backup/restore/photo/ml-portion
+probePASS. Synthetic provider with actual HTTP queue/default dispatcher only.
+Quota77%/26%; no production/live vision, actual image execution or final review claim.
+Exact evidence and remaining gates: [product-catalog.md](review-evidence/product-catalog.md).
+Workflow/backup/rollout: [PRODUCT_CATALOG.md](PRODUCT_CATALOG.md).
+Private task CHECKPOINT/result retain exact env-i commands, RED/GREEN logs,
+branch inventory and remote SHA readbacks. Parent owns final review/Actions/PR.
+
+### Final coordinator review — 2026-10-26
+
+Tested/reviewed source `2df48534b97f8d74d6aefb6ed8684b4ccad51292`.
+Fresh independent combined review PASS after reproduced OFF energy/cache FAIL
+and strict TDD fix (4 RED →33 focused GREEN). Coordinator full suite661PASS/
+1existing optional-import skip196.46s; frontend25PASS, both syntaxPASS;
+unchanged original+adjacent adversarial probes31PASS and real HTTP probePASS.
+Real Chromium and actual separate SQLite API backup/restorePASS on isolated
+synthetic data. No live vision/OAuth/production claims. Exact final-head fork
+image/CI and new upstream PR CI are separate gates: read PR description/checks.
+The older author results above remain historical, not the final acceptance.
+
+
 ## 2026-10-26 — visible chat scroll correction
 
 Single writer, branch `fix/chat-scroll-anchor`, baseline `69fb626`, application
@@ -1082,3 +1108,20 @@ No production/backend/HS/auth access or changes, PR, merge, deployment, provider
 changes, resets or paid fallback. Quota14%/16% at15:44:09Z, stop80% any/unknown.
 Private CHECKPOINT/result retain final exact HEAD/remote and immutable evidence.
 Next: coordinator independent review and actual image/PR CI.
+
+
+## 2026-10-26 — feature-only base synchronization
+
+Merge parents: catalog `3be6b1395133ed006caece859a5b058ed215b4d7` and upstream
+`79ee22a67687341e65fc02d8193d2b41977dd2d9`; original common base `69fb626`.
+Only STATUS/VERIFICATION required manual conflict resolution; both historical
+sections retained. Source and regression tests merged without manual edits.
+Earlier independent PASS `2df4853` and fork CI `3be6b139` remain historical only.
+Fresh integrated-source independent review and full CI remain coordinator gates;
+no PR_READY claim. Exact local commands/results and final merge SHA are recorded
+outside Git in task `phases/integrate-base-1/result.json` and `final.md`.
+No push, upstream/main write, PR17 merge, image publication or deployment.
+Local integrated-tree verification: isolated env-i offline Python661 PASS /
+1 existing skip194.50s; Node25 PASS; app.js/catalog.mjs syntax PASS; diff check
+PASS. Parent-file preservation and exact upstream loadChat checks PASS.
+These are integration-writer checks, not fresh independent review or CI.

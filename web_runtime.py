@@ -225,6 +225,10 @@ def process_message(content):
 
     user_id = MESSAGE_CONTEXT.get().get('user_id', os.getenv("CONVERSATION_USER_ID", "owner"))
     text = content if isinstance(content, str) else ""
+    if text.startswith('/produkt zatwierdz '):
+        # run_agent captures the original and executes only the exact local
+        # approval command, before sync/summary or any model work.
+        return run_agent(content, user_id=user_id)[0]
     if (
         text.strip().lower().split()[:1] == ["/update"]
         and os.getenv("K90_SYNC_ENABLED", "true") == "false"

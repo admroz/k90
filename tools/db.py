@@ -165,6 +165,10 @@ def init_db():
             last_summary_refresh_at DATETIME
         );
     """)
+    from .food_catalog import initialize as initialize_food_catalog
+    initialize_food_catalog(conn)
+    from .food_off import initialize as initialize_food_external
+    initialize_food_external(conn)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(conversations)")}
     for name in ("channel", "request_id"):
         if name not in columns:

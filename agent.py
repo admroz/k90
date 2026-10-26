@@ -142,6 +142,11 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
         turn = memory_runtime.begin_turn(user_id, user_message)
     token = memory_runtime.TURN_CONTEXT.set(turn)
     try:
+        from tools.food_catalog import approval_command
+        approval = approval_command(user_message)
+        if approval is not None:
+            save_history(user_id, user_message, approval)
+            return approval, False
         memory_runtime.start_worker()
         return _run_agent(user_message, user_id)
     except BaseException as exc:
@@ -159,6 +164,8 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
     history = load_history(user_id)
     with _phase("context"):
         system, context_stats = _build_system_message()
+    from tools.food_catalog import CATALOG_PROMPT
+    system += '\n\n' + CATALOG_PROMPT
     turn = memory_runtime.TURN_CONTEXT.get() or {}
     recalled, memory_stats = memory_runtime.recall_context(user_id, user_message,
                                                         exclude=[turn.get('source_id')])
