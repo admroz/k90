@@ -1065,3 +1065,17 @@ Dokładne polecenia, oryginalny FAIL, logi i omyłkowy przebieg z konfliktem bas
 Quota końcowa 88% session/48% weekly, bez resetów/fallbacku. Kolejne kroki:
 koordynator sprawdza quota, pełną regresję i świeży niezależny review immutable
 commita korekty. Brak push/PR, produkcji i testów live; kontroler bez zmian.
+
+
+## Local nutrition catalog — 2026-10-26
+
+Author verification on89467c68238a16e9ba5a0a3df01f9e3db7a012e0:
+643 Python passed/1 existing optional-import skip192.97s; frontend25PASS,
+app.js/catalog.mjs syntaxPASS. Fresh Chromium create/review/confirmation/portion
+96kcal/reload/XSS inert and separate SQLite backup/restore/photo/ml-portion
+probePASS. Synthetic provider with actual HTTP queue/default dispatcher only.
+Quota77%/26%; no production/live vision, actual image execution or final review claim.
+Exact evidence and remaining gates: [product-catalog.md](review-evidence/product-catalog.md).
+Workflow/backup/rollout: [PRODUCT_CATALOG.md](PRODUCT_CATALOG.md).
+Private task CHECKPOINT/result retain exact env-i commands, RED/GREEN logs,
+branch inventory and remote SHA readbacks. Parent owns final review/Actions/PR.

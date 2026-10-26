@@ -1,5 +1,20 @@
 # k90 — bieżący status zadania
 
+## Own label nutrition catalog — 2026-10-26
+
+IMPLEMENTED for coordinator review; branch feat/local-food-catalog.
+Tested source89467c68238a16e9ba5a0a3df01f9e3db7a012e0.
+Persistent SQLite drafts/versions/photo references, explicit owner confirmation,
+authenticated catalog panel, local-first OFF backup and deterministic meal portions.
+Final isolated offline regression643 passed/1existing skip192.97s; Node25PASS,
+JS syntaxPASS; fresh real Chromium and separate backup/restore probePASS.
+Synthetic provider E2E uses actual HTTP queue/default dispatcher; no live vision claim.
+Read-only advisory review findings corrected through RED/GREEN. Final independent
+coordinator review and actual built-image Actions smoke remain pending, as does
+parent PR decision. No PR/merge/publication/deployment or production access.
+Quota17:21:02Z77%/26%. Evidence: [product-catalog.md](review-evidence/product-catalog.md).
+
+
 ## CI SQLite correction — 2026-10-26
 
 Feature branch feat/chat-timeline-profiling, base bd73eb9; uncommitted correction
