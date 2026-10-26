@@ -1,5 +1,24 @@
 # k90 — bieżący status zadania
 
+## Chat timeline, text filter and profiling — 2026-10-26
+
+Branch feat/chat-timeline-profiling; tested source `6d3e4b13750e637088e2711eb07cce4d3854cc81`.
+IMPLEMENTED — author verification complete; independent review is a later gate.
+Four self-reviewed source WIP commits pushed only to origin feature branch,
+remote SHA confirmed. Three vertical TDD slices: persistent request-linked
+conversation timeline, explicit model text-filter (default true), optional
+content-free stage profiling (default false). Final isolated offline Python:
+583 passed / 1 existing optional-import skip (136.90s). Frontend 23 PASS,
+JavaScript syntax and diff checks PASS. The full suite executes shipped-agent
+photo->text with a valid PNG over 95% of 5 MB and unchanged stored originals,
+and the exact new embedded container helper on HOST. Actual Docker build/CI
+is not claimed; independent review, actual image/CI and final PR stay with
+coordinator. No merge/deployment/provider/account changes or production access.
+Permanent quota stop is NOW >=80% in ANY window or unknown, superseding older
+90% policies below and in IMPLEMENTATION_PLAN. One writer throughout.
+Evidence: [chat_timeline_profiling.md](review-evidence/chat_timeline_profiling.md).
+Private CHECKPOINT/result retain final head, usage, commands and push readbacks.
+
 ## Container photo runtime acceptance — 2026-10-26
 
 Branch fix/image-history-performance, base 6739ffa. Added direct shipped run_agent

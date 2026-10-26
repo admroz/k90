@@ -1,5 +1,32 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+## 2026-10-26 — timeline, model text-filter switch and profiling
+
+Worktree /opt/data/projects/k90-observability, feat/chat-timeline-profiling.
+Tested source `6d3e4b13750e637088e2711eb07cce4d3854cc81`; later edits documentation only.
+Final isolated offline `python -m pytest -q`: **583 passed, 1 skipped**, 136.90s.
+Skip is existing K90_TEST_IMPORT opt-in (no local import selected).
+`node --check web/app.js` PASS; `node --test tests/web_*.test.mjs`:23 passed.
+`git diff --check` PASS. Three vertical RED/GREEN slices and focused follow-ups
+recorded in [implementation evidence](review-evidence/chat_timeline_profiling.md).
+
+Final Python command (all paths below are synthetic scratch):
+
+```sh
+env -i PATH=/usr/bin:/bin HOME=/opt/data/cache/scratch/k90-observability/home TMPDIR=/opt/data/cache/scratch/k90-observability/tmp DB_PATH=/opt/data/cache/scratch/k90-observability/test.db DATA_DIR=/opt/data/cache/scratch/k90-observability/data K90_CHATGPT_STATE_DIR=/opt/data/cache/scratch/k90-observability/auth PYTHON_DOTENV_DISABLED=1 PYTHONPATH=/opt/data/cache/scratch/k90-observability/guard /opt/data/projects/k90/.venv/bin/python -m pytest -q
+```
+
+Host execution includes actual shipped run_agent photo->text at >95% of 5 MB,
+unchanged stored originals, and embedded timeline/filter/profile runtime smoke.
+No actual Docker build/run or CI result claimed. New runtime module explicitly
+copied by Dockerfile. Independent review, built-image/CI verification and final PR
+are later coordinator gates; no merge or deployment. Production data/credentials,
+account/model/provider and existing service configuration remain untouched.
+Permanent stop >=80% ANY quota window or unknown supersedes historical 90% notes.
+Private task checkpoints contain all actual quota readings, WIP pushes/readbacks
+and logs; this record does not claim independent approval or live acceptance.
+
+
 ## 2026-10-26 — owner-approved opaque image follow-up
 
 Worktree /opt/data/projects/k90-image-performance, branch fix/image-history-performance.
