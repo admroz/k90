@@ -343,25 +343,19 @@ def create_app(*, start_worker=True, processor=None):
         before: int | None = Query(None, ge=1, le=2**63 - 1),
         limit: int = Query(50, ge=1, le=100),
     ):
-        with closing(get_conn()) as conn:
-            rows = conn.execute(
-                "SELECT * FROM conversations WHERE user_id = ? AND id < ? ORDER BY id DESC LIMIT ?",
-                (
-                    os.getenv("CONVERSATION_USER_ID", "owner"),
-                    before or 2**63 - 1,
-                    limit,
-                ),
-            ).fetchall()
+        from web_runtime import timeline
+        rows = timeline(os.getenv("CONVERSATION_USER_ID", "owner"), before, limit)
         return [
             {**dict(row), "content": web_data.history_content(row["content"])}
-            for row in reversed(rows)
+            for row in rows
         ]
 
     @app.get("/api/jobs", dependencies=[Depends(authenticated)])
     def jobs():
         with closing(get_conn()) as conn:
             rows = conn.execute(
-                "SELECT request_id, channel, payload, state, response, created_at FROM chat_jobs WHERE state != 'done' AND kind = 'message' ORDER BY seq DESC LIMIT 100"
+                "SELECT request_id, channel, payload, state, response, created_at FROM chat_jobs WHERE state != 'done' AND kind = 'message' AND user_id = ? ORDER BY seq DESC LIMIT 100",
+                (os.getenv("CONVERSATION_USER_ID", "owner"),),
             ).fetchall()
         return [
             {

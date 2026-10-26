@@ -23,6 +23,39 @@ def test_concurrent_retries_enqueue_once(runtime):
         assert conn.execute("SELECT COUNT(*) FROM chat_jobs").fetchone()[0] == 1
 
 
+def test_timeline_stable_states_pagination_and_ownership(runtime, monkeypatch):
+    from web_runtime import timeline
+    from agent import save_history
+
+    enqueue('web:first', 'identical')
+    enqueue('telegram:second', 'identical', 'telegram', 123)
+    initial = timeline('owner')
+    ids = [r['id'] for r in initial]
+    assert [r['content'] for r in initial if r['role'] == 'user'] == ['identical', 'identical']
+    assert [r['state'] for r in initial] == ['queued'] * 4
+    assert timeline('owner', ids[2], 2) == initial[:2]
+    assert timeline('other') == []
+
+    def processor(content):
+        assert timeline('owner')[1]['state'] == 'running'
+        save_history('owner', content, 'answer')
+        return 'answer'
+
+    ConversationWorker(processor).run_once()
+    assert [r['id'] for r in timeline('owner')] == ids
+    assert timeline('owner')[1]['content'] == 'answer'
+    assert timeline('owner')[1]['state'] == 'done'
+    with closing(get_conn()) as conn, conn:
+        conn.execute("UPDATE chat_jobs SET state='running' WHERE request_id='telegram:second'")
+    recover_interrupted()
+    init_runtime()
+    assert [r['id'] for r in timeline('owner')] == ids
+    assert timeline('owner')[-1]['state'] == 'interrupted'
+    monkeypatch.setenv('CONVERSATION_USER_ID', 'other')
+    with pytest.raises(ValueError):
+        enqueue('web:first', 'identical')
+
+
 def test_channels_processed_in_order_and_share_context(runtime):
     from agent import load_history
 

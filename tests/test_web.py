@@ -395,6 +395,26 @@ def test_history_is_shared_by_channel_but_scoped_to_owner(web_client):
     )
 
 
+def test_failed_request_stays_in_timeline_before_later_message(web_client):
+    from web_runtime import enqueue, ConversationWorker
+
+    login(web_client)
+    enqueue("web:failure", "first")
+
+    def fail(_):
+        raise RuntimeError("private provider diagnostic")
+
+    ConversationWorker(processor=fail).run_once()
+    enqueue("telegram:later", "second", channel="telegram", chat_id=123)
+    rows = web_client.get("/api/messages").json()
+    assert [row["request_id"] for row in rows] == [
+        "web:failure", "web:failure", "telegram:later", "telegram:later"
+    ]
+    assert rows[1]["state"] == "failed"
+    assert "private provider diagnostic" not in str(rows)
+    assert web_client.get("/api/messages").json() == rows
+
+
 def test_dashboard_deduplicates_glucose_and_does_not_turn_missing_into_zero(web_client):
     login(web_client)
     day = today_local()

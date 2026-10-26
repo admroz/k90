@@ -45,6 +45,57 @@ def init_runtime():
         columns = {row[1] for row in conn.execute("PRAGMA table_info(chat_jobs)")}
         if "kind" not in columns:
             conn.execute("ALTER TABLE chat_jobs ADD COLUMN kind TEXT NOT NULL DEFAULT 'message'")
+        if "user_id" not in columns:
+            conn.execute("ALTER TABLE chat_jobs ADD COLUMN user_id TEXT NOT NULL DEFAULT 'owner'")
+            conn.execute("UPDATE chat_jobs SET user_id = ?", (os.getenv("CONVERSATION_USER_ID", "owner"),))
+        conn.execute("""CREATE TABLE IF NOT EXISTS chat_timeline (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL, identity TEXT NOT NULL, role TEXT NOT NULL,
+            conversation_id INTEGER, job_seq INTEGER,
+            UNIQUE(user_id, identity, role)
+        )""")
+        _index_timeline(conn)
+
+
+def _index_timeline(conn):
+    # Identity, never content or timestamps, joins the two persistence paths.
+    candidates = []
+    for row in conn.execute("SELECT * FROM conversations ORDER BY id"):
+        identity = "request:" + row["request_id"] if row["request_id"] else "legacy:" + str(row["id"])
+        candidates.append((row["timestamp"], 1, row["id"], row["user_id"], identity,
+                           row["role"], row["id"], None))
+    for row in conn.execute("SELECT * FROM chat_jobs WHERE kind = 'message' ORDER BY seq"):
+        for role in ("user", "assistant"):
+            candidates.append((row["created_at"], 0, row["seq"], row["user_id"],
+                               "request:" + row["request_id"], role, None, row["seq"]))
+    for _, _, _, owner, identity, role, conversation, job in sorted(candidates, key=lambda c: c[:3]):
+        conn.execute("""INSERT INTO chat_timeline
+            (user_id, identity, role, conversation_id, job_seq) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, identity, role) DO UPDATE SET
+            conversation_id = COALESCE(excluded.conversation_id, conversation_id),
+            job_seq = COALESCE(excluded.job_seq, job_seq)""",
+            (owner, identity, role, conversation, job))
+
+
+def timeline(user_id, before=None, limit=50):
+    with closing(get_conn()) as conn, conn:
+        _index_timeline(conn)
+        rows = conn.execute("""SELECT t.id, t.role, t.user_id,
+            COALESCE(j.request_id, c.request_id) AS request_id,
+            COALESCE(j.channel, c.channel) AS channel,
+            COALESCE(j.created_at, c.timestamp) AS timestamp,
+            j.state, CASE WHEN t.role = 'user' THEN COALESCE(j.payload, c.content)
+                ELSE COALESCE(c.content, j.response, '') END AS content
+            FROM chat_timeline t
+            LEFT JOIN conversations c ON c.id = t.conversation_id AND c.user_id = t.user_id
+            LEFT JOIN chat_jobs j ON j.seq = t.job_seq AND j.user_id = t.user_id
+            WHERE t.user_id = ? AND t.id < ? ORDER BY t.id DESC LIMIT ?""",
+            (user_id, before or 2**63 - 1, limit)).fetchall()
+    result = [dict(row) for row in reversed(rows)]
+    for row in result:
+        if row['role'] == 'user' and row['state'] is not None:
+            row['content'] = json.loads(row['content'])
+    return result
 
 
 def set_transport(name, value):
@@ -69,15 +120,17 @@ def enqueue(request_id, content, channel="web", chat_id=None, *, kind="message")
     payload = json.dumps(content, ensure_ascii=False)
     with closing(get_conn()) as conn, conn:
         conn.execute("BEGIN IMMEDIATE")
+        _index_timeline(conn)
         existing = conn.execute(
             "SELECT * FROM chat_jobs WHERE request_id = ?", (request_id,)
         ).fetchone()
         if existing:
-            if (existing["payload"], existing["channel"], existing["chat_id"], existing["kind"]) != (
+            if (existing["payload"], existing["channel"], existing["chat_id"], existing["kind"], existing["user_id"]) != (
                 payload,
                 channel,
                 chat_id,
                 kind,
+                os.getenv("CONVERSATION_USER_ID", "owner"),
             ):
                 raise ValueError("Ten identyfikator wiadomości ma już inną treść.")
             return dict(existing)
@@ -93,9 +146,10 @@ def enqueue(request_id, content, channel="web", chat_id=None, *, kind="message")
                 "Kolejka jest pełna. Poczekaj na zakończenie poprzednich wiadomości."
             )
         conn.execute(
-            "INSERT INTO chat_jobs (request_id, channel, payload, chat_id, kind) VALUES (?, ?, ?, ?, ?)",
-            (request_id, channel, payload, chat_id, kind),
+            "INSERT INTO chat_jobs (request_id, channel, payload, chat_id, kind, user_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (request_id, channel, payload, chat_id, kind, os.getenv("CONVERSATION_USER_ID", "owner")),
         )
+        _index_timeline(conn)
         return dict(
             conn.execute(
                 "SELECT * FROM chat_jobs WHERE request_id = ?", (request_id,)
@@ -106,11 +160,11 @@ def enqueue(request_id, content, channel="web", chat_id=None, *, kind="message")
 def recover_interrupted():
     with closing(get_conn()) as conn, conn:
         for row in conn.execute(
-            "SELECT request_id FROM chat_jobs WHERE state = 'running'"
+            "SELECT request_id, user_id FROM chat_jobs WHERE state = 'running'"
         ).fetchall():
             saved = conn.execute(
-                "SELECT content FROM conversations WHERE request_id = ? AND role = 'assistant' ORDER BY id DESC LIMIT 1",
-                (row[0],),
+                "SELECT content FROM conversations WHERE request_id = ? AND user_id = ? AND role = 'assistant' ORDER BY id DESC LIMIT 1",
+                (row[0], row[1]),
             ).fetchone()
             conn.execute(
                 "UPDATE chat_jobs SET state = ?, response = ?, finished_at = CURRENT_TIMESTAMP WHERE request_id = ?",
