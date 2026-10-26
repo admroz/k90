@@ -83,6 +83,8 @@ def parse(data, code):
         else:
             result['kcal'] = float(Decimal(str(_number(n['energy-kj_100g']))) / Decimal('4.184'))
             result['energy_conversion'] = 'kJ / 4.184'
+        if result['kcal'] > 1000:
+            raise ValueError('OFF energy exceeds per100 limit')
         return result
     except (KeyError, TypeError, AttributeError):
         raise ValueError('OFF incomplete/invalid product; use own label') from None

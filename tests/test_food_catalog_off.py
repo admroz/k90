@@ -140,3 +140,50 @@ def test_compressed_responses_are_rejected_before_stream_read(monkeypatch):
         def get(self, *a, **kw): return Reply()
     monkeypatch.setattr(off.requests, 'Session', Session)
     with pytest.raises(ValueError, match='encoding'): off._fetch(CODE)
+
+
+@pytest.mark.parametrize('source,value', [
+    ('kcal', 10000), ('kj', 4184.004184),
+])
+@pytest.mark.parametrize('path', ['parse', 'lookup'])
+def test_excessive_energy_is_rejected_before_cache(temp_db, monkeypatch, source, value, path):
+    data = response()
+    n = data['product']['nutriments']
+    del n['energy-kcal_100g']
+    n['energy-'+source+'_100g'] = value
+    monkeypatch.setattr(off, '_fetch', lambda _: data)
+    try:
+        with pytest.raises(ValueError):
+            if path == 'parse':
+                off.parse(data, CODE)
+            else:
+                off.lookup(CODE)
+    finally:
+        with off.get_conn() as conn:
+            assert conn.execute('SELECT count(*) FROM food_external_cache').fetchone()[0] == 0
+
+
+@pytest.mark.parametrize('source', ['kcal', 'kj'])
+@pytest.mark.parametrize('value', [None, -1, float('nan'), float('inf'), 'missing'])
+def test_invalid_energy_is_rejected(source, value):
+    data = response()
+    n = data['product']['nutriments']
+    del n['energy-kcal_100g']
+    if value != 'missing':
+        n['energy-'+source+'_100g'] = value
+    with pytest.raises(ValueError):
+        off.parse(data, CODE)
+
+
+@pytest.mark.parametrize('source,multiplier', [('kcal', 1), ('kj', 4.184)])
+@pytest.mark.parametrize('kcal', [0, 1000])
+def test_energy_per100_boundaries_are_valid(temp_db, monkeypatch, source, multiplier, kcal):
+    data = response()
+    n = data['product']['nutriments']
+    del n['energy-kcal_100g']
+    n['energy-'+source+'_100g'] = kcal * multiplier
+    monkeypatch.setattr(off, '_fetch', lambda _: data)
+    assert off.parse(data, CODE)['kcal'] == kcal
+    assert off.lookup(CODE)['kcal'] == kcal
+    with off.get_conn() as conn:
+        assert json.loads(conn.execute('SELECT payload FROM food_external_cache').fetchone()[0])['kcal'] == kcal
