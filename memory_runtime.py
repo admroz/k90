@@ -18,6 +18,7 @@ from k90_memory import (BackendError, HindsightBackend, PrivacyError, Worker,
 from k90_memory.store import current
 from k90_memory.privacy import PrivacyPolicy
 from outbound_policy import model_policy
+from profiling import profiled, span
 from tools.db import MESSAGE_CONTEXT, get_conn
 
 log=logging.getLogger(__name__)
@@ -27,6 +28,10 @@ _thread: threading.Thread | None=None
 
 
 def initialize(conn):
+    # Reserve write intent before schema/settings reads to avoid a deferred
+    # read-to-write upgrade deadlock. Leave caller-owned transactions intact.
+    if not conn.in_transaction:
+        conn.execute('BEGIN IMMEDIATE')
     initialize_ledger(conn)
     conn.execute('''CREATE TABLE IF NOT EXISTS agent_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT, owner TEXT NOT NULL, request_id TEXT NOT NULL,
@@ -159,16 +164,17 @@ def _transport(token):
         if token:
             headers['Authorization']='Bearer '+token
         try:
-            connection.request(method,parsed.path,body=body,headers=headers)
-            response=connection.getresponse()
-            if method=='DELETE' and response.status==404:
-                return {'success':True}
-            if response.status!=200:
-                raise BackendError()
-            raw=response.read(max_bytes+1)
-            if len(raw)>max_bytes:
-                raise BackendError()
-            return json.loads(raw)
+            with span('hs_request'):
+                connection.request(method,parsed.path,body=body,headers=headers)
+                response=connection.getresponse()
+                if method=='DELETE' and response.status==404:
+                    return {'success':True}
+                if response.status!=200:
+                    raise BackendError()
+                raw=response.read(max_bytes+1)
+                if len(raw)>max_bytes:
+                    raise BackendError()
+                return json.loads(raw)
         except Exception:
             raise BackendError() from None
         finally:
@@ -195,6 +201,7 @@ def get_backend(policy,*,worker=False):
                             allow_internal_http=_bool('K90_HINDSIGHT_ALLOW_INTERNAL_HTTP'),transport=_transport(token))
 
 
+@profiled('recall')
 def recall_context(owner,question,*,exclude=()):
     stats={'memory_sources':0,'memory_blocked':0,'memory_chars':0}
     if _local_only(question):
@@ -246,6 +253,7 @@ def recall_context(owner,question,*,exclude=()):
     return context,stats
 
 
+@profiled('memory_index')
 def run_pending(limit=3):
     policy=model_policy()
     backend=get_backend(policy,worker=True)

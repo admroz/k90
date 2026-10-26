@@ -5,6 +5,7 @@ No login runs at import. OAuth tokens stay with this application's own store.
 import json
 import re
 import time
+from profiling import first_provider_event
 API_ORIGIN = 'https://api.openai.com'
 
 class ProbeError(Exception):
@@ -33,6 +34,7 @@ def read_stream(stream):
             data = []
             if not isinstance(event, dict):
                 raise ProbeError('invalid_stream')
+            first_provider_event()
             kind = event.get('type')
             if kind == 'response.output_item.done':
                 oi, item = event.get('output_index'), event.get('item')
@@ -44,6 +46,8 @@ def read_stream(stream):
                 if type(oi) is not int or not 0 <= oi < 4096 or type(ci) is not int or not 0 <= ci < 128 or not isinstance(delta, str):
                     raise ProbeError('invalid_stream')
                 text_parts.setdefault((oi, ci), []).append(delta)
+                if delta:
+                    first_provider_event(text=True)
             if kind in ('response.failed', 'response.incomplete', 'error'):
                 detail = event.get('response') or event
                 error = detail.get('error', {}) if isinstance(detail, dict) else {}

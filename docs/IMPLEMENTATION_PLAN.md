@@ -1,5 +1,11 @@
 # Plan wykonawczy: pamięć, dokumenty SQLite i opcjonalna subskrypcja
 
+Aktualne zlecenie 2026-10-26: `/opt/data/jobs/k90-observability/mission.md` oraz
+polecenie właściciela mają pierwszeństwo. Stały stop to >=80% DOWOLNEGO okna lub
+nieznany odczyt; wcześniejsze progi 90% poniżej są historyczne. Trzy bieżące
+etapy: trwała oś rozmowy, jawny filtr tekstu modelu i opcjonalne profilowanie.
+Niezależny review oraz finalny PR pozostają osobną późniejszą bramką koordynatora.
+
 ## Zlecenie i granice
 
 Aktualna polityka od wznowienia po resecie 2026-10-25T16:33:40Z: pauza przy

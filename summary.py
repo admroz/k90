@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from profiling import profiled, span
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -50,6 +51,7 @@ def _collapse_text(text: str, limit: int = 180) -> str:
     return trimmed + "..."
 
 
+@profiled('db')
 def _load_patient_parts() -> tuple[list[str], dict[str, str]]:
     from patient_documents import get_document
 
@@ -60,13 +62,15 @@ def _load_patient_parts() -> tuple[list[str], dict[str, str]]:
             contents[fname] = document["content"]
     # Check each original document, with shared budgets, BEFORE adding headings.
     # The fallback consumes the same safe copies; SQLite originals are untouched.
-    contents = model_policy().sanitize(contents)
+    with span('filtering'):
+        contents = model_policy().sanitize(contents)
     parts = [f"=== {fname} ===\n{text}" for fname, text in contents.items()]
     return parts, contents
 
 
 def _build_summary_prompt(combined: str, compact: bool = False) -> str:
-    combined = model_policy().sanitize_text(combined)
+    with span('filtering'):
+        combined = model_policy().sanitize_text(combined)
     style = (
         "Każda linia ma mieć maksymalnie około 160 znaków. Pisz bardzo skrótowo, bez markdownu, bez wstępów, bez zakończeń."
         if compact
@@ -103,7 +107,8 @@ def _is_summary_complete(summary: str, finish_reason: str | None) -> bool:
 
 
 def _fallback_summary(contents: dict[str, str]) -> str:
-    contents = model_policy().sanitize(contents)
+    with span('filtering'):
+        contents = model_policy().sanitize(contents)
     pacjent = _collapse_text(contents.get("pacjent.md", "brak danych"), 200)
     wywiad = _collapse_text(contents.get("wywiad.md", "brak danych"), 200)
     analiza = _collapse_text(contents.get("analiza.md", "brak danych"), 200)
@@ -166,6 +171,7 @@ def _generate_summary(combined: str) -> tuple[str, str | None, int]:
     return "", last_finish_reason, 2
 
 
+@profiled('summary')
 def refresh_patient_summary(trigger: str = "manual") -> str:
     """Generuje nowe podsumowanie pacjenta z plików .md i zapisuje w SQLite."""
     parts, contents = _load_patient_parts()
@@ -180,13 +186,16 @@ def refresh_patient_summary(trigger: str = "manual") -> str:
         log.warning("summary.fallback trigger=%s finish_reason=%s", trigger, finish_reason)
         summary = _fallback_summary(contents)
 
-    conn = get_conn()
-    conn.execute(
-        "INSERT OR REPLACE INTO patient_summary (id, content, updated_at, trigger) VALUES (1, ?, ?, ?)",
-        (summary, now_local().isoformat(), trigger),
-    )
-    conn.commit()
-    conn.close()
+    with span('persistence'):
+        conn = get_conn()
+        try:
+            with conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO patient_summary (id, content, updated_at, trigger) VALUES (1, ?, ?, ?)",
+                    (summary, now_local().isoformat(), trigger),
+                )
+        finally:
+            conn.close()
 
     log.info(
         "summary.saved trigger=%s chars=%d attempts=%d",

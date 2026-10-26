@@ -1,5 +1,41 @@
 # k90 — bieżący status zadania
 
+## CI SQLite correction — 2026-10-26
+
+Feature branch feat/chat-timeline-profiling, base bd73eb9; uncommitted correction
+awaits fresh independent review before commit/push. Deterministic application
+capture regression RED: four database-is-locked failures, history already safe.
+Write intent now reserved before runtime initialization reads, preserving existing
+caller transactions. Original immutable private probe changed from reproduced=true
+to reproduced=false / original_writer_already_reserved, without probe edits.
+Two additional reproduced profiling blockers corrected in separate RED/GREEN slices:
+SDK timeout hierarchy and returned tool errors. Offline synthetic verification:
+594 Python passed / 1 existing optional-import skip (145.56s); frontend 23 PASS,
+JS syntax PASS; 29 unchanged independent probes replayed PASS by the writer.
+Host suite executes unchanged shipped photo->text helper; actual container CI is
+still pending, and replay is not a fresh independent review. No retries, timeout
+increase, provider/auth changes, PR, merge or deployment. One source writer.
+Private fix-ci result/checkpoint retains commands, immutable snapshot and hashes.
+
+## Chat timeline, text filter and profiling — 2026-10-26
+
+Branch feat/chat-timeline-profiling; tested source `6d3e4b13750e637088e2711eb07cce4d3854cc81`.
+IMPLEMENTED — author verification complete; independent review is a later gate.
+Four self-reviewed source WIP commits pushed only to origin feature branch,
+remote SHA confirmed. Three vertical TDD slices: persistent request-linked
+conversation timeline, explicit model text-filter (default true), optional
+content-free stage profiling (default false). Final isolated offline Python:
+583 passed / 1 existing optional-import skip (136.90s). Frontend 23 PASS,
+JavaScript syntax and diff checks PASS. The full suite executes shipped-agent
+photo->text with a valid PNG over 95% of 5 MB and unchanged stored originals,
+and the exact new embedded container helper on HOST. Actual Docker build/CI
+is not claimed; independent review, actual image/CI and final PR stay with
+coordinator. No merge/deployment/provider/account changes or production access.
+Permanent quota stop is NOW >=80% in ANY window or unknown, superseding older
+90% policies below and in IMPLEMENTATION_PLAN. One writer throughout.
+Evidence: [chat_timeline_profiling.md](review-evidence/chat_timeline_profiling.md).
+Private CHECKPOINT/result retain final head, usage, commands and push readbacks.
+
 ## Container photo runtime acceptance — 2026-10-26
 
 Branch fix/image-history-performance, base 6739ffa. Added direct shipped run_agent

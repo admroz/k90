@@ -8,6 +8,7 @@ import json
 
 from openai import OpenAI
 from outbound_policy import ModelCallError, sanitize_payload
+from profiling import span
 
 
 def uses_responses(model: str) -> bool:
@@ -83,7 +84,7 @@ class ResponsesConversation:
             store=False, include=["reasoning.encrypted_content"], **options,
         ))
         try:
-            with OpenAI(timeout=120.0, max_retries=2) as client:
+            with span('provider_request'), OpenAI(timeout=120.0, max_retries=2) as client:
                 response = client.responses.create(**payload)
         except Exception:
             raise ModelCallError('model_request_failed') from None

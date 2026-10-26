@@ -196,10 +196,12 @@ class TokenStore:
             if old['expires_at'] > self.clock() + 60:
                 return old['access_token']
             try:
-                response = self._call(TOKEN_ENDPOINT, form=True, data={
-                    'grant_type': 'refresh_token', 'client_id': old['client_id'],
-                    'refresh_token': old['refresh_token'], 'resource': 'https://api.openai.com/v1',
-                })
+                from profiling import span
+                with span('token_refresh'):
+                    response = self._call(TOKEN_ENDPOINT, form=True, data={
+                        'grant_type': 'refresh_token', 'client_id': old['client_id'],
+                        'refresh_token': old['refresh_token'], 'resource': 'https://api.openai.com/v1',
+                    })
             except Exception:
                 raise CredentialsError('refresh_failed') from None
             if (not isinstance(response, dict) or

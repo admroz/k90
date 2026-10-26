@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import replace
+from profiling import profiled
 
 from k90_memory import PrivacyError, PrivacyPolicy
 from k90_memory.privacy import strict_json_loads, validate_image_url
@@ -18,14 +19,17 @@ def model_policy():
     try:
         terms=json.loads(os.getenv('K90_PRIVACY_REDACT_TERMS','[]'))
         images=os.getenv('K90_ALLOW_MODEL_IMAGES','false').strip().casefold()
-        if images not in ('true','false'):
+        text_filter=os.getenv('K90_TEXT_FILTER_ENABLED','true')
+        if images not in ('true','false') or text_filter not in ('true','false'):
             raise PrivacyError()
         return PrivacyPolicy(redact_terms=terms,allow_images=images=='true',
+                             text_filter_enabled=text_filter=='true',
                              max_chars=int(os.getenv('K90_OUTBOUND_MAX_CHARS','2000000')))
     except Exception:
         raise PrivacyError() from None
 
 
+@profiled('filtering')
 def sanitize_payload(value):
     try:
         return model_policy().sanitize(value)
@@ -33,6 +37,7 @@ def sanitize_payload(value):
         raise PrivacyError() from None
 
 
+@profiled('projection')
 def project_history(raw):
     """Validate originals before omitting recognized historical image parts.
 
@@ -81,7 +86,9 @@ def _validate_historical_image_url(url):
 def chat_completion(completion, **payload):
     safe=sanitize_payload(payload)
     try:
-        return completion(**safe)
+        from profiling import span
+        with span('provider_request'):
+            return completion(**safe)
     except PrivacyError:
         raise
     except Exception:

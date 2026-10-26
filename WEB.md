@@ -75,6 +75,28 @@ Po restarcie zlecenie rozpoczęte, ale niezakończone, jest oznaczane jako przer
 nie jest automatycznie wykonywane ponownie, ponieważ narzędzie mogło już zapisać dane.
 Jeżeli odpowiedź została zapisana przed restartem, zostaje odzyskana z historii.
 
+`chat_timeline` rezerwuje trwałe pozycje użytkownika i odpowiedzi przy przyjęciu
+zlecenia. Stan queued/running i wynik done/failed/interrupted zmieniają treść
+tej samej pozycji, także po odświeżeniu i na innej przeglądarce. Błąd pozostaje
+przy swojej wiadomości; nie ma ukrywania w localStorage ani automatycznego retry.
+`conversations` i zdarzenia audytowe pozostają zachowane. Korelacja używa wyłącznie
+`request_id` wraz z właścicielem i rolą, bez porównywania treści lub zgadywania
+na podstawie daty. Historyczne wpisy bez identyfikatora zachowują własną tożsamość.
+
+Migracja jest addytywna. Właściciel starszego zadania pochodzi z jednoznacznych
+rekordów o tym samym request_id (rozmowa/zdarzenia); sprzeczne przypisania są
+odseparowane. Gdy brak jakichkolwiek takich rekordów, stara jednoosobowa kolejka
+dziedziczy skonfigurowany `CONVERSATION_USER_ID`. Repo nie pozwala odtworzyć
+wcześniejszej wartości konfiguracji, jeśli operator zmienił ją bez zachowania
+śladów. Daty służą początkowemu uporządkowaniu migracji, numery kolejki/rekordów
+rozstrzygają remisy. Nowe wpisy mają kolejność przyjęcia zleceń.
+
+`GET /api/messages` zachowuje listę i parametr `before`, ale `id` jest teraz
+kursorem projekcji timeline, nie kluczem tabeli conversations. Po aktualizacji
+odśwież stronę i pobierz nowe kursory. `GET /api/jobs` pozostaje kompatybilnym,
+ograniczonym widokiem statusów; przeglądarka renderuje rozmowę z timeline.
+Opcjonalne profilowanie i przełącznik tekstu: [runbook](docs/DEPLOYMENT_RUNBOOK.md#pomiary-etapów).
+
 Niedostępny Telegram nie blokuje startu WWW. Jego błędy i retry dotyczą adaptera;
 awaria procesu adaptera powoduje restart tylko tego procesu. Odpowiedzi czekają
 w bazie na dostarczenie. Potwierdzane są osobne fragmenty długich odpowiedzi.
@@ -170,7 +192,7 @@ Domyślne `WEB_COOKIE_SECURE=true` wymaga HTTPS. Nie wystawiaj tego portu public
 Dla bezpośredniego HTTP w zaufanym LAN ustaw `WEB_BIND_IP` na adres serwera i
 `WEB_COOKIE_SECURE=false`. Mapowanie portu jest już w Compose. Przykład: [DEPLOY.md](DEPLOY.md).
 
-Schemat obsługuje dwie opcjonalne kolumny historii oraz tabele kolejki i transportu.
+Schemat obsługuje kolumny identyfikacji historii oraz tabele kolejki, timeline i transportu.
 Przed aktualizacją starszej instalacji zachowaj backup bazy i dokumentów.
 `python server.py` pozostaje alternatywnym, starszym trybem Telegram-only;
 nie uruchamiaj go równolegle z nowym adapterem dla tego samego bota.

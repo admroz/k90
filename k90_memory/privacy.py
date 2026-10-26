@@ -123,11 +123,13 @@ class PrivacyPolicy:
     allow_images: bool = False
     max_chars: int = 1_000_000
     max_depth: int = 40
+    text_filter_enabled: bool = True
 
     def __post_init__(self):
         if (type(self.redact_terms) not in (tuple, list)
                 or any(type(t) is not str or not t.strip() or len(t) > 1000 for t in self.redact_terms)
                 or len(self.redact_terms) > 1000 or type(self.allow_images) is not bool
+                or type(self.text_filter_enabled) is not bool
                 or type(self.max_chars) is not int or not 1 <= self.max_chars <= 10_000_000
                 or type(self.max_depth) is not int or not 1 <= self.max_depth <= 100):
             raise PrivacyError()
@@ -136,15 +138,16 @@ class PrivacyPolicy:
     def _text(self, text):
         if type(text) is not str or len(text) > self.max_chars:
             raise PrivacyError()
-        if _SECRET.search(text) or _LOCAL_ONLY.search(text):
+        if (self.text_filter_enabled and _SECRET.search(text)) or _LOCAL_ONLY.search(text):
             raise PrivacyError()
         if not self.allow_images and re.search(r'(?i)data:(?:image|audio|video|application)/', text):
             raise PrivacyError()
         for term in sorted(self.redact_terms, key=len, reverse=True):
             text = re.sub(re.escape(term), '[REDACTED]', text, flags=re.IGNORECASE)
-        text = _redact_emails(text)
-        for pattern in (_PHONE_INTL, _PESEL, _PHONE_US, _PHONE):
-            text = pattern.sub('[REDACTED]', text)
+        if self.text_filter_enabled:
+            text = _redact_emails(text)
+            for pattern in (_PHONE_INTL, _PESEL, _PHONE_US, _PHONE):
+                text = pattern.sub('[REDACTED]', text)
         return text
 
     def sanitize_text(self, text):
@@ -301,7 +304,7 @@ class PrivacyPolicy:
                     if clean_key in out or budget[1] > self.max_chars:
                         raise PrivacyError()
                     clean_item = walk(item, depth + 1, required_json=canonical == 'arguments')
-                    if canonical in _IDENTIFIER_KEYS and type(item) in (int, float):
+                    if self.text_filter_enabled and canonical in _IDENTIFIER_KEYS and type(item) in (int, float):
                         # Numeric JSON has already discarded any leading zeroes;
                         # semantic identifier fields cannot use a length heuristic.
                         clean_item = '[REDACTED]'

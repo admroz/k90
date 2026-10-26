@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .db import get_conn
+from profiling import profiled
 from .time_utils import date_days_ago
 from outbound_policy import model_policy
 
@@ -38,6 +39,7 @@ def _section(title: str, items: list[str]) -> str | None:
     return f"{title}: " + " | ".join(clean)
 
 
+@profiled('db')
 def build_operational_context() -> tuple[str, dict]:
     with get_conn() as conn:
         meals = conn.execute(

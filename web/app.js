@@ -1,8 +1,7 @@
 "use strict";
 import {
   escapeHTML,
-  createJobDismissals,
-  renderJobs,
+  renderTimeline,
   number,
   markdown,
   chart,
@@ -227,23 +226,25 @@ $("#meal-date").onchange = () => {
   if (input.value && input.checkValidity()) loadMeals(input.value);
   else if (mealView) input.value = mealView.date;
 };
-let jobDismissals;
-function getJobDismissals() {
-  if (!jobDismissals) {
-    let storage;
-    try { storage = window.localStorage; } catch {}
-    jobDismissals = createJobDismissals(storage);
-  }
-  return jobDismissals;
-}
 async function loadChat(before = null) {
-  const [messages, jobs] = await Promise.all([api(`/api/messages${before?`?before=${before}`:""}`), api("/api/jobs")]);
+  const messages = await api(`/api/messages${before?`?before=${before}`:""}`);
   if (!session) return;
+  // Refresh previously loaded pages as well: an old queued job can finish
+  // after many later submissions have pushed it out of the newest page.
+  if (!before && history.size) {
+    const oldest = Math.min(...history.keys());
+    let page = messages;
+    while (page.length === 50 && page[0].id > oldest) {
+      page = await api(`/api/messages?before=${page[0].id}`);
+      if (!session) return;
+      messages.unshift(...page);
+    }
+  }
   const box = $("#messages"),
     atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
   messages.forEach(m => history.set(m.id, m));
   const sorted = [...history.values()].sort((a, b) => a.id - b.id);
-  const html = sorted.map(m => `<div class="message ${m.role==="user"?"user":"assistant"}"><div class="meta">${m.role==="user"?"Ty":"k90"} · ${escapeHTML(m.channel||"historia")} · ${escapeHTML(formatTimestamp(m.timestamp,session.timezone))}</div><div class="message-body">${m.role==="assistant"?markdown(m.content.text):escapeHTML(m.content.text)}</div>${m.content.has_image?'<div class="image-note">▧ Załączono zdjęcie</div>':""}</div>`).join("") || '<div class="empty">Zacznij od pytania. Twój agent ma wspólną pamięć w obu kanałach.</div>';
+  const html = renderTimeline(sorted, session.timezone);
   if (box.innerHTML !== html) {
     const oldHeight = box.scrollHeight;
     box.innerHTML = html;
@@ -251,16 +252,7 @@ async function loadChat(before = null) {
     else if (atBottom) box.scrollTop = box.scrollHeight;
   }
   if (before || history.size <= 50) $("#older-messages").hidden = messages.length < 50;
-  const dismissed = getJobDismissals();
-  const render = () => {
-    $("#jobs").innerHTML = renderJobs(jobs, dismissed);
-    $$("[data-dismiss-job]").forEach(button => button.addEventListener("click", () => {
-      const job = jobs.find(j => j.request_id === button.dataset.dismissJob);
-      if (job) dismissed.dismiss(job);
-      render();
-    }));
-  };
-  render();
+  $("#jobs").innerHTML = "";
 }
 async function loadTable() {
   const request = ++tableRequest;

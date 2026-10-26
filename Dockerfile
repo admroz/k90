@@ -11,6 +11,7 @@ COPY tools/ ./tools/
 COPY patient_documents.py memory_runtime.py memory_admin.py outbound_policy.py subscription_auth.py subscription_protocol.py subscription_api.py subscription_login.py subscription_host.py ./
 COPY k90_memory/ ./k90_memory/
 COPY webapp.py web_data.py web_runtime.py telegram_adapter.py container_start.py supervisord.conf ./
+COPY profiling.py ./
 COPY web/ ./web/
 
 ENV PYTHONUNBUFFERED=1
