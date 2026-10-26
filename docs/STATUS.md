@@ -1,5 +1,14 @@
 # k90 — bieżący status zadania
 
+## Feature base integration — 2026-10-26
+
+Feature-only synchronization of approved catalog HEAD `3be6b1395133ed006caece859a5b058ed215b4d7`
+with upstream base `79ee22a67687341e65fc02d8193d2b41977dd2d9` (owner-merged PR16).
+Both historical evidence sections below are preserved. The independent catalog
+PASS on `2df4853` and fork CI on `3be6b139` apply only to those earlier snapshots.
+The integrated source requires fresh independent review and full CI before any
+PR_READY decision. No push, PR17 merge, main write, publication or deployment.
+
 ## Own label nutrition catalog — 2026-10-26
 
 Source independently reviewed PASS; branch feat/local-food-catalog.
@@ -15,6 +24,19 @@ Earlier actual fork image smoke passed on f9af4df; exact final-head Actions is a
 separate PR gate recorded in the PR description. No merge/publication/deployment
 or production access. Owner live vision remains deferred.
 Evidence: [product-catalog.md](review-evidence/product-catalog.md).
+
+
+## Chat scroll anchor — 2026-10-26
+
+Branch fix/chat-scroll-anchor; author implementation and real Chromium acceptance
+PASS on synthetic desktop/narrow history. Behavioral RED captured before source
+change: Enter exposed older history with10128px bottom gap before animated
+recovery. Instant restoration plus stable visible-message anchor gives0px maximum
+gap across Enter and polling/status frames. Reading/prepend/reload/attachment and
+submission behavior PASS. Frontend23 PASS; offline Python594 PASS/1 existing skip,
+web subset58 PASS. Branch-only WIP checkpoints pushed, no PR/merge/deployment.
+Coordinator independent review and actual image CI remain separate gates.
+Evidence: [chat-scroll-anchor.md](review-evidence/chat-scroll-anchor.md).
 
 
 ## CI SQLite correction — 2026-10-26

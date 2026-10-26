@@ -1091,3 +1091,37 @@ Real Chromium and actual separate SQLite API backup/restorePASS on isolated
 synthetic data. No live vision/OAuth/production claims. Exact final-head fork
 image/CI and new upstream PR CI are separate gates: read PR description/checks.
 The older author results above remain historical, not the final acceptance.
+
+
+## 2026-10-26 — visible chat scroll correction
+
+Single writer, branch `fix/chat-scroll-anchor`, baseline `69fb626`, application
+source `63f3f6e`. Real Chromium RED before application edits, then GREEN desktop
+and narrow viewport; complete commands/results/limitations in
+[chat-scroll-anchor.md](review-evidence/chat-scroll-anchor.md). Changed only
+frontend scroll/escaped message identity, browser regression and Node mock
+scaffolding/docs. Enter bottom gap10128px ->0px; reading anchor, prepend, actual
+interval polling, pending/running/answer, reload, attachment and request identity
+verified. JS syntax PASS; Node23 PASS; relevant Python58 PASS43.81s; full offline
+Python594 PASS/1 existing skip143.06s using inspected adapted audit guard/env-i.
+No production/backend/HS/auth access or changes, PR, merge, deployment, provider
+changes, resets or paid fallback. Quota14%/16% at15:44:09Z, stop80% any/unknown.
+Private CHECKPOINT/result retain final exact HEAD/remote and immutable evidence.
+Next: coordinator independent review and actual image/PR CI.
+
+
+## 2026-10-26 — feature-only base synchronization
+
+Merge parents: catalog `3be6b1395133ed006caece859a5b058ed215b4d7` and upstream
+`79ee22a67687341e65fc02d8193d2b41977dd2d9`; original common base `69fb626`.
+Only STATUS/VERIFICATION required manual conflict resolution; both historical
+sections retained. Source and regression tests merged without manual edits.
+Earlier independent PASS `2df4853` and fork CI `3be6b139` remain historical only.
+Fresh integrated-source independent review and full CI remain coordinator gates;
+no PR_READY claim. Exact local commands/results and final merge SHA are recorded
+outside Git in task `phases/integrate-base-1/result.json` and `final.md`.
+No push, upstream/main write, PR17 merge, image publication or deployment.
+Local integrated-tree verification: isolated env-i offline Python661 PASS /
+1 existing skip194.50s; Node25 PASS; app.js/catalog.mjs syntax PASS; diff check
+PASS. Parent-file preservation and exact upstream loadChat checks PASS.
+These are integration-writer checks, not fresh independent review or CI.
