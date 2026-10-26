@@ -18,7 +18,7 @@ from k90_memory import (BackendError, HindsightBackend, PrivacyError, Worker,
 from k90_memory.store import current
 from k90_memory.privacy import PrivacyPolicy
 from outbound_policy import model_policy
-from profiling import profiled
+from profiling import profiled, span
 from tools.db import MESSAGE_CONTEXT, get_conn
 
 log=logging.getLogger(__name__)
@@ -160,16 +160,17 @@ def _transport(token):
         if token:
             headers['Authorization']='Bearer '+token
         try:
-            connection.request(method,parsed.path,body=body,headers=headers)
-            response=connection.getresponse()
-            if method=='DELETE' and response.status==404:
-                return {'success':True}
-            if response.status!=200:
-                raise BackendError()
-            raw=response.read(max_bytes+1)
-            if len(raw)>max_bytes:
-                raise BackendError()
-            return json.loads(raw)
+            with span('hs_request'):
+                connection.request(method,parsed.path,body=body,headers=headers)
+                response=connection.getresponse()
+                if method=='DELETE' and response.status==404:
+                    return {'success':True}
+                if response.status!=200:
+                    raise BackendError()
+                raw=response.read(max_bytes+1)
+                if len(raw)>max_bytes:
+                    raise BackendError()
+                return json.loads(raw)
         except Exception:
             raise BackendError() from None
         finally:

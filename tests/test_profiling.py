@@ -98,3 +98,32 @@ def test_background_is_separate_and_nested_spans_are_not_summed(monkeypatch, cap
     starts = [r for r in rows if r['event'] == 'start' and 'span_id' in r]
     assert starts[1]['parent_span_id'] == starts[0]['span_id']
     assert rows[-1]['spans'] == 2 and 'sum_ms' not in rows[-1]
+
+
+def test_hs_timeout_is_visible_before_safe_backend_fallback(monkeypatch, caplog):
+    import memory_runtime
+    import profiling
+    from k90_memory import BackendError
+    monkeypatch.setenv('K90_PROFILING_ENABLED', 'true')
+    class Connection:
+        def __init__(self, *a, **kw): pass
+        def request(self, *a, **kw): raise TimeoutError('private HS URL and token')
+        def close(self): pass
+    monkeypatch.setattr(memory_runtime.http.client, 'HTTPSConnection', Connection)
+    with caplog.at_level(logging.INFO), profiling.request_scope('web'):
+        with pytest.raises(BackendError):
+            memory_runtime._transport('private-token')('POST', 'https://private.invalid/recall', b'private meal', 1, 100)
+    assert any(r['stage'] == 'hs_request' and r['event'] == 'timeout' for r in events(caplog))
+    assert 'private' not in caplog.text
+
+
+def test_returned_sync_error_is_visible_without_changing_result(monkeypatch, caplog):
+    import profiling
+    monkeypatch.setenv('K90_PROFILING_ENABLED', 'true')
+    @profiling.profiled('sync_garmin')
+    def sync():
+        return {'error':'private provider contents'}
+    with caplog.at_level(logging.INFO):
+        assert sync() == {'error':'private provider contents'}
+    assert any(r['stage'] == 'sync_garmin' and r['event'] == 'error' for r in events(caplog))
+    assert 'private' not in caplog.text
