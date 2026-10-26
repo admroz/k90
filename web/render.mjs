@@ -161,6 +161,6 @@ export function renderTimeline(rows, timezone) {
     const user = m.role === 'user';
     const status = !user && states[m.state];
     const text = m.content.text;
-    return `<div class="message ${user?'user':'assistant'}"><div class="meta">${user?'Ty':'k90'} · ${escapeHTML(m.channel || 'historia')} · ${escapeHTML(formatTimestamp(m.timestamp, timezone))}</div>${status?`<strong>${status}</strong>`:''}<div class="message-body">${user || status ? escapeHTML(text) : markdown(text)}</div>${m.content.has_image?'<div class="image-note">▧ Załączono zdjęcie</div>':''}</div>`;
+    return `<div class="message ${user?'user':'assistant'}" data-message-id="${escapeHTML(m.id)}"><div class="meta">${user?'Ty':'k90'} · ${escapeHTML(m.channel || 'historia')} · ${escapeHTML(formatTimestamp(m.timestamp, timezone))}</div>${status?`<strong>${status}</strong>`:''}<div class="message-body">${user || status ? escapeHTML(text) : markdown(text)}</div>${m.content.has_image?'<div class="image-note">▧ Załączono zdjęcie</div>':''}</div>`;
   }).join('') || '<div class="empty">Zacznij od pytania. Twój agent ma wspólną pamięć w obu kanałach.</div>';
 }
