@@ -1065,3 +1065,20 @@ Dokładne polecenia, oryginalny FAIL, logi i omyłkowy przebieg z konfliktem bas
 Quota końcowa 88% session/48% weekly, bez resetów/fallbacku. Kolejne kroki:
 koordynator sprawdza quota, pełną regresję i świeży niezależny review immutable
 commita korekty. Brak push/PR, produkcji i testów live; kontroler bez zmian.
+
+
+## 2026-10-26 — visible chat scroll correction
+
+Single writer, branch `fix/chat-scroll-anchor`, baseline `69fb626`, application
+source `63f3f6e`. Real Chromium RED before application edits, then GREEN desktop
+and narrow viewport; complete commands/results/limitations in
+[chat-scroll-anchor.md](review-evidence/chat-scroll-anchor.md). Changed only
+frontend scroll/escaped message identity, browser regression and Node mock
+scaffolding/docs. Enter bottom gap10128px ->0px; reading anchor, prepend, actual
+interval polling, pending/running/answer, reload, attachment and request identity
+verified. JS syntax PASS; Node23 PASS; relevant Python58 PASS43.81s; full offline
+Python594 PASS/1 existing skip143.06s using inspected adapted audit guard/env-i.
+No production/backend/HS/auth access or changes, PR, merge, deployment, provider
+changes, resets or paid fallback. Quota14%/16% at15:44:09Z, stop80% any/unknown.
+Private CHECKPOINT/result retain final exact HEAD/remote and immutable evidence.
+Next: coordinator independent review and actual image/PR CI.

@@ -4,7 +4,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
-const root = path.resolve(__dirname, '../../web');
+const root = process.env.K90_WEB_ROOT || path.resolve(__dirname, '../../web');
 const evidence = process.env.K90_SCROLL_EVIDENCE;
 const rows = Array.from({length:150}, (_, i) => ({id:i+1, role:i%2?'assistant':'user', channel:'web', timestamp:'2026-01-01 12:00:00', state:'completed', content:{text:`Synthetic message ${i+1}. ` + 'Long synthetic history for browser layout. '.repeat(12)}}));
 const baseline=structuredClone(rows);
@@ -41,19 +41,24 @@ const server = http.createServer((req,res) => {
       const page=await browser.newPage({viewport});
       page.on('pageerror', e=>console.error('Browser error:',e.message));
       page.setDefaultTimeout(10000);
+      let gapShot;
+      await page.exposeFunction('captureScrollGap',()=>{if(evidence)gapShot ||= page.screenshot({path:path.join(evidence,`visible-gap-${viewport.width}.png`)});return gapShot;});
+      if(evidence)fs.mkdirSync(evidence,{recursive:true});
       await page.route('**/*',route=>route.request().url().startsWith(origin+'/')?route.continue():route.abort());
       await page.goto(origin+'/#chat');
       await page.waitForFunction(()=>document.querySelectorAll('.message').length===50);
       await page.evaluate(()=>{const b=document.querySelector('#messages');b.scrollTo({top:b.scrollHeight,behavior:'instant'});});
       await page.locator('#message').fill('Synthetic Enter submission');
       await page.evaluate(()=>{
-        const b=document.querySelector('#messages');window.samples=[];
-        let n=0;const sample=()=>{window.samples.push({frame:n,top:b.scrollTop,height:b.scrollHeight,client:b.clientHeight,firstVisible:[...b.children].find(e=>e.getBoundingClientRect().bottom>b.getBoundingClientRect().top)?.textContent.slice(0,95)});if(++n<100)requestAnimationFrame(sample);};requestAnimationFrame(sample);
+        const b=document.querySelector('#messages');window.samples=[];window.mutations=[];window.observer=new MutationObserver(()=>{if(window.mutations.length<30)window.mutations.push({ms:performance.now(),top:b.scrollTop,height:b.scrollHeight,state:b.lastElementChild?.textContent.slice(0,160)});});window.observer.observe(b,{childList:true,subtree:true});
+        let n=0,shot=false;const sample=()=>{if(!shot && b.scrollHeight-b.clientHeight-b.scrollTop>80){shot=true;window.captureScrollGap();}window.samples.push({frame:n,ms:performance.now(),top:b.scrollTop,height:b.scrollHeight,client:b.clientHeight,firstVisible:[...b.children].find(e=>e.getBoundingClientRect().bottom>b.getBoundingClientRect().top)?.textContent.slice(0,95)});if(++n<100)requestAnimationFrame(sample);};requestAnimationFrame(sample);
       });
       await page.locator('#message').press('Enter');
       await page.waitForFunction(()=>window.samples.length===100);
       const samples=await page.evaluate(()=>window.samples);
-      const result={viewport,samples,posts:[...posts]};results.push(result);
+      if(gapShot)await gapShot;
+      const mutations=await page.evaluate(()=>{window.observer.disconnect();return window.mutations;});
+      const result={viewport,samples,mutations,posts:[...posts]};results.push(result);
       if(evidence){fs.mkdirSync(evidence,{recursive:true});fs.writeFileSync(path.join(evidence,`enter-${viewport.width}.json`),JSON.stringify(result,null,2));await page.screenshot({path:path.join(evidence,`enter-${viewport.width}.png`)});}
       assert.equal(posts.length,1,'Enter submits exactly once');
       assert(samples.every(s=>s.height-s.client-s.top < 80) && samples.every(s=>s.top >= samples[0].top-2),`visible Enter jump: initial ${samples[0].top}, minimum ${Math.min(...samples.map(s=>s.top))}`);
@@ -61,8 +66,8 @@ const server = http.createServer((req,res) => {
       // Keep an actual visible message anchored through polling and older pages.
       await page.evaluate(()=>{const b=document.querySelector('#messages');b.scrollTo({top:900,behavior:'instant'});});
       const anchor=()=>page.evaluate(()=>{const b=document.querySelector('#messages'),top=b.getBoundingClientRect().top;const el=[...b.children].find(e=>e.getBoundingClientRect().bottom>top+30);return {text:el.querySelector('.message-body').textContent,y:el.getBoundingClientRect().top};});
-      const a=await anchor();
-      const sameAnchor=async label=>{const actual=await anchor();assert.equal(actual.text,a.text,label);assert(Math.abs(actual.y-a.y)<=1,`${label}: ${actual.y} vs ${a.y}`);};
+      const a=await anchor(),anchorChecks=[];
+      const sameAnchor=async label=>{const actual=await anchor();anchorChecks.push({label,expected:a,actual});assert.equal(actual.text,a.text,label);assert(Math.abs(actual.y-a.y)<=1,`${label}: ${actual.y} vs ${a.y}`);};
       rows[50].content.text += ' Synthetic updated text above the viewport. '.repeat(25);
       rows.at(-1).state='running';
       const count=gets.length;await page.waitForFunction(()=>document.querySelector('#messages').textContent.includes('Agent pracuje'));
@@ -102,7 +107,7 @@ const server = http.createServer((req,res) => {
       assert.equal(posts.length,2,'poll never retries submissions');
       const ids=await page.locator('.message').evaluateAll(nodes=>nodes.map(n=>n.dataset.messageId));
       assert.equal(new Set(ids).size,ids.length,'unique message identities');
-      if(evidence)fs.writeFileSync(path.join(evidence,`acceptance-${viewport.width}.json`),JSON.stringify({anchor:a,transitions,ids,posts:posts.map(p=>({request_id:p.request_id,has_image:!!p.image})),gets},null,2));
+      if(evidence)fs.writeFileSync(path.join(evidence,`acceptance-${viewport.width}.json`),JSON.stringify({anchor:a,anchorChecks,transitions,ids,posts:posts.map(p=>({request_id:p.request_id,has_image:!!p.image})),gets},null,2));
       await page.close();
     }
     console.log('PASS real Chromium desktop + narrow: Enter, anchor, polling, pending/running/answer, pagination, reload, keyboard');
