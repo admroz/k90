@@ -520,3 +520,16 @@ Przygotowanie personal self-hosted nie jest akceptacją produkcyjnej topologii,
 prawdziwego OAuth/provider behavior, bank ACL, szyfrowania backupu ani pełnej
 anonimizacji. CI używa syntetyków i network-none dla runtime; nie uwierzytelnia
 konta i nie deployuje. Szczegóły rzeczywiście wykonanych prób: VERIFICATION.md.
+# Filtr tekstu do modelu
+
+`K90_TEXT_FILTER_ENABLED=true` zachowuje dotychczasowe automatyczne maskowanie
+podstawowych identyfikatorów i blokowanie oczywistych sekretów regexami. Tylko
+dokładne `true` lub `false` są poprawne; inna wartość blokuje wywołanie modelu.
+Ustawienie `false` pozwala wysłać tekst bez tych ochron we wszystkich ścieżkach
+modelowych (rozmowa WWW/Telegram, historia, kontekst, narzędzia i summary).
+Jawne `K90_PRIVACY_REDACT_TERMS`, wykluczenia local-only, walidacja techniczna,
+limity struktury/rozmiaru i kontrola transportu pozostają aktywne. Obrazy nadal
+wymagają osobnej zgody, są nieprzezroczyste dla filtra tekstu i nie wracają
+z historii. Hindsight zawsze ponawia swój bazowy filtr tekstu niezależnie od
+przełącznika modelu; nie oznacza to pełnej anonimizacji.
+

@@ -18,9 +18,11 @@ def model_policy():
     try:
         terms=json.loads(os.getenv('K90_PRIVACY_REDACT_TERMS','[]'))
         images=os.getenv('K90_ALLOW_MODEL_IMAGES','false').strip().casefold()
-        if images not in ('true','false'):
+        text_filter=os.getenv('K90_TEXT_FILTER_ENABLED','true')
+        if images not in ('true','false') or text_filter not in ('true','false'):
             raise PrivacyError()
         return PrivacyPolicy(redact_terms=terms,allow_images=images=='true',
+                             text_filter_enabled=text_filter=='true',
                              max_chars=int(os.getenv('K90_OUTBOUND_MAX_CHARS','2000000')))
     except Exception:
         raise PrivacyError() from None
