@@ -24,11 +24,11 @@ def check_photo_history_in_runtime():
         return (struct.pack('>I', len(data)) + kind + data +
                 struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff))
 
-    pixels = random.Random(90).randbytes(224 * 224 * 3)
-    scanlines = b''.join(b'\0' + pixels[i:i+672] for i in range(0, len(pixels), 672))
-    png = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 224, 224, 8, 2, 0, 0, 0)) +
+    pixels = random.Random(90).randbytes(640 * 640 * 3)
+    scanlines = b''.join(b'\0' + pixels[i:i+1920] for i in range(0, len(pixels), 1920))
+    png = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 640, 640, 8, 2, 0, 0, 0)) +
            chunk(b'IDAT', zlib.compress(scanlines)) + chunk(b'IEND', b''))
-    assert len(png) >= 128 * 1024
+    assert len(png) >= 1_179_648  # B1: accepted photo used to block the follow-up
     encoded = base64.b64encode(png).decode('ascii')
     uri = 'data:image/png;base64,' + encoded
     photo = [{'type': 'text', 'text': 'Synthetic millet lunch, synthetic@example.invalid'},

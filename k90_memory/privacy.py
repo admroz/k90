@@ -26,6 +26,11 @@ _PHONE_US = re.compile(r'(?<!\w)(?:\+?1[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]?\d{3}[ .
 _LOCAL_ONLY = re.compile(r'(?i)(?:\[|<)local[_ -]only(?:\]|>)')
 _SECRET_KEYS = {'authorization', 'proxyauthorization', 'apikey', 'password', 'passwd', 'secret', 'clientsecret', 'accesstoken', 'refreshtoken', 'privatekey', 'cookie', 'setcookie'}
 _IDENTIFIER_KEYS = {'pesel', 'phone', 'phonenumber', 'telephone', 'telephonenumber', 'mobile', 'mobilenumber', 'nationalid', 'nationalidentifier', 'ssn', 'socialsecuritynumber'}
+# Independent technical bounds; images never consume the natural-language budget.
+MAX_TOTAL_IMAGE_BYTES = 10_000_000
+MAX_ENCODED_JSON_CHARS = 32_000_000
+MAX_IMAGE_BASE64_CHARS = 4 * ((5_000_000 + 2) // 3)
+
 _IMAGE_KEYS = {'image', 'imageurl', 'inputimage', 'imagedata', 'file', 'filedata', 'inputfile', 'attachment', 'attachments', 'audio', 'inputaudio', 'video', 'inputvideo', 'document', 'pdf', 'base64'}
 
 
@@ -77,9 +82,10 @@ def validate_image_url(url):
 
     No decoding to pixels, OCR, EXIF removal or anonymization is performed.
     Return whether this is an opaque base64 body; remote URLs remain text.
-    Callers must charge string length against their budget before calling.
+    Callers account validated bytes separately from ordinary text. The encoded
+    length is bounded before splitting/decoding, including standalone callers.
     """
-    if type(url) is not str or not url:
+    if type(url) is not str or not url or len(url) > MAX_IMAGE_BASE64_CHARS + 128:
         raise PrivacyError()
     if url.startswith('data:'):
         header, separator, body = url.partition(',')
@@ -156,19 +162,37 @@ class PrivacyPolicy:
         Images/files are rejected anywhere by default. Image consent is solely for
         a model boundary, NEVER permission for the memory backend to index images.
         """
-        budget = [0, 0]
+        # nodes, text chars, decoded image bytes, opaque URI chars, parsed chars
+        budget = [0, 0, 0, 0, 0]
+        def charge_text(count):
+            budget[1] += count
+            if budget[1] > self.max_chars:
+                raise PrivacyError()
         def walk(obj, depth, required_json=False, preserve_json=False, image_url=False):
             budget[0] += 1
             if depth > self.max_depth or budget[0] > 100_000:
                 raise PrivacyError()
             if type(obj) is str:
-                budget[1] += len(obj)
-                if budget[1] > self.max_chars:
-                    raise PrivacyError()
                 if image_url and validate_image_url(obj):
+                    body_length = len(obj) - obj.index(',') - 1
+                    decoded_length = body_length // 4 * 3 - (2 if obj.endswith('==') else 1 if obj.endswith('=') else 0)
+                    budget[2] += decoded_length
+                    budget[3] += len(obj)
+                    if budget[2] > MAX_TOTAL_IMAGE_BYTES:
+                        raise PrivacyError()
                     return obj
+                # Bound allocation BEFORE lstrip/JSON parsing. Extra capacity is
+                # only provisional: a successful walk must justify it with exact
+                # validated image envelopes; malformed/text-only JSON gets none.
+                raw_limit = self.max_chars + (4 * ((MAX_TOTAL_IMAGE_BYTES + 2) // 3) + 4096 if self.allow_images else 0)
+                if len(obj) > raw_limit:
+                    raise PrivacyError()
                 stripped = obj.lstrip()
                 if required_json or stripped.startswith(('{', '[', '"')):
+                    budget[4] += len(obj)
+                    if budget[4] > MAX_ENCODED_JSON_CHARS:
+                        raise PrivacyError()
+                    opaque_before = budget[3]
                     try:
                         parsed = strict_json_loads(obj)
                     except PrivacyError:
@@ -186,10 +210,14 @@ class PrivacyPolicy:
                                           label.strip() not in ('true', 'false', 'null'))))
                         if required_json or not markdown:
                             raise PrivacyError() from None
+                        charge_text(len(obj))
                         return self._text(obj)
                     # Reuse this walk's depth/node/character budgets for every
                     # decoded layer, and retain the original number of encodings.
                     clean = walk(parsed, depth + 1)
+                    # Preserve raw + decoded TEXT inspection/accounting. Only
+                    # opaque URI bytes are excluded at each encoded layer.
+                    charge_text(len(obj) - (budget[3] - opaque_before))
                     if preserve_json:
                         # Names cannot be canonicalized or partially redacted:
                         # that could rename a protocol field or create a collision.
@@ -206,6 +234,7 @@ class PrivacyPolicy:
                             raise PrivacyError()
                         return obj
                     return json.dumps(clean, ensure_ascii=False, separators=(',', ':'))
+                charge_text(len(obj))
                 return self._text(obj)
             if obj is None or type(obj) is bool:
                 return obj

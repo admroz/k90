@@ -71,9 +71,13 @@ def test_unsupported_or_secret_envelope_blocks_transport(monkeypatch, value):
 
 
 def test_opaque_budget_consent_and_hs_default():
-    for policy in (PrivacyPolicy(), PrivacyPolicy(allow_images=True, max_chars=100)):
-        with pytest.raises(PrivacyError):
-            policy.sanitize(part())
+    with pytest.raises(PrivacyError):
+        PrivacyPolicy().sanitize(part())
+    # Budget contract B1/B2: validated bytes no longer consume text chars.
+    policy = PrivacyPolicy(allow_images=True, max_chars=100)
+    assert policy.sanitize(part()) == part()
+    with pytest.raises(PrivacyError):
+        policy.sanitize({'text': 'x' * 101, 'photo': part()})
     # A URI in prose remains textual and cannot inherit opaque treatment.
     assert '12345678901' not in PrivacyPolicy(allow_images=True,
         redact_terms=('12345678901',)).sanitize('meal ' + URI)
@@ -117,8 +121,11 @@ def test_remote_url_and_free_text_are_filtered_not_opaque():
 def test_opaque_nodes_obey_depth_and_total_character_budgets():
     with pytest.raises(PrivacyError):
         PrivacyPolicy(allow_images=True, max_depth=1).sanitize(part())
+    policy = PrivacyPolicy(allow_images=True, max_chars=100)
+    assert policy.sanitize([part(), part()]) == [part(), part()]
+    # Envelope keys/detail still count, cumulatively, as actual text.
     with pytest.raises(PrivacyError):
-        PrivacyPolicy(allow_images=True, max_chars=len(URI) + 100).sanitize([part(), part()])
+        policy.sanitize([part()] * 4)
 
 
 @pytest.mark.parametrize('uri', [
