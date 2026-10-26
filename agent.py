@@ -259,8 +259,10 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
             if tool_call.name in SUMMARY_REFRESH_TRIGGERS:
                 should_refresh = True
             args = strict_json_loads(tool_call.arguments or "{}")
-            with _phase('tool'):
+            with _phase('tool') as failed:
                 result = execute_tool(tool_call.name, args)
+                if failed is not None and isinstance(result, dict) and 'error' in result:
+                    failed[0] = True
             memory_runtime.record_tool(tool_call.name, args, result)
             log.info(
                 "agent.tool_result user=%s tool=%s ok=%s",

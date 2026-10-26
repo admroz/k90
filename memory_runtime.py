@@ -28,6 +28,10 @@ _thread: threading.Thread | None=None
 
 
 def initialize(conn):
+    # Reserve write intent before schema/settings reads to avoid a deferred
+    # read-to-write upgrade deadlock. Leave caller-owned transactions intact.
+    if not conn.in_transaction:
+        conn.execute('BEGIN IMMEDIATE')
     initialize_ledger(conn)
     conn.execute('''CREATE TABLE IF NOT EXISTS agent_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT, owner TEXT NOT NULL, request_id TEXT NOT NULL,

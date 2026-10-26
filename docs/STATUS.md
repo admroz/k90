@@ -1,5 +1,22 @@
 # k90 — bieżący status zadania
 
+## CI SQLite correction — 2026-10-26
+
+Feature branch feat/chat-timeline-profiling, base bd73eb9; uncommitted correction
+awaits fresh independent review before commit/push. Deterministic application
+capture regression RED: four database-is-locked failures, history already safe.
+Write intent now reserved before runtime initialization reads, preserving existing
+caller transactions. Original immutable private probe changed from reproduced=true
+to reproduced=false / original_writer_already_reserved, without probe edits.
+Two additional reproduced profiling blockers corrected in separate RED/GREEN slices:
+SDK timeout hierarchy and returned tool errors. Offline synthetic verification:
+594 Python passed / 1 existing optional-import skip (145.56s); frontend 23 PASS,
+JS syntax PASS; 29 unchanged independent probes replayed PASS by the writer.
+Host suite executes unchanged shipped photo->text helper; actual container CI is
+still pending, and replay is not a fresh independent review. No retries, timeout
+increase, provider/auth changes, PR, merge or deployment. One source writer.
+Private fix-ci result/checkpoint retains commands, immutable snapshot and hashes.
+
 ## Chat timeline, text filter and profiling — 2026-10-26
 
 Branch feat/chat-timeline-profiling; tested source `6d3e4b13750e637088e2711eb07cce4d3854cc81`.

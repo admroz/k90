@@ -1,5 +1,53 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+## 2026-10-26 — reproduced SQLite upgrade CI blocker and profiling findings
+
+Base `bd73eb9ff29ebcd1e1f1e4f54b86f6646582306e`, feature checkout
+`/opt/data/projects/k90-observability`; correction remains uncommitted pending
+fresh independent review. Original CI failure is retained as FAIL: photo helper →
+run_agent → begin_turn → event INSERT. Runtime ledger initialization started a
+deferred transaction before settings reads; a competing RESERVED writer made the
+subsequent upgrade fail immediately. Runtime initialization now reserves write
+intent first only when the caller has no transaction. Existing save_history starts
+with a conversation INSERT and already owns write intent. No implicit commits,
+retry/replay, timeout adjustment, workflow weakening or network transaction added.
+
+Strict vertical evidence: application capture regression 4 FAIL / 1 PASS before
+source change (incoming/tool/failure/pair fail; history passes), then 14 focused
+PASS including caller rollback and exact embedded photo helper twice. Immutable
+private SQL probe: RED reproduced=true/competing_writer_reserved_during_read;
+GREEN reproduced=false/original_writer_already_reserved. Original SHA-256
+`8a20415dfd3aae4adba9933a009ace20f1cbb7b42f69efedaa4fc097067c3274` preserved.
+Additional external-contention probe: exception remains visible, exactly one
+attempt, connection closed, HMAC key unchanged, event/source/outbox rollback atomic.
+
+OWNER_STEERING R1/R2 were separate vertical slices. SDK timeout tests: original
+independent 2 FAIL and repo 3 FAIL, then 11 focused PASS. Actual dispatcher returned
+error: original independent 1 FAIL and repo 1 FAIL / 2 PASS, then 4 focused PASS.
+Results, safe wrapping, conversation success and single tool execution preserved.
+All 29 original independent probes replayed unchanged: 29 PASS (20.95s).
+This replay was performed by the writer, not a new independent verdict.
+
+Final offline suite: **594 passed, 1 skipped**, 145.56s; skip remains optional
+K90_TEST_IMPORT. Frontend **23 PASS**, JS syntax and diff checks PASS. Synthetic
+photo→text with original persistence and opaque image handling remains covered.
+Actual Docker/CI and fresh combined independent review are pending. No commit,
+push, PR, merge, deployment, production access or new model delegation performed.
+
+Reproduction/test environment and final commands (synthetic scratch only):
+
+```sh
+env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/opt/data/cache/scratch/k90-observability/fix-ci PYTHON_DOTENV_DISABLED=1 PYTHONPATH=/opt/data/cache/scratch/k90-observability/guard:/opt/data/projects/k90-observability TMPDIR=/opt/data/cache/scratch/k90-observability/fix-ci DB_PATH=/opt/data/cache/scratch/k90-observability/fix-ci/full.db DATA_DIR=/opt/data/cache/scratch/k90-observability/fix-ci/data K90_CHATGPT_STATE_DIR=/opt/data/cache/scratch/k90-observability/fix-ci/auth /opt/data/projects/k90/.venv/bin/python -m pytest -q --basetemp=/opt/data/cache/scratch/k90-observability/fix-ci/full
+env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/opt/data/cache/scratch/k90-observability/fix-ci TMPDIR=/opt/data/cache/scratch/k90-observability/fix-ci node --test tests/web_*.test.mjs
+env -i PATH=/usr/local/bin:/usr/bin:/bin node --check web/app.js
+```
+
+Private task fix-ci holds per-slice logs, original probe replay, all-probe replay,
+immutable snapshot manifest and final checkpoint. Initial probe setup was blocked
+by the offline guard attempting dotenv; PYTHON_DOTENV_DISABLED=1 corrected the
+synthetic harness before the actual successful RED reproduction. Permanent stop
+remains >=80% any quota window or unknown; last phase admission 61% / 10%.
+
 ## 2026-10-26 — timeline, model text-filter switch and profiling
 
 Worktree /opt/data/projects/k90-observability, feat/chat-timeline-profiling.

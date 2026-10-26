@@ -43,7 +43,11 @@ def _emit(state, stage, event, **numbers):
 
 
 def _outcome(exc):
-    return 'timeout' if isinstance(exc, TimeoutError) or type(exc).__name__ in ('Timeout', 'ReadTimeout', 'ConnectTimeout', 'TimeoutException') else 'error'
+    # Only load SDK classes when profiling an exception, never on the disabled path.
+    from openai import APITimeoutError
+    from httpx import TimeoutException
+    from requests.exceptions import Timeout
+    return 'timeout' if isinstance(exc, (TimeoutError, APITimeoutError, TimeoutException, Timeout)) else 'error'
 
 
 def failure(exc):
