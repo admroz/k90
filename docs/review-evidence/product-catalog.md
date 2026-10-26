@@ -54,3 +54,53 @@ Final quota17:21:02Z: session77%, weekly26%; no new coding/tests started afterwa
 Remaining gates: coordinator independent final review; actual fork Actions image
 build/network-none smoke on tested source; parent final PR decision. Owner live
 vision/rollout check is documented and separate from synthetic acceptance.
+
+## Końcowy review i powtórzenie koordynatora — 2026-10-26
+
+Testowane i niezależnie ocenione źródło:
+`2df48534b97f8d74d6aefb6ed8684b4ccad51292`, ta sama baza `69fb626`.
+Późniejsze zmiany wyłącznie w docs nie są nowym review kodu.
+
+Pierwszy pełny niezależny reviewer wykonał rzeczywiste testy i wydał FAIL:
+OFF przyjmował10000kcal/100g i zapisywał je do cache. Koordynator niezależnie
+odtworzył oba błędy (2FAIL/12PASS). Osobny kontekst naprawczy dodał regresje
+kcal/kJ/parser/cache:4RED, następnie33GREEN, minimalny limit1000 po konwersji.
+Oryginalne probe'y nie zostały zmienione ani osłabione.
+
+Świeży niezależny reviewer całego połączonego zakresu22 plików wydał PASS,
+bez otwartych ustaleń:31 rzeczywistych probe'ów transportu/cache/granic
+(14oryginalnych+17nowych),67testów katalogu,283testy agenta/web/prywatności,
+25frontend, Chromium, HTTP i backup/restore. Końcowe SHA, inventory/hashes oraz
+pięć oryginalnych harnessów sprawdzone bez zmian. Przegląd objął też prompt
+nadpisywany przez właściciela, licencję/proweniencję, historyczne obrazy i5MB.
+
+Koordynator uruchomił na tym źródle:
+
+- pełne izolowane `python -m pytest -q`:661PASS/1istniejący skip,196.46s;
+- `node --check web/app.js`, `node --check web/catalog.mjs`:PASS;
+  `node --test tests/web_*.test.mjs`:25PASS;
+- niezmienione31probe'ów niezależnych reviewerów:PASS;
+- niezmieniony rzeczywisty HTTP probe:7tras bez autoryzacji, CSRF, ignorowanie
+  modelowego confirmed, stare zatwierdzenie, g/ml, idempotencja i snapshot:PASS;
+- świeży Chromium:formularz→kontrola→zatwierdzenie→96kcal→reload/XSS:PASS;
+- oddzielny SQLite API backup/restore oryginalnego zdjęcia/katalogu/wersji/
+  porcji ml/idempotencji i integralności:PASS.
+
+Wszystkie testy aplikacyjne były syntetyczne, z osobnym HOME/DB/DATA/auth,
+wyłączonym dotenv i blokadą sieci poza loopback. Zachowano błędy pierwszego
+harnessu (.env fixture poza SAFE i błędny prywatny health URL); poprawiono
+wyłącznie harness i powtórzono testy, nie kod ani oczekiwania aplikacji.
+
+Rzeczywiste publiczne GET adaptera:trzy rekordy Piątnicy
+5900531004544/5900531000102/5900531000010, Poland,100g,unverified.
+Zweryfikowano oficjalny indeks/specyfikację v3/licencję. Brak deklaracji
+reprezentatywności rynku lub poprawności etykiet. Publiczny search503 zachowany;
+indywidualne GET zakończone powodzeniem. Bez owner-data/model/OAuth/upload.
+
+Wcześniejszy fork Actions [40393559615](https://github.com/hermesinski/k90/actions/runs/40393559615)
+przeszedł testy i rzeczywisty build/network-none smoke na `f9af4df`; publikacja
+pominięta. Nie certyfikuje to późniejszego HEAD. Końcowy PR wolno utworzyć dopiero
+po zielonym dispatch dla dokładnego końcowego HEAD; link/readback w opisie PR.
+Nowe CI upstream PR może wymagać zgody właściciela i nie jest wcześniejszym runem.
+Nie wykonano merge, publikacji, wdrożenia ani odczytu produkcji. Live vision i
+rollout pozostają jawnym, odrębnym sprawdzeniem właściciela z PRODUCT_CATALOG.md.

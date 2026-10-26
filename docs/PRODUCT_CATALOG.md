@@ -69,6 +69,8 @@ lokalny katalog dostępny.
 Wymagane są oznaczenie rynku `en:poland`, zgodny kod i komplet kcal/B/W/T.
 Nie są to dowody poprawności etykiety. Null nie jest zerem; zero tłuszczu jest
 poprawne. kJ jest jawnie przeliczane przez4,184 tylko przy braku kcal.
+Wartość energii po przeliczeniu musi mieścić się w zakresie0–1000kcal na100;
+nierealny wynik jest odrzucany przed zapisem cache, tak samo jak błędne makro.
 Dla legacy nutriments z podstawą100ml wymagane jest dodatkowo jawne
 `product_quantity_unit=ml`; niejednoznaczne rekordy są odrzucane. Adapter nie
 próbuje zgadywać kategorii ani poprawiać podejrzanego produktu.
@@ -131,9 +133,20 @@ szkic→komenda właściciela→ponowne użycie→posiłek; nie jest to test liv
 ani OAuth. Chromium sprawdza logowanie, formularz, zatwierdzenie, porcję96kcal,
 ponowne wczytanie i nieaktywne XSS. Wyniki końcowe: review-evidence/product-catalog.md.
 
-Przed PR pozostają niezależna ocena koordynatora i rzeczywisty build/network-none
-smoke na Actions forka. Wdrożenie pozostaje osobnym działaniem właściciela.
+Końcowy niezależny review źródła `2df48534b97f8d74d6aefb6ed8684b4ccad51292`
+zakończył się PASS po naprawie walidacji energii OFF. Koordynator powtórzył pełne
+testy i niezmienione probe'y. Bramka PR nadal wymaga rzeczywistego build/network-none
+smoke na Actions forka dla dokładnego końcowego HEAD; link i stan są w opisie PR,
+nie należy utożsamiać wcześniejszego przebiegu z CI nowego PR.
+Wdrożenie pozostaje osobnym działaniem właściciela.
 Przy jego odbiorze live: przesłać własną etykietę, porównać każde pole,
 poprawić jedno pole, sprawdzić odrzucenie starej wersji, zatwierdzić aktualną,
 zapisać znaną porcję i sprawdzić późniejszą rozmowę tekstową. Bez testowego
 wysyłania prywatnych zdjęć lub prawdziwych danych podczas weryfikacji autora.
+
+Dodatkowy ograniczony odczyt rzeczywistym adapterem potwierdził trzy kompletne
+rekordy oznaczone rynkiem polskim:5900531004544 Skyr Naturalny,
+5900531000102 Low Fat Cottage Cheese i5900531000010 SEREK WIEJSKI (Piątnica).
+Wszystkie pozostały `unverified`,100g; to nie jest gwarancja poprawności etykiet
+ani reprezentatywnego pokrycia rynku. Publiczny endpoint wyszukiwania zwrócił503;
+sprawdzono pojedyncze produkty GET, bez zmiany adaptera i bez danych właściciela.
