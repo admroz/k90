@@ -10,7 +10,8 @@ test("app polls persistent timeline through state changes and reload without ret
   let state = "queued";
   const rows = () => [{id:1,role:"user",channel:"web",content:{text:"first"}},
     {id:2,role:"assistant",state,content:{text:"safe failure"}},
-    {id:3,role:"user",channel:"telegram",content:{text:"later"}}];
+    {id:3,role:"user",channel:"telegram",content:{text:"later"}},
+    ...Array.from({length:61}, (_, i) => ({id:i+4, role:'assistant', state:'done', content:{text:'archive-'+i}}))];
   const element = selector => {
     if (!elements.has(selector)) elements.set(selector, {value: "", innerHTML: "", setAttribute() {}, replaceChildren() {}});
     return elements.get(selector);
@@ -21,19 +22,21 @@ test("app polls persistent timeline through state changes and reload without ret
     window: {addEventListener() {}, get localStorage() {throw Error("must not read localStorage");}}, location: {hash: ""}, setInterval() {},
     fetch: async (path, options = {}) => {
       requests.push({path, options});
-      return {ok: true, json: async () => path.startsWith("/api/messages") ? rows() : []};
+      const before = Number(new URL(path, 'http://localhost').searchParams.get('before')) || Infinity;
+      return {ok: true, json: async () => path.startsWith("/api/messages") ? rows().filter(m=>m.id<before).slice(-50) : []};
     }
   });
   vm.runInContext(source, context);
   await new Promise(resolve => setImmediate(resolve));
   vm.runInContext("session = {timezone: 'UTC'}", context);
   await vm.runInContext("loadChat()", context);
+  await vm.runInContext("loadChat(15)", context);
   assert.match(element("#messages").innerHTML, /W kolejce/);
   for (const next of ["running", "failed", "interrupted", "done"]) {
     state = next;
     await vm.runInContext("loadChat()", context);
     const html = element("#messages").innerHTML;
-    assert.equal((html.match(/class="message /g)||[]).length, 3);
+    assert.equal((html.match(/class="message /g)||[]).length, 64);
     assert.ok(html.indexOf("safe failure") < html.indexOf("later"));
     assert.equal(element("#jobs").innerHTML, "");
     assert.doesNotMatch(html, /data-dismiss-job/);
@@ -41,6 +44,7 @@ test("app polls persistent timeline through state changes and reload without ret
   state = "failed";
   vm.runInContext("history.clear()", context);
   await vm.runInContext("loadChat()", context);
+  await vm.runInContext("loadChat(15)", context);
   assert.match(element("#messages").innerHTML, /Błąd odpowiedzi/);
   assert.ok(requests.every(r => !r.options.method));
 });

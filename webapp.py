@@ -344,11 +344,14 @@ def create_app(*, start_worker=True, processor=None):
         limit: int = Query(50, ge=1, le=100),
     ):
         from web_runtime import timeline
+        from profiling import request_scope, span
         rows = timeline(os.getenv("CONVERSATION_USER_ID", "owner"), before, limit)
-        return [
-            {**dict(row), "content": web_data.history_content(row["content"])}
-            for row in rows
-        ]
+        result = []
+        for row in rows:
+            with request_scope(row['channel'], row['profile_id'], row['job_id'], scope='delivery'):
+                with span('transport_delivery'):
+                    result.append({**row, 'content': web_data.history_content(row['content'])})
+        return result
 
     @app.get("/api/jobs", dependencies=[Depends(authenticated)])
     def jobs():
@@ -397,7 +400,7 @@ def create_app(*, start_worker=True, processor=None):
             return [
                 dict(row)
                 for row in conn.execute(
-                    "SELECT request_id, chat_id, response, delivery_index FROM chat_jobs WHERE channel = 'telegram' AND delivered = 0 AND state IN ('done', 'failed', 'interrupted') ORDER BY seq LIMIT 10"
+                    "SELECT request_id, chat_id, response, delivery_index, profile_id, seq AS job_id FROM chat_jobs WHERE channel = 'telegram' AND delivered = 0 AND state IN ('done', 'failed', 'interrupted') ORDER BY seq LIMIT 10"
                 )
             ]
 

@@ -56,6 +56,32 @@ def test_timeline_stable_states_pagination_and_ownership(runtime, monkeypatch):
         enqueue('web:first', 'identical')
 
 
+def test_failed_job_after_partial_persistence_still_projects_safe_error(runtime):
+    from agent import save_history
+    from web_runtime import timeline
+    enqueue('web:partial', 'hello')
+    def processor(content):
+        save_history('owner', content, 'partial saved answer')
+        raise RuntimeError('private provider diagnostic')
+    ConversationWorker(processor).run_once()
+    rows = timeline('owner')
+    assert len(rows) == 2 and rows[-1]['state'] == 'failed'
+    assert 'Sprawdź dane' in rows[-1]['content']
+
+
+def test_legacy_job_migration_uses_exact_persisted_owner(runtime, monkeypatch):
+    from web_runtime import timeline
+    enqueue('web:legacy-owner', 'legacy')
+    ConversationWorker().run_once()
+    with closing(get_conn()) as conn, conn:
+        conn.execute('DROP TABLE chat_timeline')
+        conn.execute('ALTER TABLE chat_jobs DROP COLUMN user_id')
+    monkeypatch.setenv('CONVERSATION_USER_ID', 'other')
+    init_runtime()
+    assert timeline('other') == []
+    assert len(timeline('owner')) == 2
+
+
 def test_channels_processed_in_order_and_share_context(runtime):
     from agent import load_history
 

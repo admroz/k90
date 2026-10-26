@@ -6,6 +6,7 @@ import base64
 import logging
 import os
 import time
+from profiling import request_scope, span
 
 import requests
 
@@ -72,14 +73,16 @@ def accept_update(api, backend, update):
 
 def deliver_pending(api, backend):
     for item in backend.call("GET", "/internal/deliveries"):
-        chunks = split_message(item["response"])
-        for index in range(item["delivery_index"], len(chunks)):
-            api.send_text(item["chat_id"], chunks[index])
-            backend.call(
-                "POST",
-                f"/internal/deliveries/{item['request_id']}",
-                json={"index": index + 1, "done": index + 1 == len(chunks)},
-            )
+        with request_scope('telegram', item.get('profile_id'), item.get('job_id'), scope='delivery'):
+            with span('transport_delivery'):
+                chunks = split_message(item["response"])
+                for index in range(item["delivery_index"], len(chunks)):
+                    api.send_text(item["chat_id"], chunks[index])
+                    backend.call(
+                        "POST",
+                        f"/internal/deliveries/{item['request_id']}",
+                        json={"index": index + 1, "done": index + 1 == len(chunks)},
+                    )
 
 
 def main():

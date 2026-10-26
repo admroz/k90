@@ -18,6 +18,7 @@ from k90_memory import (BackendError, HindsightBackend, PrivacyError, Worker,
 from k90_memory.store import current
 from k90_memory.privacy import PrivacyPolicy
 from outbound_policy import model_policy
+from profiling import profiled
 from tools.db import MESSAGE_CONTEXT, get_conn
 
 log=logging.getLogger(__name__)
@@ -195,6 +196,7 @@ def get_backend(policy,*,worker=False):
                             allow_internal_http=_bool('K90_HINDSIGHT_ALLOW_INTERNAL_HTTP'),transport=_transport(token))
 
 
+@profiled('recall')
 def recall_context(owner,question,*,exclude=()):
     stats={'memory_sources':0,'memory_blocked':0,'memory_chars':0}
     if _local_only(question):
@@ -246,6 +248,7 @@ def recall_context(owner,question,*,exclude=()):
     return context,stats
 
 
+@profiled('memory_index')
 def run_pending(limit=3):
     policy=model_policy()
     backend=get_backend(policy,worker=True)

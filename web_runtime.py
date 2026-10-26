@@ -11,7 +11,9 @@ import logging
 import os
 import threading
 import time
+from uuid import uuid4
 from contextlib import closing
+import profiling
 
 from tools.db import MESSAGE_CONTEXT, get_conn, init_db
 
@@ -20,6 +22,7 @@ INTERRUPTED = "Przetwarzanie przerwano podczas restartu. Sprawdź historię i da
 
 
 def init_runtime():
+    profiling.enabled()  # Reject invalid configuration before starting the worker.
     init_db()
     with closing(get_conn()) as conn, conn:
         conn.executescript("""
@@ -47,24 +50,44 @@ def init_runtime():
             conn.execute("ALTER TABLE chat_jobs ADD COLUMN kind TEXT NOT NULL DEFAULT 'message'")
         if "user_id" not in columns:
             conn.execute("ALTER TABLE chat_jobs ADD COLUMN user_id TEXT NOT NULL DEFAULT 'owner'")
-            conn.execute("UPDATE chat_jobs SET user_id = ?", (os.getenv("CONVERSATION_USER_ID", "owner"),))
+            for job in conn.execute('SELECT seq, request_id FROM chat_jobs').fetchall():
+                owners = {row[0] for row in conn.execute(
+                    'SELECT DISTINCT user_id FROM conversations WHERE request_id=?', (job['request_id'],))}
+                if conn.execute("SELECT 1 FROM sqlite_master WHERE name='agent_events'").fetchone():
+                    owners.update(row[0] for row in conn.execute(
+                        'SELECT DISTINCT owner FROM agent_events WHERE request_id=?', (job['request_id'],)))
+                owner = next(iter(owners)) if len(owners) == 1 else (
+                    '__ambiguous_legacy_owner__' if owners else os.getenv('CONVERSATION_USER_ID', 'owner'))
+                conn.execute('UPDATE chat_jobs SET user_id=? WHERE seq=?', (owner, job['seq']))
+        for name, kind in (('profile_id', 'TEXT'), ('queued_monotonic', 'REAL'), ('queue_clock_id', 'TEXT')):
+            if name not in columns:
+                conn.execute(f"ALTER TABLE chat_jobs ADD COLUMN {name} {kind}")
+        for row in conn.execute("SELECT seq FROM chat_jobs WHERE profile_id IS NULL").fetchall():
+            conn.execute("UPDATE chat_jobs SET profile_id=? WHERE seq=?", (uuid4().hex, row[0]))
         conn.execute("""CREATE TABLE IF NOT EXISTS chat_timeline (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id TEXT NOT NULL, identity TEXT NOT NULL, role TEXT NOT NULL,
             conversation_id INTEGER, job_seq INTEGER,
             UNIQUE(user_id, identity, role)
         )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS chat_timeline_job ON chat_timeline(job_seq)")
         _index_timeline(conn)
 
 
 def _index_timeline(conn):
     # Identity, never content or timestamps, joins the two persistence paths.
     candidates = []
-    for row in conn.execute("SELECT * FROM conversations ORDER BY id"):
+    for row in conn.execute("""SELECT c.id, c.user_id, c.request_id, c.role, c.timestamp
+        FROM conversations c LEFT JOIN chat_timeline t ON t.user_id=c.user_id
+        AND t.role=c.role AND t.identity=CASE WHEN length(c.request_id)>0
+            THEN 'request:' || c.request_id ELSE 'legacy:' || c.id END
+        WHERE t.conversation_id IS NOT c.id ORDER BY c.id"""):
         identity = "request:" + row["request_id"] if row["request_id"] else "legacy:" + str(row["id"])
         candidates.append((row["timestamp"], 1, row["id"], row["user_id"], identity,
                            row["role"], row["id"], None))
-    for row in conn.execute("SELECT * FROM chat_jobs WHERE kind = 'message' ORDER BY seq"):
+    for row in conn.execute("""SELECT j.seq, j.user_id, j.request_id, j.created_at
+        FROM chat_jobs j WHERE j.kind='message' AND
+        (SELECT COUNT(*) FROM chat_timeline t WHERE t.job_seq=j.seq) < 2 ORDER BY j.seq"""):
         for role in ("user", "assistant"):
             candidates.append((row["created_at"], 0, row["seq"], row["user_id"],
                                "request:" + row["request_id"], role, None, row["seq"]))
@@ -77,6 +100,7 @@ def _index_timeline(conn):
             (owner, identity, role, conversation, job))
 
 
+@profiling.profiled('projection')
 def timeline(user_id, before=None, limit=50):
     with closing(get_conn()) as conn, conn:
         _index_timeline(conn)
@@ -84,7 +108,9 @@ def timeline(user_id, before=None, limit=50):
             COALESCE(j.request_id, c.request_id) AS request_id,
             COALESCE(j.channel, c.channel) AS channel,
             COALESCE(j.created_at, c.timestamp) AS timestamp,
+            j.profile_id, j.seq AS job_id,
             j.state, CASE WHEN t.role = 'user' THEN COALESCE(j.payload, c.content)
+                WHEN j.state IN ('failed', 'interrupted') THEN COALESCE(j.response, '')
                 ELSE COALESCE(c.content, j.response, '') END AS content
             FROM chat_timeline t
             LEFT JOIN conversations c ON c.id = t.conversation_id AND c.user_id = t.user_id
@@ -150,11 +176,19 @@ def enqueue(request_id, content, channel="web", chat_id=None, *, kind="message")
             (request_id, channel, payload, chat_id, kind, os.getenv("CONVERSATION_USER_ID", "owner")),
         )
         _index_timeline(conn)
-        return dict(
+        job = dict(
             conn.execute(
                 "SELECT * FROM chat_jobs WHERE request_id = ?", (request_id,)
             ).fetchone()
         )
+        profile_id = uuid4().hex
+        queued = profiling.perf_counter() if profiling.enabled() else None
+        conn.execute("UPDATE chat_jobs SET profile_id=?, queued_monotonic=?, queue_clock_id=? WHERE seq=?",
+                     (profile_id, queued, profiling.CLOCK_ID, job['seq']))
+        job.update(profile_id=profile_id, queued_monotonic=queued, queue_clock_id=profiling.CLOCK_ID)
+        with profiling.request_scope(channel, profile_id, job['seq'], scope='submission'):
+            profiling.queue_event('start', queued, profiling.CLOCK_ID)
+        return job
 
 
 def recover_interrupted():
@@ -189,7 +223,7 @@ def process_message(content):
     )
     from tools.libre import should_auto_sync, sync_libre_data
 
-    user_id = os.getenv("CONVERSATION_USER_ID", "owner")
+    user_id = MESSAGE_CONTEXT.get().get('user_id', os.getenv("CONVERSATION_USER_ID", "owner"))
     text = content if isinstance(content, str) else ""
     if (
         text.strip().lower().split()[:1] == ["/update"]
@@ -276,9 +310,14 @@ class ConversationWorker:
             conn.execute(
                 "UPDATE chat_jobs SET state = 'running' WHERE seq = ?", (job["seq"],)
             )
+        with profiling.request_scope(job['channel'], job['profile_id'], job['seq']):
+            profiling.queue_event('finish', job['queued_monotonic'], job['queue_clock_id'])
+            return self._run_claimed(job)
+
+    def _run_claimed(self, job):
         log.info("conversation.claim seq=%d channel=%s", job["seq"], job["channel"])
         token = MESSAGE_CONTEXT.set(
-            {"channel": job["channel"], "request_id": job["request_id"]}
+            {"channel": job["channel"], "request_id": job["request_id"], 'user_id': job['user_id']}
         )
         try:
             if job["kind"] == "garmin_sync":
@@ -290,17 +329,19 @@ class ConversationWorker:
                     raise RuntimeError("Garmin synchronization failed")
                 response = "Dane Garmin zostały pobrane."
             else:
-                response = self.processor(json.loads(job["payload"]))
+                with profiling.span('processing'):
+                    response = self.processor(json.loads(job["payload"]))
             state = "done"
-        except Exception:
-            log.exception("conversation.failed request_id=%s", job["request_id"])
+        except Exception as exc:
+            profiling.failure(exc)
+            log.error("conversation.failed job_id=%d", job["seq"])
             response = "Nie udało się zakończyć odpowiedzi. Sprawdź dane przed ponowieniem — część operacji mogła zostać wykonana."
             if job["kind"] == "garmin_sync":
                 response = "Nie udało się pobrać danych Garmin. Sprawdź połączenie i konfigurację w logach kontenera."
             state = "failed"
         finally:
             MESSAGE_CONTEXT.reset(token)
-        with closing(get_conn()) as conn, conn:
+        with profiling.span('persistence'), closing(get_conn()) as conn, conn:
             conn.execute(
                 "UPDATE chat_jobs SET state = ?, response = ?, finished_at = CURRENT_TIMESTAMP WHERE seq = ?",
                 (state, response, job["seq"]),

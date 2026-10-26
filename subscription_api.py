@@ -4,6 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 import re
+from profiling import span
 
 from responses_api import FunctionCall, Turn, _input_messages
 from subscription_protocol import API_ORIGIN, ProbeError, request_json
@@ -22,7 +23,8 @@ class SubscriptionConversation:
         self.request = request or request_json
         self.reasoning_effort = reasoning_effort
         # Validate original structure before normalization can discard restrictions.
-        messages = self.policy.sanitize(messages)
+        with span('filtering'):
+            messages = self.policy.sanitize(messages)
         self.instructions = '\n\n'.join(m['content'] for m in messages if m.get('role') == 'system')
         self.input = _input_messages([m for m in messages if m.get('role') != 'system'])
         self.tool_names = set()
@@ -49,17 +51,21 @@ class SubscriptionConversation:
         if self.reasoning_effort:
             body['reasoning'] = {'effort': self.reasoning_effort}
         # Filter BEFORE any token refresh, catalog request or inference request.
-        body = self.policy.sanitize(body)
-        token = self.token_store.access_token()
+        with span('filtering'):
+            body = self.policy.sanitize(body)
+        with span('token_access'):
+            token = self.token_store.access_token()
         try:
             if not self._model_checked:
-                catalog = self.request(API_ORIGIN+'/v1/models', token=token)
+                with span('catalog'):
+                    catalog = self.request(API_ORIGIN+'/v1/models', token=token)
                 allowed = {m.get('slug') for m in catalog.get('models', [])
                            if m.get('visibility') == 'list' and isinstance(m.get('slug'), str)}
                 if self.model not in allowed:
                     raise SubscriptionError('model_not_in_account_catalog')
                 self._model_checked = True
-            response = self.request(API_ORIGIN+'/v1/responses', data=body, token=token, stream=True)
+            with span('provider_request'):
+                response = self.request(API_ORIGIN+'/v1/responses', data=body, token=token, stream=True)
         except SubscriptionError:
             raise
         except ProbeError as exc:
@@ -95,6 +101,7 @@ class SubscriptionConversation:
                     output_tokens=int(usage.get('output_tokens') or 0), complete=True)
 
     def add_tool_result(self, call_id, result):
-        safe = self.policy.sanitize(result)
+        with span('filtering'):
+            safe = self.policy.sanitize(result)
         self.input.append({'type': 'function_call_output', 'call_id': call_id,
                            'output': json.dumps(safe, ensure_ascii=False, default=str)})

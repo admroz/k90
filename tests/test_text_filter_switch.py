@@ -9,7 +9,7 @@ EMAIL = 'synthetic@example.invalid'
 
 @pytest.mark.parametrize('enabled', ['true', 'false'])
 @pytest.mark.parametrize('transport', ['chat', 'responses', 'subscription'])
-def test_agent_context_history_tool_and_current_text_follow_switch(temp_db, monkeypatch, enabled, transport):
+def test_agent_context_history_tool_and_current_text_follow_switch(temp_db, monkeypatch, caplog, enabled, transport):
     import agent
     import responses_api
     import subscription_api
@@ -17,6 +17,7 @@ def test_agent_context_history_tool_and_current_text_follow_switch(temp_db, monk
     from litellm import ModelResponse
 
     monkeypatch.setenv('K90_TEXT_FILTER_ENABLED', enabled)
+    monkeypatch.setenv('K90_PROFILING_ENABLED', 'true')
     monkeypatch.setenv('K90_AGENT_AUTH', 'chatgpt' if transport == 'subscription' else 'api')
     monkeypatch.setenv('K90_MEMORY_BACKEND', 'disabled')
     monkeypatch.setattr(agent, 'MODEL', 'gpt-6.1-sol' if transport == 'responses' else 'demo')
@@ -64,7 +65,13 @@ def test_agent_context_history_tool_and_current_text_follow_switch(temp_db, monk
     monkeypatch.setattr(responses_api, 'OpenAI', Client)
     monkeypatch.setattr(subscription_auth, 'TokenStore', lambda *a: SimpleNamespace(access_token=lambda:'synthetic'))
     monkeypatch.setattr(subscription_api, 'request_json', request)
-    assert agent.run_agent('current ' + EMAIL, 'test') == ('done', False)
+    with caplog.at_level('INFO'):
+        assert agent.run_agent('current ' + EMAIL, 'test') == ('done', False)
+    profiles = [json.loads(r.getMessage().split(' profile=', 1)[1])
+                for r in caplog.records if ' profile=' in r.getMessage()]
+    assert {'history', 'context', 'recall', 'provider', 'tool', 'persistence', 'filtering', 'provider_request'} <= {r['stage'] for r in profiles}
+    assert len({r['request_id'] for r in profiles}) == 1
+    assert EMAIL not in json.dumps(profiles) and 'test' not in json.dumps(profiles)
     assert len(sent) == 2
     wire = json.dumps(sent)
     for label in ('context', 'history', 'tool', 'current'):

@@ -197,6 +197,7 @@ def test_new_photo_still_requires_consent(temp_db, monkeypatch, auth):
 def test_preparation_and_provider_phase_logs_are_content_free(temp_db, monkeypatch, caplog):
     import logging
     import memory_runtime
+    monkeypatch.setenv('K90_PROFILING_ENABLED', 'true')
     monkeypatch.setenv('K90_AGENT_AUTH', 'api')
     monkeypatch.setattr(agent, 'MODEL', 'synthetic')
     monkeypatch.setattr(memory_runtime, 'start_worker', lambda: None)

@@ -520,7 +520,8 @@ Przygotowanie personal self-hosted nie jest akceptacją produkcyjnej topologii,
 prawdziwego OAuth/provider behavior, bank ACL, szyfrowania backupu ani pełnej
 anonimizacji. CI używa syntetyków i network-none dla runtime; nie uwierzytelnia
 konta i nie deployuje. Szczegóły rzeczywiście wykonanych prób: VERIFICATION.md.
-# Filtr tekstu do modelu
+
+## Filtr tekstu do modelu
 
 `K90_TEXT_FILTER_ENABLED=true` zachowuje dotychczasowe automatyczne maskowanie
 podstawowych identyfikatorów i blokowanie oczywistych sekretów regexami. Tylko
@@ -533,3 +534,25 @@ wymagają osobnej zgody, są nieprzezroczyste dla filtra tekstu i nie wracają
 z historii. Hindsight zawsze ponawia swój bazowy filtr tekstu niezależnie od
 przełącznika modelu; nie oznacza to pełnej anonimizacji.
 
+## Pomiary etapów
+
+`K90_PROFILING_ENABLED=false` jest domyślne; wyłącznie dokładne `true`/`false`
+są poprawne. Błędna konfiguracja zatrzymuje inicjalizację workera. Po włączeniu
+dotychczasowy logger `agent.phase` emituje start i finish/error/timeout, UTC,
+monotoniczne czasy i krótkie summary. `request_id` jest losowym identyfikatorem
+profilowania zapisanym przy zadaniu, `job_id` lokalnym numerem kolejki; nie są
+to identyfikatory użytkownika ani surowe identyfikatory Telegrama.
+
+`scope=submission`, `processing` i `delivery` rozdzielają przyjęcie, wykonanie
+i dostarczenie. `background=true` oznacza osobny kontekst, np. indeksowanie HS
+lub summary przy starcie. Czasy zagnieżdżonych spanów nakładają się: **nie sumuj
+ich do czasu odpowiedzi**. Start bez końca jest dowodem niedokończonego etapu.
+`queue_wait` używa zegara monotonicznego procesu przyjęcia; po restarcie lub
+włączeniu profilowania dopiero po przyjęciu `elapsed_ms=null` i `clock_reset=true`
+oznaczają brak wiarygodnej długości oczekiwania, a UTC zachowuje chronologię.
+
+`first_event` i `first_text` pochodzą z rzeczywistych zdarzeń SSE subskrypcji;
+pozostałe transporty mierzą całe wywołanie, bez deklarowania TTFT. Profilowanie
+nie zapisuje treści, argumentów narzędzi, wyjątków, adresów, tokenów ani obrazów.
+Pomiary dostarczenia WWW obejmują przygotowanie projekcji odpowiedzi API,
+nie potwierdzają odebrania bajtów ani wyświetlenia przez przeglądarkę.

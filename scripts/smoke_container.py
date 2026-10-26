@@ -24,11 +24,14 @@ def check_photo_history_in_runtime():
         return (struct.pack('>I', len(data)) + kind + data +
                 struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff))
 
-    pixels = random.Random(90).randbytes(640 * 640 * 3)
-    scanlines = b''.join(b'\0' + pixels[i:i+1920] for i in range(0, len(pixels), 1920))
-    png = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 640, 640, 8, 2, 0, 0, 0)) +
+    side = 1280
+    stride = side * 3
+    pixels = random.Random(90).randbytes(side * side * 3)
+    scanlines = b''.join(b'\0' + pixels[i:i+stride] for i in range(0, len(pixels), stride))
+    png = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', side, side, 8, 2, 0, 0, 0)) +
            chunk(b'IDAT', zlib.compress(scanlines)) + chunk(b'IEND', b''))
-    assert len(png) >= 1_179_648  # B1: accepted photo used to block the follow-up
+    from tools.images import MAX_IMAGE_BYTES
+    assert MAX_IMAGE_BYTES * .95 < len(png) <= MAX_IMAGE_BYTES
     encoded = base64.b64encode(png).decode('ascii')
     uri = 'data:image/png;base64,' + encoded
     photo = [{'type': 'text', 'text': 'Synthetic millet lunch, synthetic@example.invalid'},
@@ -95,6 +98,63 @@ def check_photo_history_in_runtime():
 
 check_photo_history_in_runtime()
 
+def check_observability_in_runtime():
+    import io, json, logging, os, tempfile
+    from unittest.mock import patch
+    from k90_memory import PrivacyError, PrivacyPolicy
+    from outbound_policy import sanitize_payload
+    from web_runtime import init_runtime, enqueue, ConversationWorker, timeline
+    from agent import save_history
+    capture = io.StringIO()
+    logger = logging.getLogger('agent')
+    handler = logging.StreamHandler(capture)
+    previous = logger.level
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    try:
+        with tempfile.TemporaryDirectory() as scratch, patch.dict(os.environ, {
+                'DB_PATH': scratch + '/synthetic.db', 'DATA_DIR': scratch,
+                'CONVERSATION_USER_ID': 'synthetic-smoke',
+                'K90_TEXT_FILTER_ENABLED': 'false', 'K90_PROFILING_ENABLED': 'true',
+                'K90_MEMORY_BACKEND': 'disabled'}):
+            assert sanitize_payload('synthetic@example.invalid') == 'synthetic@example.invalid'
+            try:
+                PrivacyPolicy().sanitize_text('Bearer synthetic-secret')
+            except PrivacyError:
+                pass
+            else:
+                raise AssertionError('HS baseline was disabled')
+            init_runtime()
+            first = enqueue('web:synthetic-failed', 'synthetic first')
+            def fail(_):
+                raise RuntimeError('private diagnostic must not escape')
+            assert ConversationWorker(fail).run_once()
+            second = enqueue('telegram:synthetic-later', 'synthetic later', 'telegram', 123)
+            def succeed(content):
+                save_history('synthetic-smoke', content, 'synthetic answer')
+                return 'synthetic answer'
+            assert ConversationWorker(succeed).run_once()
+            rows = timeline('synthetic-smoke')
+            assert len(rows) == 4 and rows[1]['state'] == 'failed' and rows[-1]['state'] == 'done'
+            assert rows[-1]['content'] == 'synthetic answer'
+            assert timeline('synthetic-other') == []
+            assert timeline('synthetic-smoke', rows[2]['id']) == rows[:2]
+            assert timeline('synthetic-smoke') == rows
+            events = [json.loads(line.split(' profile=', 1)[1])
+                      for line in capture.getvalue().splitlines() if ' profile=' in line]
+            ids = {first['profile_id'], second['profile_id']}
+            correlated = [r for r in events if r['request_id'] in ids]
+            assert {r['request_id'] for r in correlated} == ids
+            assert {'queue_wait', 'processing', 'persistence'} <= {r['stage'] for r in correlated}
+            assert 'private diagnostic' not in capture.getvalue()
+            assert 'synthetic@example.invalid' not in capture.getvalue()
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(previous)
+    print('Timeline, model filter switch, HS baseline and profiling runtime passed (synthetic offline).')
+
+check_observability_in_runtime()
+
 base = 'http://127.0.0.1:8000'
 client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 def call(path, body=None):
@@ -111,7 +171,7 @@ call('/api/messages', {'request_id':'web:smoke', 'text':'hello'})
 deadline = time.monotonic()+10
 while time.monotonic()<deadline:
     rows = call('/api/messages')
-    if len(rows)==2:
+    if len(rows)==2 and rows[-1].get('state') == 'done':
         assert rows[-1]['role']=='assistant'
         break
     time.sleep(.1)

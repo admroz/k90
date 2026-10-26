@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from profiling import profiled
+
 import logging
 import os
 
@@ -87,6 +89,7 @@ def mark_summary_refreshed() -> None:
     _set_sync_status(last_summary_refresh_at=now_local().isoformat())
 
 
+@profiled('sync_garmin')
 def sync_garmin_data(trigger: str = "manual") -> dict:
     """Pobiera nowe dane z Garmin Connect i aktualizuje SQLite bez pośrednictwa CSV."""
     if os.getenv("K90_SYNC_ENABLED", "true").lower() == "false":

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from profiling import profiled
+
 import logging
 import os
 
@@ -94,6 +96,7 @@ def mark_summary_refreshed() -> None:
     _set_sync_status(last_summary_refresh_at=now_local().isoformat())
 
 
+@profiled('sync_libre')
 def sync_libre_data(trigger: str = "manual") -> dict:
     if os.getenv("K90_SYNC_ENABLED", "true").lower() == "false":
         return {"error": "Synchronizacja jest wyłączona w lokalnej kopii danych."}

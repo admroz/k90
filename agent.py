@@ -14,8 +14,8 @@ from __future__ import annotations
 import json
 import logging
 import os
-from contextlib import closing, contextmanager
-from time import perf_counter
+from contextlib import closing
+from profiling import span as _phase, profiled, profiled_request
 import litellm
 from dotenv import load_dotenv
 
@@ -67,6 +67,7 @@ def _save_usage(model: str, prompt_tokens: int, completion_tokens: int) -> None:
     conn.close()
 
 
+@profiled('history')
 def load_history(user_id: str) -> list[dict]:
     """Ładuje ostatnie HISTORY_MESSAGES par wiadomości z historii rozmów."""
     conn = get_conn()
@@ -82,6 +83,7 @@ def load_history(user_id: str) -> list[dict]:
     return result
 
 
+@profiled('persistence')
 def save_history(user_id: str, user_content, assistant_content: str) -> None:
     """Zapisuje wiadomość użytkownika i odpowiedź asystenta do historii."""
     if isinstance(user_content, list):
@@ -133,19 +135,9 @@ def _message_kind(user_message: str | list) -> str:
     return "text"
 
 
-@contextmanager
-def _phase(stage):
-    started = perf_counter()
-    try:
-        yield
-    finally:
-        log.info("agent.phase stage=%s elapsed_ms=%.3f", stage,
-                 (perf_counter() - started) * 1000)
-
-
+@profiled_request
 def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool]:
     """Capture originals durably before any outbound work, even if a provider fails."""
-    log.info("agent.phase stage=begin elapsed_ms=0")
     with _phase("capture"):
         turn = memory_runtime.begin_turn(user_id, user_message)
     token = memory_runtime.TURN_CONTEXT.set(turn)
@@ -164,14 +156,12 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
 
 def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool]:
     """Uruchamia agenta i zwraca (odpowiedź, czy_odświeżyć_podsumowanie)."""
-    with _phase("history"):
-        history = load_history(user_id)
+    history = load_history(user_id)
     with _phase("context"):
         system, context_stats = _build_system_message()
     turn = memory_runtime.TURN_CONTEXT.get() or {}
-    with _phase("recall"):
-        recalled, memory_stats = memory_runtime.recall_context(user_id, user_message,
-                                                            exclude=[turn.get('source_id')])
+    recalled, memory_stats = memory_runtime.recall_context(user_id, user_message,
+                                                        exclude=[turn.get('source_id')])
     context_stats.update(memory_stats)
     if recalled:
         system += "\n\n" + recalled
@@ -214,7 +204,6 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
         )
 
     for round_index in range(1, MAX_TOOL_ROUNDS + 1):
-        log.info("agent.phase stage=provider.start round=%d", round_index)
         with _phase("provider"):
             if responses is not None:
                 turn = responses.complete()
@@ -270,7 +259,8 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
             if tool_call.name in SUMMARY_REFRESH_TRIGGERS:
                 should_refresh = True
             args = strict_json_loads(tool_call.arguments or "{}")
-            result = execute_tool(tool_call.name, args)
+            with _phase('tool'):
+                result = execute_tool(tool_call.name, args)
             memory_runtime.record_tool(tool_call.name, args, result)
             log.info(
                 "agent.tool_result user=%s tool=%s ok=%s",
