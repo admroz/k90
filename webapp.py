@@ -282,6 +282,35 @@ def create_app(*, start_worker=True, processor=None):
             ),
         }
 
+    from tools import food_catalog
+
+    def catalog_action(fn, *args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except (ValueError, TypeError, OverflowError) as exc:
+            raise HTTPException(409, str(exc)) from None
+
+    @app.get('/api/catalog', dependencies=[Depends(authenticated)])
+    def catalog_list(query: str = Query('', max_length=200), barcode: str | None = None):
+        return catalog_action(food_catalog.search, query, barcode)
+
+    @app.post('/api/catalog', dependencies=[Depends(authenticated)])
+    def catalog_create(body: dict):
+        return catalog_action(food_catalog.propose, body)
+
+    @app.put('/api/catalog/{product_id}', dependencies=[Depends(authenticated)])
+    def catalog_edit(product_id: int, body: dict):
+        return catalog_action(food_catalog.revise, product_id, body.get('version'), body.get('product', {}))
+
+    @app.post('/api/catalog/{product_id}/confirm', dependencies=[Depends(authenticated)])
+    def catalog_confirm(product_id: int, body: dict):
+        return catalog_action(food_catalog.confirm, product_id, body.get('version'))
+
+    @app.post('/api/catalog/{product_id}/portion', dependencies=[Depends(authenticated)])
+    def catalog_portion(product_id: int, body: dict):
+        return catalog_action(food_catalog.log_portion, product_id, body.get('version'),
+                              body.get('quantity'), body.get('unit'), body.get('request_id'))
+
     @app.get("/api/dashboard", dependencies=[Depends(authenticated)])
     def dashboard(days: int = Query(30, ge=1, le=366)):
         return web_data.dashboard(days)
