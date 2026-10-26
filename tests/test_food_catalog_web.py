@@ -25,3 +25,41 @@ def test_catalog_owner_review_and_meal(web_client):
     edit = c.put(f"/api/catalog/{p['id']}", json=dict(version=2, product=label()), headers=H)
     assert edit.status_code == 200 and edit.json()['status'] == 'draft'
     assert c.get('/api/catalog?barcode=../../etc/passwd').status_code == 409
+
+
+def test_explicit_external_lookup_and_retrievable_label(web_client, monkeypatch):
+    import memory_runtime
+    from tools import food_catalog, food_off
+    from test_food_catalog_off import response, CODE
+    from tools import execute_tool
+    login(web_client)
+    monkeypatch.setattr(food_off, '_fetch', lambda _: response())
+    result = web_client.post('/api/catalog/lookup', json={'barcode':CODE}, headers=H)
+    assert result.status_code == 200 and result.json()['status'] == 'unverified'
+    assert execute_tool('lookup_food_barcode', {'barcode':CODE})['status'] == 'unverified'
+    own = label(); own['provenance'] = 'own_label'
+    assert web_client.post('/api/catalog', json=own, headers=H).status_code == 409
+    image = 'data:image/png;base64,iVBORw0KGgo='
+    turn = memory_runtime.begin_turn('owner', [{'type':'image_url','image_url':{'url':image}}])
+    token = memory_runtime.TURN_CONTEXT.set(turn)
+    try:
+        p = food_catalog.propose_from_chat(own)
+    finally:
+        memory_runtime.TURN_CONTEXT.reset(token)
+    assert web_client.get(f"/api/catalog/{p['id']}/label").json()['image'] == image
+
+
+def test_invalid_product_structure_and_cross_owner_label_are_rejected(web_client):
+    import memory_runtime
+    from tools import food_catalog
+    login(web_client)
+    for bad in [None, [], 'fixture']:
+        assert web_client.put('/api/catalog/1', json={'version':1,'product':bad}, headers=H).status_code == 409
+    turn = memory_runtime.begin_turn('other-owner', [{'type':'image_url','image_url':{'url':'data:image/png;base64,iVBORw0KGgo='}}])
+    token = memory_runtime.TURN_CONTEXT.set(turn)
+    try:
+        own = label(); own['provenance'] = 'own_label'
+        p = food_catalog.propose_from_chat(own)
+    finally:
+        memory_runtime.TURN_CONTEXT.reset(token)
+    assert web_client.get(f"/api/catalog/{p['id']}/label").status_code == 409

@@ -83,3 +83,67 @@ def test_portion_rejects_ambiguous_quantity_units(temp_db, quantity, unit):
         catalog.log_portion(p['id'], 2, quantity, unit, 'invalid')
     with get_conn() as conn:
         assert conn.execute('SELECT count(*) FROM posilki').fetchone()[0] == 0
+
+
+def test_strict_versions_and_owner_macro_limits(temp_db):
+    p = catalog.propose(label())
+    for version in [True, '1', 1.0, None]:
+        with pytest.raises(ValueError): catalog.confirm(p['id'], version)
+    data = label(); data['protein'] = 101
+    with pytest.raises(ValueError): catalog.propose(data)
+
+
+def test_same_draft_submission_without_barcode_is_idempotent(temp_db):
+    data = label(); data['barcode'] = None
+    first = catalog.propose(data, request_id='owner-submission')
+    assert catalog.propose(data, request_id='owner-submission') == first
+    changed = dict(data, name='Another fixture')
+    with pytest.raises(ValueError, match='request'):
+        catalog.propose(changed, request_id='owner-submission')
+    with get_conn() as conn:
+        assert conn.execute('SELECT count(*) FROM food_products').fetchone()[0] == 1
+
+
+def test_correction_keeps_label_evidence(temp_db):
+    import memory_runtime
+    message = [{'type':'image_url','image_url':{'url':'data:image/png;base64,iVBORw0KGgo='}}]
+    turn = memory_runtime.begin_turn('owner', message)
+    token = memory_runtime.TURN_CONTEXT.set(turn)
+    try:
+        data = label(); data['provenance'] = 'own_label'
+        p = catalog.propose_from_chat(data)
+    finally:
+        memory_runtime.TURN_CONTEXT.reset(token)
+    data['kcal'] = 65; data['provenance'] = 'manual'
+    revised = catalog.revise(p['id'], 1, data)
+    assert revised['source_event_id'] == turn['user_event_id']
+    assert catalog.label_image(p['id'])['image'] == message[0]['image_url']['url']
+
+
+def test_polish_name_search_casefold_and_no_wildcards(temp_db):
+    data = label(); data['name'] = 'ŻÓŁTY ser'; data['barcode'] = None
+    p = catalog.propose(data)
+    assert catalog.search(query='żółty') == [p]
+    assert catalog.search(query="%' OR 1=1 --") == []
+
+
+def test_confirmation_returns_approved_snapshot_during_concurrent_edit(temp_db, monkeypatch):
+    import threading
+    p = catalog.propose(label())
+    original_get = catalog.get
+    reread, proceed = threading.Event(), threading.Event()
+    result = []
+    def delayed_get(product_id):
+        if threading.current_thread().name == 'confirm-race':
+            reread.set()
+            assert proceed.wait(3)
+        return original_get(product_id)
+    monkeypatch.setattr(catalog, 'get', delayed_get)
+    thread = threading.Thread(name='confirm-race', target=lambda: result.append(catalog.confirm(p['id'], 1)))
+    thread.start()
+    if reread.wait(1):
+        changed = label(); changed['kcal'] = 80
+        catalog.revise(p['id'], 2, changed)
+    proceed.set(); thread.join(4)
+    assert not thread.is_alive()
+    assert result[0]['version'] == 2 and result[0]['status'] == 'confirmed' and result[0]['kcal'] == 64

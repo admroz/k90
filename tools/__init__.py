@@ -10,7 +10,8 @@ from .diet import log_meal, update_meal, get_recent_meals, delete_meal
 from .garmin import sync_garmin_data
 from .libre import sync_libre_data
 from .patient import read_patient_file, update_patient_file
-from .food_catalog import propose_from_chat, search as find_food_products, log_portion
+from .food_catalog import propose_from_chat, search as find_food_products, log_portion_from_chat
+from .food_off import lookup as lookup_food_barcode
 
 
 def _refresh_patient_summary() -> dict:
@@ -21,9 +22,10 @@ def _refresh_patient_summary() -> dict:
 
 # Mapa nazwa → funkcja
 _REGISTRY = {
+    "lookup_food_barcode": lookup_food_barcode,
     "propose_food_product": propose_from_chat,
     "find_food_products": find_food_products,
-    "log_food_portion": log_portion,
+    "log_food_portion": log_portion_from_chat,
     "get_blood_pressure": get_blood_pressure,
     "get_weight_trend": get_weight_trend,
     "get_sleep_stats": get_sleep_stats,
@@ -301,6 +303,8 @@ TOOLS = [
 
 
 for _name, _description, _properties, _required in [
+    ('lookup_food_barcode', 'Lokalnie najpierw, OFF zapasowo. Zewnętrzny wynik zawsze niepotwierdzony; nie importuj jako etykiety.',
+     {'barcode':{'type':'string'}}, ['barcode']),
     ('propose_food_product', 'Zapisz wyłącznie szkic etykiety do jawnej kontroli użytkownika.',
      {'product': {'type': 'object', 'properties': {
          **{k: {'type':'string'} for k in ('name','brand','barcode')},
@@ -325,6 +329,14 @@ def execute_tool(name: str, args: dict):
     if fn is None:
         return {"error": f"Nieznane narzędzie: {name}"}
     try:
-        return fn(**args)
+        from memory_runtime import TURN_CONTEXT
+        turn = TURN_CONTEXT.get()
+        is_meal = name in ('log_meal', 'log_food_portion')
+        if turn and is_meal and turn.get('meal_log_kind') not in (None, name):
+            return {'error':'Nie łącz log_meal i log_food_portion w jednej wiadomości. Porcja mogła już zostać zapisana; osobny posiłek zgłoś w nowej wiadomości.'}
+        result = fn(**args)
+        if turn and is_meal and isinstance(result, dict) and 'error' not in result:
+            turn['meal_log_kind'] = name
+        return result
     except Exception as e:
         return {"error": str(e)}

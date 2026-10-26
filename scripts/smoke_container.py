@@ -155,6 +155,36 @@ def check_observability_in_runtime():
 
 check_observability_in_runtime()
 
+def check_catalog_in_runtime():
+    import os, sqlite3, tempfile
+    from unittest.mock import patch
+    from tools.db import init_db, get_conn, create_db_backup
+    from tools.food_catalog import propose, confirm, log_portion, revise
+    from tools.food_off import lookup
+    with tempfile.TemporaryDirectory() as scratch, patch.dict(os.environ, {
+            'DB_PATH': scratch+'/catalog.db', 'DATA_DIR': scratch,
+            'BACKUP_DIR': scratch+'/backups'}):
+        init_db()
+        draft = propose(dict(name='Synthetic container skyr', brand='Fixture', barcode='5900531004544',
+                             basis='100g', kcal=64, protein=12, carbs='4,1', fat=0, provenance='manual'))
+        init_db()
+        product = confirm(draft['id'], 1)
+        assert lookup('5900531004544') == product  # Local lookup must need no network.
+        result = log_portion(product['id'], 2, 150, 'g', 'container-portion')
+        assert result['nutrition'] == dict(kcal=96, protein=18, carbs=6.15, fat=0)
+        assert log_portion(product['id'], 2, 150, 'g', 'container-portion') == result
+        edited = dict(product, kcal=80)
+        assert revise(product['id'], 2, edited)['status'] == 'draft'
+        with get_conn() as conn:
+            assert conn.execute('SELECT count(*) FROM posilki').fetchone()[0] == 1
+            assert conn.execute('SELECT kalorie FROM posilki').fetchone()[0] == 96
+        backup = create_db_backup()
+        with sqlite3.connect(backup['path']) as conn:
+            assert conn.execute('SELECT count(*) FROM food_product_versions').fetchone()[0] == 3
+    print('Catalog migration, local lookup, review, portion snapshot/idempotency and backup passed (synthetic offline).')
+
+check_catalog_in_runtime()
+
 base = 'http://127.0.0.1:8000'
 client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 def call(path, body=None):

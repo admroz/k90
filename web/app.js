@@ -21,7 +21,8 @@ const labels = {
   activity: "Aktywność",
   chat: "Rozmowa",
   data: "Dane",
-  documents: "Dokumenty"
+  documents: "Dokumenty",
+  catalog: "Katalog"
 };
 let currentView = "dashboard",
   days = 30,
@@ -60,6 +61,14 @@ async function api(path, options = {}) {
 function error(message) {
   $("#global-error").textContent = message;
   $("#global-error").hidden = !message;
+}
+let catalogLoader;
+async function loadCatalog() {
+  if (!catalogLoader) {
+    const { setupCatalog } = await import('./catalog.mjs');
+    catalogLoader = setupCatalog(api, $('#catalog-view'), err => error(err.message));
+  }
+  await catalogLoader();
 }
 
 function showLogin() {
@@ -114,6 +123,7 @@ async function navigate(view) {
   if (view === "chat") await loadChat();
   if (view === "data") await loadTable();
   if (view === "documents") await loadDocument(currentDocument?.name || "pacjent.md");
+  if (view === "catalog") await loadCatalog();
 }
 async function loadDashboard() {
   const request = ++dashboardRequest;

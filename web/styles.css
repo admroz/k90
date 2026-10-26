@@ -1325,3 +1325,4 @@ pre#document-raw {
     flex-wrap: wrap
   }
 }
+#catalog-label { max-width: 100%; }

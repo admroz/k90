@@ -31,6 +31,9 @@ def initialize(conn):
             snapshot TEXT NOT NULL,
             meal_id INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS food_draft_requests (
+            request_id TEXT PRIMARY KEY, payload TEXT NOT NULL, product_id INTEGER NOT NULL
+        );
     """)
 
 
@@ -59,6 +62,8 @@ def _number(value):
 
 
 def _validated(data):
+    if not isinstance(data, dict):
+        raise ValueError('product must be an object')
     result = {}
     for field in ("name", "brand"):
         value = data.get(field, "")
@@ -74,6 +79,8 @@ def _validated(data):
     result["provenance"] = data["provenance"]
     for field in ("kcal", "protein", "carbs", "fat"):
         result[field] = _number(data.get(field))
+        if result[field] > (1000 if field == 'kcal' else 100):
+            raise ValueError('nutrition exceeds per100 limit')
     return result
 
 
@@ -90,21 +97,35 @@ def get(product_id):
         return _record(row)
 
 
-def propose(data, *, source_event_id=None):
+def propose(data, *, source_event_id=None, request_id=None):
     record = _validated(data)
+    if record['provenance'] == 'own_label' and source_event_id is None:
+        raise ValueError('own_label requires submitted photo; use manual entry otherwise')
     if source_event_id is not None:
         record['source_event_id'] = source_event_id
     payload = json.dumps(record, ensure_ascii=False, allow_nan=False)
+    if request_id is not None and (not isinstance(request_id, str) or not 1 <= len(request_id) <= 100):
+        raise ValueError('invalid request id')
     try:
         with get_conn() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            if request_id:
+                previous = conn.execute('SELECT * FROM food_draft_requests WHERE request_id=?', (request_id,)).fetchone()
+                if previous:
+                    if previous['payload'] != payload:
+                        raise ValueError('request id conflict')
+                    return _record(conn.execute('SELECT * FROM food_products WHERE id=?', (previous['product_id'],)).fetchone())
             cur = conn.execute("INSERT INTO food_products(barcode,version,status,payload) VALUES (?,1,'draft',?)",
                                (record["barcode"], payload))
             product_id = cur.lastrowid
             conn.execute("INSERT INTO food_product_versions(product_id,version,status,payload) VALUES (?,1,'draft',?)",
                          (product_id, payload))
+            if request_id:
+                conn.execute('INSERT INTO food_draft_requests VALUES (?,?,?)', (request_id, payload, product_id))
+            result = _record(conn.execute('SELECT * FROM food_products WHERE id=?', (product_id,)).fetchone())
     except sqlite3.IntegrityError:
         raise ValueError("barcode already exists; select existing product") from None
-    return get(product_id)
+    return result
 
 
 def propose_from_chat(product):
@@ -118,7 +139,9 @@ def propose_from_chat(product):
         content = json.loads(row['payload']) if row else None
         if not isinstance(content, list) or not any(isinstance(p, dict) and p.get('type') == 'image_url' for p in content):
             raise ValueError('own_label requires current submitted photo')
-    draft = propose(product, source_event_id=event_id)
+    import hashlib
+    key = ('event:' + str(event_id) + ':' + hashlib.sha256(json.dumps(_validated(product), sort_keys=True).encode()).hexdigest()[:32]) if event_id else None
+    draft = propose(product, source_event_id=event_id, request_id=key)
     draft['review_instruction'] = f"Sprawdź nazwę, podstawę i kcal/B/W/T. Zatwierdź dokładnie: /produkt zatwierdz {draft['id']} {draft['version']} albo popraw w panelu Katalog."
     return draft
 
@@ -147,11 +170,29 @@ Korekty można wprowadzić w panelu Katalog; wpis ręczny ma provenance manual.
 Przy ponownym użyciu najpierw find_food_products po kodzie, potem nazwie; wybierz dokładny potwierdzony produkt i wersję.
 log_food_portion oblicza i zapisuje porcję deterministycznie: ilość g dla100g lub ml dla100ml.
 Nie zapisuj tej samej porcji ponownie przez log_meal. Przekaż stały unikalny request_id dla powtórzenia tej samej operacji.
+Gdy brak lokalnego kodu, lookup_food_barcode używa OFF tylko jako zapasowego źródła: wynik unverified nie jest etykietą właściciela ani produktem do logowania.
+Nie importuj wartości OFF jako manual/own_label. Poproś o własną etykietę lub ręczne sprawdzone wartości.
 """
+
+
+def label_image(product_id):
+    import os
+    product = get(product_id)
+    with get_conn() as conn:
+        row = conn.execute("SELECT payload FROM agent_events WHERE id=? AND owner=? AND role='user'",
+                           (product.get('source_event_id'), os.getenv('CONVERSATION_USER_ID', 'owner'))).fetchone()
+    content = json.loads(row['payload']) if row else []
+    for part in content if isinstance(content, list) else []:
+        if isinstance(part, dict) and part.get('type') == 'image_url':
+            url = part.get('image_url', {}).get('url', '')
+            if isinstance(url, str) and url.startswith(('data:image/png;base64,', 'data:image/jpeg;base64,', 'data:image/webp;base64,')):
+                return {'image':url}
+    raise ValueError('label photo unavailable')
 
 
 def confirm(product_id, version):
     """Only trusted explicit owner action may call this; never expose as model authority."""
+    _version(version)
     with get_conn() as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT * FROM food_products WHERE id=?", (product_id,)).fetchone()
@@ -161,39 +202,57 @@ def confirm(product_id, version):
                      (product_id,))
         conn.execute("INSERT INTO food_product_versions(product_id,version,status,payload) VALUES (?,?,'confirmed',?)",
                      (product_id, version + 1, row["payload"]))
-    return get(product_id)
+        return _record(conn.execute('SELECT * FROM food_products WHERE id=?', (product_id,)).fetchone())
 
 
 def search(query="", barcode=None):
     if not isinstance(query, str) or len(query) > 200:
         raise ValueError("invalid query")
     with get_conn() as conn:
+        conn.create_function('catalog_fold', 1, lambda s: s.casefold())
         if barcode is not None:
             rows = conn.execute("SELECT * FROM food_products WHERE barcode=?", (validate_barcode(barcode),)).fetchall()
         else:
             # instr is literal: wildcard characters never broaden a query.
-            rows = conn.execute("SELECT * FROM food_products WHERE instr(lower(json_extract(payload,'$.name') || ' ' || json_extract(payload,'$.brand')),lower(?))>0 ORDER BY id DESC LIMIT 30", (query,)).fetchall()
+            rows = conn.execute("SELECT * FROM food_products WHERE instr(catalog_fold(json_extract(payload,'$.name') || ' ' || json_extract(payload,'$.brand')),catalog_fold(?))>0 ORDER BY id DESC LIMIT 30", (query,)).fetchall()
         return [_record(row) for row in rows]
 
 
 def revise(product_id, version, data):
+    _version(version)
     record = _validated(data)
-    payload = json.dumps(record, ensure_ascii=False, allow_nan=False)
     try:
         with get_conn() as conn:
             conn.execute("BEGIN IMMEDIATE")
+            old = conn.execute('SELECT * FROM food_products WHERE id=? AND version=?', (product_id,version)).fetchone()
+            if old is None:
+                raise ValueError('stale version')
+            original = json.loads(old['payload'])
+            if original.get('source_event_id') is not None:
+                record['source_event_id'] = original['source_event_id']
+            if record['provenance'] == 'own_label' and not record.get('source_event_id'):
+                raise ValueError('own_label requires submitted photo')
+            if record['provenance'] == 'own_label':
+                evidence = conn.execute("SELECT payload FROM agent_events WHERE id=? AND role='user'", (record['source_event_id'],)).fetchone()
+                content = json.loads(evidence[0]) if evidence else None
+                if not isinstance(content, list) or not any(isinstance(p, dict) and p.get('type') == 'image_url' for p in content):
+                    raise ValueError('own_label requires original photo')
+            payload = json.dumps(record, ensure_ascii=False, allow_nan=False)
             cur = conn.execute("UPDATE food_products SET version=version+1,status='draft',barcode=?,payload=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND version=?",
                                (record['barcode'], payload, product_id, version))
             if cur.rowcount != 1:
                 raise ValueError("stale version")
             conn.execute("INSERT INTO food_product_versions(product_id,version,status,payload) VALUES (?,?,'draft',?)",
                          (product_id, version + 1, payload))
+            result = _record(conn.execute('SELECT * FROM food_products WHERE id=?', (product_id,)).fetchone())
     except sqlite3.IntegrityError:
         raise ValueError("barcode already exists") from None
-    return get(product_id)
+    return result
 
 
 def log_portion(product_id, version, quantity, unit, request_id):
+    _version(product_id)
+    _version(version)
     amount = _number(quantity)
     if amount <= 0 or unit not in ('g', 'ml'):
         raise ValueError("positive quantity and explicit g/ml required")
@@ -224,3 +283,20 @@ def log_portion(product_id, version, quantity, unit, request_id):
         conn.execute('INSERT INTO food_portions VALUES (?,?,?,?)',
                      (request_id, fingerprint, json.dumps(result, ensure_ascii=False), cur.lastrowid))
         return result
+
+
+def _version(value):
+    if type(value) is not int or not 1 <= value < 2**63 - 1:
+        raise ValueError('invalid version')
+
+
+def log_portion_from_chat(product_id, version, quantity, unit, request_id):
+    _version(product_id)
+    from memory_runtime import TURN_CONTEXT
+    import hashlib
+    turn = TURN_CONTEXT.get()
+    if not turn:
+        raise ValueError('portion tool requires active conversation turn')
+    identity = json.dumps([turn['owner'], turn['request_id'], product_id, version, _number(quantity), unit])
+    trusted_key = 'chat:' + hashlib.sha256(identity.encode()).hexdigest()
+    return log_portion(product_id, version, quantity, unit, trusted_key)

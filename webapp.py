@@ -296,7 +296,16 @@ def create_app(*, start_worker=True, processor=None):
 
     @app.post('/api/catalog', dependencies=[Depends(authenticated)])
     def catalog_create(body: dict):
-        return catalog_action(food_catalog.propose, body)
+        return catalog_action(food_catalog.propose, body, request_id=body.get('request_id'))
+
+    @app.post('/api/catalog/lookup', dependencies=[Depends(authenticated)])
+    def catalog_lookup(body: dict):
+        from tools.food_off import lookup
+        return catalog_action(lookup, body.get('barcode'))
+
+    @app.get('/api/catalog/{product_id}/label', dependencies=[Depends(authenticated)])
+    def catalog_label(product_id: int):
+        return catalog_action(food_catalog.label_image, product_id)
 
     @app.put('/api/catalog/{product_id}', dependencies=[Depends(authenticated)])
     def catalog_edit(product_id: int, body: dict):
