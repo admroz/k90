@@ -1,0 +1,410 @@
+{
+  "head": "422ff9e56286e93699b268d849818f51099310bb",
+  "tested_source": "b8091b7a03ac2de7010d7a1408eb44a3f09d24d9",
+  "base": "17beba2353cbc1e1a2d39d71bc9b5a78f11a2ed4",
+  "clean_worktree": true,
+  "source_equivalent_to_tested": true,
+  "post_tested_changes": [
+    "docs/review-evidence/photo-history-checkpoint.md",
+    "docs/review-evidence/photo-history-coordinator-frontend.log",
+    "docs/review-evidence/photo-history-coordinator-full.log"
+  ],
+  "original_probe_sha256": "845a470f70d0ca2a73b157a43e32f9966b24950c41b54fa6962ccfff9d6cd11a",
+  "original_probe_equals_committed_preserved_copy": true,
+  "offline_guard_sha256": "91eba7add87ed0ba62ebdeaf78ca2e50e6cc9239235aee7b963294b2345343ca",
+  "full": {
+    "cases": 483,
+    "counts": {
+      "passed": 482,
+      "skipped": 1
+    },
+    "modules": {
+      "tests.test_admin_memory": {
+        "passed": 2
+      },
+      "tests.test_agent": {
+        "passed": 4
+      },
+      "tests.test_app_memory": {
+        "passed": 7
+      },
+      "tests.test_commands": {
+        "passed": 5
+      },
+      "tests.test_compose_contract": {
+        "passed": 3
+      },
+      "tests.test_context": {
+        "passed": 1
+      },
+      "tests.test_diet": {
+        "passed": 4
+      },
+      "tests.test_document_startup": {
+        "passed": 1
+      },
+      "tests.test_garmin": {
+        "passed": 9
+      },
+      "tests.test_health": {
+        "passed": 1
+      },
+      "tests.test_image_manifest": {
+        "passed": 1
+      },
+      "tests.test_imported_data": {
+        "skipped": 1
+      },
+      "tests.test_libre": {
+        "passed": 4
+      },
+      "tests.test_local_data": {
+        "passed": 4
+      },
+      "tests.test_memory_acceptance": {
+        "passed": 3
+      },
+      "tests.test_memory_backend": {
+        "passed": 10
+      },
+      "tests.test_memory_privacy": {
+        "passed": 14
+      },
+      "tests.test_memory_store": {
+        "passed": 5
+      },
+      "tests.test_memory_worker": {
+        "passed": 10
+      },
+      "tests.test_model_wiring": {
+        "passed": 7
+      },
+      "tests.test_outbound_policy": {
+        "passed": 3
+      },
+      "tests.test_patient_documents": {
+        "passed": 26
+      },
+      "tests.test_photo_history": {
+        "passed": 49
+      },
+      "tests.test_privacy_composition": {
+        "passed": 106
+      },
+      "tests.test_privacy_json_boundary": {
+        "passed": 20
+      },
+      "tests.test_responses_api": {
+        "passed": 22
+      },
+      "tests.test_review_blockers": {
+        "passed": 9
+      },
+      "tests.test_review_final_cycle": {
+        "passed": 16
+      },
+      "tests.test_server": {
+        "passed": 6
+      },
+      "tests.test_subscription_api": {
+        "passed": 3
+      },
+      "tests.test_subscription_auth": {
+        "passed": 11
+      },
+      "tests.test_subscription_host_identity": {
+        "passed": 26
+      },
+      "tests.test_subscription_login": {
+        "passed": 5
+      },
+      "tests.test_subscription_protocol.StreamChecks": {
+        "passed": 1
+      },
+      "tests.test_subscription_protocol.CallbackChecks": {
+        "passed": 1
+      },
+      "tests.test_subscription_protocol.IdentityChecks": {
+        "passed": 1
+      },
+      "tests.test_subscription_protocol.AuthorizationChecks": {
+        "passed": 1
+      },
+      "tests.test_subscription_protocol.TransportChecks": {
+        "passed": 1
+      },
+      "tests.test_summary": {
+        "passed": 2
+      },
+      "tests.test_telegram_adapter": {
+        "passed": 26
+      },
+      "tests.test_web": {
+        "passed": 41
+      },
+      "tests.test_web_runtime": {
+        "passed": 11
+      }
+    },
+    "actual_agent_matrix": [
+      {
+        "name": "test_real_agent_upload_then_text_followup[false-local-api]",
+        "status": "passed"
+      },
+      {
+        "name": "test_real_agent_upload_then_text_followup[false-local-responses]",
+        "status": "passed"
+      },
+      {
+        "name": "test_real_agent_upload_then_text_followup[false-local-chatgpt]",
+        "status": "passed"
+      },
+      {
+        "name": "test_real_agent_upload_then_text_followup[false-hindsight-api]",
+        "status": "passed"
+      },
+      {
+        "name": "test_real_agent_upload_then_text_followup[false-hindsight-responses]",
+        "status": "passed"
+      },
+      {
+        "name": "test_real_agent_upload_then_text_followup[false-hindsight-chatgpt]",
+        "status": "passed"
+      },
+      {
+        "name": "test_real_agent_upload_then_text_followup[true-local-api]",
+        "status": "passed"
+      },
+      {
+        "name": "test_real_agent_upload_then_text_followup[true-local-responses]",
+        "status": "passed"
+      },
+      {
+        "name": "test_real_agent_upload_then_text_followup[true-local-chatgpt]",
+        "status": "passed"
+      },
+      {
+        "name": "test_real_agent_upload_then_text_followup[true-hindsight-api]",
+        "status": "passed"
+      },
+      {
+        "name": "test_real_agent_upload_then_text_followup[true-hindsight-responses]",
+        "status": "passed"
+      },
+      {
+        "name": "test_real_agent_upload_then_text_followup[true-hindsight-chatgpt]",
+        "status": "passed"
+      }
+    ]
+  },
+  "probes_final": {
+    "cases": 79,
+    "counts": {
+      "passed": 79
+    },
+    "modules": {
+      "jobs.k90-photo-history.review-resumed-probes": {
+        "passed": 79
+      }
+    },
+    "actual_agent_matrix": []
+  },
+  "documentation_audit": [
+    {
+      "path": "README.md",
+      "sha256": "d31feac293163abc4dc22cb7a98e134df201088d9b49a6bc409e98bc3958596d",
+      "lines": 237,
+      "historical_outcomes": []
+    },
+    {
+      "path": "docs/OPERATIONS_MEMORY_AUTH.md",
+      "sha256": "0948dfa0c39f169254e52e9b13ee3b54bc5e8d4ae66b06a4ec36fc074e7a7587",
+      "lines": 227,
+      "historical_outcomes": []
+    },
+    {
+      "path": "docs/VERIFICATION.md",
+      "sha256": "b491ffc4a17bc59cfebb2a7d111e4f7d2da459571e51a070ce73740c0da52d4b",
+      "lines": 946,
+      "historical_outcomes": [
+        "rzeczywistego agenta w `tests/test_photo_history.py`. RED 14 failed/1 passed;",
+        "sekwencyjny targeted GREEN 178 passed (32.54s), exit 0. Niezmienione probe'y",
+        "recenzenta: 4 passed/1 failed, poniewa\u017c ostatni nie obs\u0142uguje oczekiwanego teraz"
+      ]
+    },
+    {
+      "path": "docs/review-evidence/oauth_host_id_fix.md",
+      "sha256": "965dbc5b52d72cbfeaa09f74817482dba7e38fd4ab96c3da8536059474e3a83e",
+      "lines": 106,
+      "historical_outcomes": [
+        "Exit 1: 432 passed / 1 skipped / 1 failed in 83.18s. The failure was",
+        "scratch root. No application assertion failed. Rerun with the fixture temp directory",
+        "Exit 0: **433 passed / 1 skipped in 86.25s**. The skip is the existing"
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-checkpoint.md",
+      "sha256": "e64e8358336d921349f8cf8f2e6c2f3e1a61446c39664e25fa7b54ad3159dc54",
+      "lines": 13,
+      "historical_outcomes": [
+        "Coordinator full synthetic offline Python suite: 482 passed, 1 skipped, exit 0. Frontend: 21 passed, exit 0; node --check web/app.js exit 0. Real logs copied alongside this checkpoint. Source tree was clean at execution. Explicit env -i HOME, DB_PATH, DATA_DIR, K90_CHATGPT_STATE_DIR under /opt/data/cache/scratch/k90-verification-20261025/coordinator-*; PYTHON_DOTENV_DISABLED=1, PYTHONPATH=/opt/data/cache/scratch/k90-verification-20261025:., PATH=/usr/local/bin:/usr/bin:/bin, TMPDIR=/opt/data/cache/scratch/k90-verification-20261025. Python: /opt/data/projects/k90/.venv/bin/python -m pytest -q --basetemp=/opt/data/cache/scratch/k90-verification-20261025/coordinator-pytest. Frontend: node --check web/app.js; node --test tests/web_*.test.mjs."
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-coordinator-frontend.log",
+      "sha256": "4b1dac4fcbcf6be9ba7622d739ce1e67b8178bdd517a44e54f98128039b16afa",
+      "lines": 29,
+      "historical_outcomes": [
+        "\u2139 skipped 0"
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-coordinator-full.log",
+      "sha256": "62bd8b1e563a27f3223006db06eeae14ed53b10db1f0e399f8a86fd129618484",
+      "lines": 8,
+      "historical_outcomes": [
+        "482 passed, 1 skipped in 111.22s (0:01:51)"
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-green-conversation.log",
+      "sha256": "f1a146ffa2fa3b301a0aa1d07decf52984b6208ff7cf0e4cf4c0033d4ddb271e",
+      "lines": 2,
+      "historical_outcomes": [
+        "27 passed in 15.62s"
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-green-projection.log",
+      "sha256": "9b9165224ca5b67824c41824c1cbf6132ac884670f25cac2d96d1c3bc9d8831c",
+      "lines": 2,
+      "historical_outcomes": [
+        "21 passed in 10.68s"
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-green-targeted.log",
+      "sha256": "6e84f8b88bd194cbbd3d4c6990d421004d14563c442bb3e85875f8ef5cd24553",
+      "lines": 7,
+      "historical_outcomes": [
+        "262 passed in 41.55s"
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-implementation.md",
+      "sha256": "b587428fc0a99cf6c2f6656ca8cc82dd37ed0df2fa9f13a00016dabf18515632",
+      "lines": 80,
+      "historical_outcomes": [
+        "| `tests/test_photo_history.py -k ambiguous` | `photo-history-red-malformed.log` | 2 failed, 6 passed, 21 deselected |",
+        "| poni\u017cszy zestaw przed aktualizacj\u0105 starego kontraktu Responses | `photo-history-red-existing-contract.log` | 1 failed, 256 passed |",
+        "| poni\u017cszy zestaw ko\u0144cowy | `photo-history-green-targeted.log` | 262 passed, 41.55s, pytest exit 0 |"
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-original-failed-review.json",
+      "sha256": "d6fb65651fbc4f06435cfb74912353ae38544443980b6b7349e31e5adb2b217f",
+      "lines": 49,
+      "historical_outcomes": [
+        "    \"existing_targeted_tests\": \"283 passed in 42.61s; exit 0; review-original-tests.log\",",
+        "    \"independent_adversarial_tests\": \"5 failed in 3.63s; exit 1; four missing fail-closed exceptions plus one actual provider-boundary violation; review-original-probes.log\","
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-original-failed-review.md",
+      "sha256": "394ab8118c5383e13ceca6d1319a0cf51db06b577c03ff6fec6033ae0a7832b2",
+      "lines": 65,
+      "historical_outcomes": [
+        "- Ponowiony zestaw \u017ar\u00f3d\u0142owy: **283 passed in 42.61s**, exit 0 (`review-original-tests.log`). Nie jest to samodzielny dow\u00f3d PASS kontraktu.",
+        "Wynik: **5 failed in 3.63s** \u2014 cztery brakuj\u0105ce oczekiwane `PrivacyError` oraz jedno potwierdzone przekroczenie granicy providera. Probe pozostawiono w TASK do powt\u00f3rzenia po poprawce."
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-original-reviewer-probes.log",
+      "sha256": "d7066f6c5458414eb7dc81c5f99b0e9e51fe7222afb7a927f6ccaad259074ed3",
+      "lines": 126,
+      "historical_outcomes": [
+        "5 failed in 3.63s"
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-original-reviewer-probes.py",
+      "sha256": "845a470f70d0ca2a73b157a43e32f9966b24950c41b54fa6962ccfff9d6cd11a",
+      "lines": 55,
+      "historical_outcomes": []
+    },
+    {
+      "path": "docs/review-evidence/photo-history-r1-correction.md",
+      "sha256": "bc05f3e16f4f2e1272fff3a7b9b761f45aa84e67c7dc4f72d4449eaa1dd19625",
+      "lines": 47,
+      "historical_outcomes": [
+        "Replay bez jakichkolwiek zmian probe'\u00f3w: exit 1, **4 passed, 1 failed**.",
+        "basetemp: 177 passed, 1 setup error (readonly SQLite). Zachowany jako",
+        "Ko\u0144cowy sekwencyjny GREEN: **178 passed in 32.54s**, exit 0."
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-r1-green.log",
+      "sha256": "e54c6ca5c8d2d7dac1084e2d133f647f3d5d7d6c0a3f4e57d2a1353c8ca76a02",
+      "lines": 4,
+      "historical_outcomes": [
+        "178 passed in 32.54s"
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-r1-overlap-error.log",
+      "sha256": "22574b5b7a7c265a91f0efeefe7772fb197ce79b0a2f824d08f258c7307defb4",
+      "lines": 73,
+      "historical_outcomes": [
+        "177 passed, 1 error in 30.48s"
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-r1-red.log",
+      "sha256": "04bb9c687475040f602a8c1f1a140a0823ff6cc4a7d2fc7a91b229af32973b6b",
+      "lines": 718,
+      "historical_outcomes": [
+        "14 failed, 1 passed, 34 deselected in 10.49s"
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-r1-reviewer-replay.log",
+      "sha256": "10bd74522847ff6a69c6dc944e0c705c9346ac8a2b4ca343d7933d848885e516",
+      "lines": 96,
+      "historical_outcomes": [
+        "1 failed, 4 passed in 4.03s"
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-red-conversation.log",
+      "sha256": "b023e4372f6bb9c25e9f87fb891b83582615c76b27bdae5fb2d35922ad05070e",
+      "lines": 1028,
+      "historical_outcomes": [
+        "8 failed, 19 deselected in 7.91s"
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-red-existing-contract.log",
+      "sha256": "8d8f67569b3e3f4fa0a8adf574d70821165b367f3ae0c9d9782d05963abbeaf2",
+      "lines": 34,
+      "historical_outcomes": [
+        "1 failed, 256 passed in 37.91s"
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-red-malformed.log",
+      "sha256": "9d144be3423dd5a5c5eb5f6fe9a29bfe813a6f986a35114767561410968140f8",
+      "lines": 58,
+      "historical_outcomes": [
+        "2 failed, 6 passed, 21 deselected in 6.25s"
+      ]
+    },
+    {
+      "path": "docs/review-evidence/photo-history-red-projection.log",
+      "sha256": "e4be2137acc1b15f44b059c5ed2dc2d201aa3de4353bb5982325e852e24999e3",
+      "lines": 277,
+      "historical_outcomes": [
+        "7 failed, 10 passed in 10.14s"
+      ]
+    }
+  ]
+}

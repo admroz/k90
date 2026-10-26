@@ -11,33 +11,14 @@ import os
 from pathlib import Path
 import re
 import time
-import uuid
 
 from subscription_auth import CredentialsError, TokenStore
+from subscription_host import initialize_host
 from subscription_protocol import authorize, request_json, revoke, save_private, validate_identity
 
 
 def default_state_directory():
     return Path(os.getenv('K90_CHATGPT_STATE_DIR', str(Path(os.getenv('DATA_DIR', 'data'))/'chatgpt-auth')))
-
-
-def initialize_host(directory):
-    store=TokenStore(directory)
-    with store._locked():
-        path=store.directory/'registration.json'
-        if path.is_symlink():
-            raise CredentialsError('insecure_registration')
-        if path.exists():
-            try:
-                record=json.loads(path.read_text())
-            except (OSError,ValueError):
-                raise CredentialsError('invalid_registration') from None
-            if not isinstance(record,dict) or not isinstance(record.get('host_id'),str) or not record['host_id']:
-                raise CredentialsError('invalid_registration')
-            return record
-        record={'host_id':str(uuid.uuid4())}
-        save_private(path,record)
-        return record
 
 
 def login(directory, *, authorize_fn=None, confirm=None, request=None):

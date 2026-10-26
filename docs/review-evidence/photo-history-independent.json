@@ -1,0 +1,143 @@
+{
+  "verdict": "PASS",
+  "commit": "b8091b7a03ac2de7010d7a1408eb44a3f09d24d9",
+  "base_commit": "17beba2353cbc1e1a2d39d71bc9b5a78f11a2ed4",
+  "executed_checkout_head": "422ff9e56286e93699b268d849818f51099310bb",
+  "reviewer_role": "Fresh independent final security/functional reviewer; not implementer; read-only repository source",
+  "supersedes": "/opt/data/jobs/k90-photo-history/review-final.json (INCOMPLETE due to prior quota stop; preserved unchanged)",
+  "scope": "Entire source/test/documentation diff versus base, including conservative host-ID migration, privacy composition, actual run_agent photo-history matrix, actual Hindsight adapter with synthetic transport, subscription adapter, independent adapted R1 and adjacent adversarial probes, full offline regression and frontend.",
+  "findings": [],
+  "closed_findings": [
+    {
+      "id": "R1",
+      "original_severity": "MEDIUM",
+      "status": "CLOSED_VERIFIED",
+      "location": "outbound_policy.py:58-76; agent.py:79",
+      "original_reproducer": "/opt/data/jobs/k90-photo-history/review-original-probes.py",
+      "adapted_reproducer": "/opt/data/jobs/k90-photo-history/review-resumed-probes.py::test_actual_chat_unknown_attachment_must_not_reach_provider",
+      "result": "PrivacyError required and observed before provider; after exception asserts no provider calls and original stored SQL content unchanged. Unsupported attachment/text schemas and non-object parts also rejected across all three model modes and both image consent values.",
+      "original_probe_sha256": "845a470f70d0ca2a73b157a43e32f9966b24950c41b54fa6962ccfff9d6cd11a",
+      "original_unchanged": true
+    }
+  ],
+  "acceptance": {
+    "photo_history": {
+      "status": "PASS",
+      "evidence": ["/opt/data/jobs/k90-photo-history/review-resumed-full.log", "/opt/data/jobs/k90-photo-history/review-resumed-full.xml", "/opt/data/jobs/k90-photo-history/review-resumed-audit.json"],
+      "observed": "49 photo_history cases passed, including all 12 actual run_agent upload/followup combinations: API/Responses/subscription x local/Hindsight synthetic transport x false/true followup consent. New image sent only with opt-in; old images absent on followup, caption/prior assistant interpretation/correction retained; original conversations and incoming events unchanged; no automatic meal rows. Independent history-window test confirms same bounded ordering for local/disabled/Hindsight."
+    },
+    "outbound_privacy": {
+      "status": "PASS",
+      "evidence": ["/opt/data/jobs/k90-photo-history/review-resumed-full.xml", "/opt/data/jobs/k90-photo-history/review-resumed-probes-final.log", "/opt/data/jobs/k90-photo-history/review-resumed-probes-final.xml"],
+      "observed": "Full regression includes outbound_policy (3), privacy_composition (106), privacy_json_boundary (20), memory_privacy (14). Added independent actual-agent cases reject unknown attachments, malformed text, local-only/encoded secret metadata, secret URL, invalid image detail, nested encoded local-only, duplicate JSON; no provider/token boundary calls and stored originals preserved. Missing, false or invalid new-image consent rejected in every model mode. Safe projected text is redacted without changing original. Full-original walk precedes omission and final image-denying filter remains in place."
+    },
+    "hindsight_integration": {
+      "status": "PASS",
+      "qualification": "Actual local adapter code and application paths with synthetic transport, NOT live production topology",
+      "evidence": ["/opt/data/jobs/k90-photo-history/review-resumed-full.xml", "/opt/data/jobs/k90-photo-history/review-resumed-probes-final.xml"],
+      "observed": "Actual HindsightBackend retain/recall invoked by run_agent/memory_runtime matrix, real worker run_pending with synthetic transport and image-free indexed text; backend (10), worker (10), app_memory (7), memory_acceptance (3) passed. Additional independent adapter probe explicitly passes allow_images=True and verifies both retain and recall reject image JSON before transport. Worker and adapter retain independent baseline image denial; local owner/version hydration and privacy guards unchanged."
+    },
+    "subscription_adapter": {
+      "status": "PASS",
+      "evidence": ["/opt/data/jobs/k90-photo-history/review-resumed-full.xml", "/opt/data/jobs/k90-photo-history/review-resumed-probes-final.xml"],
+      "observed": "Actual SubscriptionConversation photo matrix and adversarial run_agent boundary checks passed; subscription_api (3), auth (11), host_identity (26), login (5), protocol (5) passed. Stable UUIDv4 URN initialization; migration only canonical bare UUIDv4 in host_id-only registration without any credentials filesystem entry, including dangling symlink. Bound/unknown metadata and missing registration with credentials fail closed; no credential content read by initializer. Existing alternate IDs preserved. OAuth validation, explicit credits confirmation, tool namespace/schema and no API fallback guards unchanged."
+    },
+    "regression": {
+      "status": "PASS",
+      "evidence": ["/opt/data/jobs/k90-photo-history/review-resumed-full.log", "/opt/data/jobs/k90-photo-history/review-resumed-full.xml", "/opt/data/jobs/k90-photo-history/review-resumed-frontend.log", "/opt/data/jobs/k90-photo-history/review-resumed-node-check.log"],
+      "observed": "482 passed, 1 skipped in 111.83s; sole skip tests/test_imported_data.py:17, No local import selected. Frontend 21 passed, zero failures/skips. node syntax check exit 0. Not a claim about a deployed container or live model output."
+    }
+  },
+  "execution": {
+    "cwd": "/opt/data/projects/k90-photo-history",
+    "python": "/opt/data/projects/k90/.venv/bin/python",
+    "isolation": "env -i; HOME/DB_PATH/DATA_DIR/K90_CHATGPT_STATE_DIR under resumed-review-* allowed scratch; PYTHON_DOTENV_DISABLED=1; PYTHONPATH=/opt/data/cache/scratch/k90-verification-20261025:.; unique basetemp; existing sitecustomize offline/private-file audit guard unchanged",
+    "tests": [
+      {
+        "command": "env -i HOME=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-full/home DB_PATH=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-full/data/test.db DATA_DIR=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-full/data K90_CHATGPT_STATE_DIR=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-full/auth PYTHON_DOTENV_DISABLED=1 PYTHONPATH=/opt/data/cache/scratch/k90-verification-20261025:. PATH=/usr/local/bin:/usr/bin:/bin TMPDIR=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-full/tmp /opt/data/projects/k90/.venv/bin/python -m pytest -q -ra --junitxml=/opt/data/jobs/k90-photo-history/review-resumed-full.xml --basetemp=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-full/pytest",
+        "exit_code": 0,
+        "result": "482 passed, 1 skipped in 111.83s (0:01:51)",
+        "log": "/opt/data/jobs/k90-photo-history/review-resumed-full.log"
+      },
+      {
+        "command": "env -i HOME=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-probes/home DB_PATH=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-probes/data/test.db DATA_DIR=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-probes/data K90_CHATGPT_STATE_DIR=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-probes/auth PYTHON_DOTENV_DISABLED=1 PYTHONPATH=/opt/data/cache/scratch/k90-verification-20261025:. PATH=/usr/local/bin:/usr/bin:/bin TMPDIR=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-probes/tmp /opt/data/projects/k90/.venv/bin/python -m pytest -q -ra /opt/data/jobs/k90-photo-history/review-resumed-probes.py --junitxml=/opt/data/jobs/k90-photo-history/review-resumed-probes.xml --basetemp=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-probes/pytest",
+        "exit_code": 0,
+        "result": "67 passed in 34.31s; preliminary probe version before adding default-consent/HS/redaction checks, not added to final probe total",
+        "log": "/opt/data/jobs/k90-photo-history/review-resumed-probes.log"
+      },
+      {
+        "command": "env -i HOME=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-probes/home DB_PATH=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-probes/data/test.db DATA_DIR=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-probes/data K90_CHATGPT_STATE_DIR=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-probes/auth PYTHON_DOTENV_DISABLED=1 PYTHONPATH=/opt/data/cache/scratch/k90-verification-20261025:. PATH=/usr/local/bin:/usr/bin:/bin TMPDIR=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-probes/tmp /opt/data/projects/k90/.venv/bin/python -m pytest -q -ra /opt/data/jobs/k90-photo-history/review-resumed-probes.py --junitxml=/opt/data/jobs/k90-photo-history/review-resumed-probes-final.xml --basetemp=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-probes/pytest-final",
+        "exit_code": 0,
+        "result": "79 passed in 38.84s",
+        "log": "/opt/data/jobs/k90-photo-history/review-resumed-probes-final.log"
+      },
+      {
+        "command": "env -i HOME=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-full/home PATH=/usr/local/bin:/usr/bin:/bin TMPDIR=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-full/tmp node --check web/app.js",
+        "exit_code": 0,
+        "result": "Syntax check passed, empty output",
+        "log": "/opt/data/jobs/k90-photo-history/review-resumed-node-check.log"
+      },
+      {
+        "command": "env -i HOME=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-full/home PATH=/usr/local/bin:/usr/bin:/bin TMPDIR=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-full/tmp node --test tests/web_*.test.mjs",
+        "exit_code": 0,
+        "result": "21 tests, 21 passed, 0 failed, 0 skipped",
+        "log": "/opt/data/jobs/k90-photo-history/review-resumed-frontend.log"
+      }
+    ],
+    "audit_command": "env -i HOME=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-full/home PYTHON_DOTENV_DISABLED=1 PYTHONPATH=/opt/data/cache/scratch/k90-verification-20261025:. PATH=/usr/local/bin:/usr/bin:/bin TMPDIR=/opt/data/cache/scratch/k90-verification-20261025/resumed-review-full/tmp /opt/data/projects/k90/.venv/bin/python /opt/data/jobs/k90-photo-history/review-resumed-audit.py",
+    "audit_exit_code": 0,
+    "audit_result": "/opt/data/jobs/k90-photo-history/review-resumed-audit.json; XML parsed and case/status totals asserted, all actual-agent matrix combinations enumerated, Git/source equivalence asserted, every changed documentation/evidence file read and fingerprinted"
+  },
+  "quota": {
+    "command": "/opt/hermes/.venv/bin/hermes usage --json",
+    "initial_session_percent": 2.0,
+    "initial_weekly_percent": 49.0,
+    "before_full": {"session_percent": 4.0, "weekly_percent": 49.0, "evidence": "/opt/data/jobs/k90-photo-history/review-resumed-quota-before-full.json"},
+    "before_probes": {"session_percent": 5.0, "weekly_percent": 49.0, "evidence": "/opt/data/jobs/k90-photo-history/review-resumed-quota-before-probes.json"},
+    "before_final_batch": {"session_percent": 6.0, "weekly_percent": 50.0, "evidence": "/opt/data/jobs/k90-photo-history/review-resumed-quota-before-final-batch.json"},
+    "final": {"session_percent": 7.0, "weekly_percent": 50.0, "fetched_at": "2026-10-26T03:00:06.812481+00:00", "evidence": "/opt/data/jobs/k90-photo-history/review-resumed-quota-final.json"},
+    "after_report_end_check": {"session_percent": 9.0, "weekly_percent": 50.0, "fetched_at": "2026-10-26T03:02:55.734832+00:00", "evidence": "Direct final terminal tool output; git status still empty and source diff versus TESTED_SOURCE exit 0"},
+    "reset_or_fallback_used": false
+  },
+  "integrity": {
+    "source_equivalent_to_tested_source": true,
+    "post_tested_changes_only_docs": true,
+    "final_head": "422ff9e56286e93699b268d849818f51099310bb",
+    "git_status_porcelain": "",
+    "source_edits_commits_push_pr": false,
+    "diff_check_excluding_raw_evidence_logs_exit_code": 0,
+    "original_fail_report_and_probe_preserved": true,
+    "offline_guard_sha256": "91eba7add87ed0ba62ebdeaf78ca2e50e6cc9239235aee7b963294b2345343ca",
+    "evidence": "/opt/data/jobs/k90-photo-history/review-resumed-audit.json"
+  },
+  "issues_encountered": [
+    "Tool approval layer blocked execute_code and an initial compound terminal command containing Python -c; neither ran. Recovered with direct approved tools, separate quota check and ordinary script file. No configuration, approvals, guard or source changed.",
+    "No test failures in actual independent executions. Original historical FAIL and correction replay failures remain historical evidence, not mislabeled as green."
+  ],
+  "deferred_owner_live_checks": [
+    "Production/live SIWC login, refresh and new-photo model inference under owner's intended account/settings",
+    "Owner-specific live Hindsight topology, authorization and retain/recall smoke",
+    "Container CI, image publication and production deployment/rollback smoke; not performed or certified by this review"
+  ],
+  "limits": "PASS applies to reviewed immutable source and synthetic offline acceptance only, not production readiness, complete anonymization or real model recognition accuracy. No private configuration, credentials, patient files, production database/services, push, PR, merge or deployment accessed.",
+  "report": "/opt/data/jobs/k90-photo-history/review-resumed.md",
+  "created_files": [
+    "/opt/data/jobs/k90-photo-history/review-resumed.json",
+    "/opt/data/jobs/k90-photo-history/review-resumed.md",
+    "/opt/data/jobs/k90-photo-history/review-resumed-probes.py",
+    "/opt/data/jobs/k90-photo-history/review-resumed-audit.py",
+    "/opt/data/jobs/k90-photo-history/review-resumed-audit.json",
+    "/opt/data/jobs/k90-photo-history/review-resumed-full.log",
+    "/opt/data/jobs/k90-photo-history/review-resumed-full.xml",
+    "/opt/data/jobs/k90-photo-history/review-resumed-probes.log",
+    "/opt/data/jobs/k90-photo-history/review-resumed-probes.xml",
+    "/opt/data/jobs/k90-photo-history/review-resumed-probes-final.log",
+    "/opt/data/jobs/k90-photo-history/review-resumed-probes-final.xml",
+    "/opt/data/jobs/k90-photo-history/review-resumed-node-check.log",
+    "/opt/data/jobs/k90-photo-history/review-resumed-frontend.log",
+    "/opt/data/jobs/k90-photo-history/review-resumed-quota-before-full.json",
+    "/opt/data/jobs/k90-photo-history/review-resumed-quota-before-probes.json",
+    "/opt/data/jobs/k90-photo-history/review-resumed-quota-before-final-batch.json",
+    "/opt/data/jobs/k90-photo-history/review-resumed-quota-final.json"
+  ]
+}

@@ -922,3 +922,25 @@ płatnego fallbacku.
 3. Bez commita/stage/pusha/deploy. To ostatni automatyczny fix cycle; dalsze
    odtworzone blokery wymagają checkpointu i decyzji prowadzącego/użytkownika,
    nie kolejnych automatycznych cykli.
+
+# Partia historii zdjęć 2026-10-25 — implementacja do niezależnego review
+
+Dowody RED/GREEN, dokładne polecenia i ograniczenia:
+[photo-history-implementation.md](review-evidence/photo-history-implementation.md).
+Nie jest to niezależny przegląd ani końcowy odbiór; pełne suite i PR prowadzi
+koordynator. Baza zawiera zachowaną poprawkę host ID `9e02ab0`.
+
+## Korekta photo-history R1 — 2026-10-25 23:22 UTC
+
+Worktree `/opt/data/projects/k90-photo-history`, branch `fix/meal-photo-history`.
+Po niezależnym FAIL źródła `1b031e8653b43cdecde444d716fac5ec751385ae`
+zaostrzono schemat historycznych części w `outbound_policy.py`; dodano 15 regresji
+rzeczywistego agenta w `tests/test_photo_history.py`. RED 14 failed/1 passed;
+sekwencyjny targeted GREEN 178 passed (32.54s), exit 0. Niezmienione probe'y
+recenzenta: 4 passed/1 failed, ponieważ ostatni nie obsługuje oczekiwanego teraz
+PrivacyError przed providerem. To nie jest niezależny PASS.
+Dokładne polecenia, oryginalny FAIL, logi i omyłkowy przebieg z konfliktem basetemp:
+`review-evidence/photo-history-r1-correction.md` oraz powiązane artefakty.
+Quota końcowa 88% session/48% weekly, bez resetów/fallbacku. Kolejne kroki:
+koordynator sprawdza quota, pełną regresję i świeży niezależny review immutable
+commita korekty. Brak push/PR, produkcji i testów live; kontroler bez zmian.

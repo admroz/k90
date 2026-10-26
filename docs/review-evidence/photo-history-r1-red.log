@@ -1,0 +1,718 @@
+FFFFFFFFFFFFFF.                                                          [100%]
+=================================== FAILURES ===================================
+____________ test_invalid_history_part_never_reaches_provider[None] ____________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_invalid_history_part_neve0/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x745211cee9e0>
+part = None
+
+    @pytest.mark.parametrize('part', [
+        None, 123, 'text', [], [PHOTO[0]], {},
+        {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/file'}},
+        {'type': 'unrecognized_attachment', 'payload': 'synthetic'},
+        {'type': 'text', 'text': 123}, {'type': 'text', 'text': None},
+        {'type': 'text', 'text': ['nested']}, {'type': 'text'},
+        {'type': 'text', 'text': 'safe', 'extra': 'ambiguous'},
+        {'type': ['text'], 'text': 'safe'},
+        {'type': 'image_url', 'image_url': {'url': 'https://synthetic.invalid/image', 'detail': []}},
+    ])
+    def test_invalid_history_part_never_reaches_provider(temp_db, monkeypatch, part):
+        monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+        monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        original = json.dumps([*PHOTO, part])
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', original))
+        def forbidden(**payload):
+            pytest.fail('Malformed historical part reached provider')
+        monkeypatch.setattr(agent.litellm, 'completion', forbidden)
+        with pytest.raises(PrivacyError):
+>           agent.run_agent('Synthetic followup', 'synthetic-owner')
+
+tests/test_photo_history.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:141: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:210: in _run_agent
+    response = chat_completion(litellm.completion,
+outbound_policy.py:94: in chat_completion
+    return completion(**safe)
+           ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+payload = {'model': 'gpt-5.4', 'messages': [{'role': 'system', 'content': 'Synthetic system'}, {'role': 'user', 'content': [{'ty...na z ostatnich N dni.', 'parameters': {'type': 'object', 'properties': {'days': {...}}}}}, ...], 'tool_choice': 'auto'}
+
+    def forbidden(**payload):
+>       pytest.fail('Malformed historical part reached provider')
+E       Failed: Malformed historical part reached provider
+
+tests/test_photo_history.py:36: Failed
+____________ test_invalid_history_part_never_reaches_provider[123] _____________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_invalid_history_part_neve1/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x745211cee520>
+part = 123
+
+    @pytest.mark.parametrize('part', [
+        None, 123, 'text', [], [PHOTO[0]], {},
+        {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/file'}},
+        {'type': 'unrecognized_attachment', 'payload': 'synthetic'},
+        {'type': 'text', 'text': 123}, {'type': 'text', 'text': None},
+        {'type': 'text', 'text': ['nested']}, {'type': 'text'},
+        {'type': 'text', 'text': 'safe', 'extra': 'ambiguous'},
+        {'type': ['text'], 'text': 'safe'},
+        {'type': 'image_url', 'image_url': {'url': 'https://synthetic.invalid/image', 'detail': []}},
+    ])
+    def test_invalid_history_part_never_reaches_provider(temp_db, monkeypatch, part):
+        monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+        monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        original = json.dumps([*PHOTO, part])
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', original))
+        def forbidden(**payload):
+            pytest.fail('Malformed historical part reached provider')
+        monkeypatch.setattr(agent.litellm, 'completion', forbidden)
+        with pytest.raises(PrivacyError):
+>           agent.run_agent('Synthetic followup', 'synthetic-owner')
+
+tests/test_photo_history.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:141: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:210: in _run_agent
+    response = chat_completion(litellm.completion,
+outbound_policy.py:94: in chat_completion
+    return completion(**safe)
+           ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+payload = {'model': 'gpt-5.4', 'messages': [{'role': 'system', 'content': 'Synthetic system'}, {'role': 'user', 'content': [{'ty...na z ostatnich N dni.', 'parameters': {'type': 'object', 'properties': {'days': {...}}}}}, ...], 'tool_choice': 'auto'}
+
+    def forbidden(**payload):
+>       pytest.fail('Malformed historical part reached provider')
+E       Failed: Malformed historical part reached provider
+
+tests/test_photo_history.py:36: Failed
+____________ test_invalid_history_part_never_reaches_provider[text] ____________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_invalid_history_part_neve2/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x745211d468d0>
+part = 'text'
+
+    @pytest.mark.parametrize('part', [
+        None, 123, 'text', [], [PHOTO[0]], {},
+        {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/file'}},
+        {'type': 'unrecognized_attachment', 'payload': 'synthetic'},
+        {'type': 'text', 'text': 123}, {'type': 'text', 'text': None},
+        {'type': 'text', 'text': ['nested']}, {'type': 'text'},
+        {'type': 'text', 'text': 'safe', 'extra': 'ambiguous'},
+        {'type': ['text'], 'text': 'safe'},
+        {'type': 'image_url', 'image_url': {'url': 'https://synthetic.invalid/image', 'detail': []}},
+    ])
+    def test_invalid_history_part_never_reaches_provider(temp_db, monkeypatch, part):
+        monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+        monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        original = json.dumps([*PHOTO, part])
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', original))
+        def forbidden(**payload):
+            pytest.fail('Malformed historical part reached provider')
+        monkeypatch.setattr(agent.litellm, 'completion', forbidden)
+        with pytest.raises(PrivacyError):
+>           agent.run_agent('Synthetic followup', 'synthetic-owner')
+
+tests/test_photo_history.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:141: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:210: in _run_agent
+    response = chat_completion(litellm.completion,
+outbound_policy.py:94: in chat_completion
+    return completion(**safe)
+           ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+payload = {'model': 'gpt-5.4', 'messages': [{'role': 'system', 'content': 'Synthetic system'}, {'role': 'user', 'content': [{'ty...na z ostatnich N dni.', 'parameters': {'type': 'object', 'properties': {'days': {...}}}}}, ...], 'tool_choice': 'auto'}
+
+    def forbidden(**payload):
+>       pytest.fail('Malformed historical part reached provider')
+E       Failed: Malformed historical part reached provider
+
+tests/test_photo_history.py:36: Failed
+___________ test_invalid_history_part_never_reaches_provider[part3] ____________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_invalid_history_part_neve3/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x745211aa0380>
+part = []
+
+    @pytest.mark.parametrize('part', [
+        None, 123, 'text', [], [PHOTO[0]], {},
+        {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/file'}},
+        {'type': 'unrecognized_attachment', 'payload': 'synthetic'},
+        {'type': 'text', 'text': 123}, {'type': 'text', 'text': None},
+        {'type': 'text', 'text': ['nested']}, {'type': 'text'},
+        {'type': 'text', 'text': 'safe', 'extra': 'ambiguous'},
+        {'type': ['text'], 'text': 'safe'},
+        {'type': 'image_url', 'image_url': {'url': 'https://synthetic.invalid/image', 'detail': []}},
+    ])
+    def test_invalid_history_part_never_reaches_provider(temp_db, monkeypatch, part):
+        monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+        monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        original = json.dumps([*PHOTO, part])
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', original))
+        def forbidden(**payload):
+            pytest.fail('Malformed historical part reached provider')
+        monkeypatch.setattr(agent.litellm, 'completion', forbidden)
+        with pytest.raises(PrivacyError):
+>           agent.run_agent('Synthetic followup', 'synthetic-owner')
+
+tests/test_photo_history.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:141: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:210: in _run_agent
+    response = chat_completion(litellm.completion,
+outbound_policy.py:94: in chat_completion
+    return completion(**safe)
+           ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+payload = {'model': 'gpt-5.4', 'messages': [{'role': 'system', 'content': 'Synthetic system'}, {'role': 'user', 'content': [{'ty...na z ostatnich N dni.', 'parameters': {'type': 'object', 'properties': {'days': {...}}}}}, ...], 'tool_choice': 'auto'}
+
+    def forbidden(**payload):
+>       pytest.fail('Malformed historical part reached provider')
+E       Failed: Malformed historical part reached provider
+
+tests/test_photo_history.py:36: Failed
+___________ test_invalid_history_part_never_reaches_provider[part4] ____________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_invalid_history_part_neve4/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x745211aa06b0>
+part = [{'type': 'text', 'text': 'Synthetic millet lunch'}]
+
+    @pytest.mark.parametrize('part', [
+        None, 123, 'text', [], [PHOTO[0]], {},
+        {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/file'}},
+        {'type': 'unrecognized_attachment', 'payload': 'synthetic'},
+        {'type': 'text', 'text': 123}, {'type': 'text', 'text': None},
+        {'type': 'text', 'text': ['nested']}, {'type': 'text'},
+        {'type': 'text', 'text': 'safe', 'extra': 'ambiguous'},
+        {'type': ['text'], 'text': 'safe'},
+        {'type': 'image_url', 'image_url': {'url': 'https://synthetic.invalid/image', 'detail': []}},
+    ])
+    def test_invalid_history_part_never_reaches_provider(temp_db, monkeypatch, part):
+        monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+        monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        original = json.dumps([*PHOTO, part])
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', original))
+        def forbidden(**payload):
+            pytest.fail('Malformed historical part reached provider')
+        monkeypatch.setattr(agent.litellm, 'completion', forbidden)
+        with pytest.raises(PrivacyError):
+>           agent.run_agent('Synthetic followup', 'synthetic-owner')
+
+tests/test_photo_history.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:141: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:210: in _run_agent
+    response = chat_completion(litellm.completion,
+outbound_policy.py:94: in chat_completion
+    return completion(**safe)
+           ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+payload = {'model': 'gpt-5.4', 'messages': [{'role': 'system', 'content': 'Synthetic system'}, {'role': 'user', 'content': [{'ty...na z ostatnich N dni.', 'parameters': {'type': 'object', 'properties': {'days': {...}}}}}, ...], 'tool_choice': 'auto'}
+
+    def forbidden(**payload):
+>       pytest.fail('Malformed historical part reached provider')
+E       Failed: Malformed historical part reached provider
+
+tests/test_photo_history.py:36: Failed
+___________ test_invalid_history_part_never_reaches_provider[part5] ____________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_invalid_history_part_neve5/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x745211c34750>
+part = {}
+
+    @pytest.mark.parametrize('part', [
+        None, 123, 'text', [], [PHOTO[0]], {},
+        {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/file'}},
+        {'type': 'unrecognized_attachment', 'payload': 'synthetic'},
+        {'type': 'text', 'text': 123}, {'type': 'text', 'text': None},
+        {'type': 'text', 'text': ['nested']}, {'type': 'text'},
+        {'type': 'text', 'text': 'safe', 'extra': 'ambiguous'},
+        {'type': ['text'], 'text': 'safe'},
+        {'type': 'image_url', 'image_url': {'url': 'https://synthetic.invalid/image', 'detail': []}},
+    ])
+    def test_invalid_history_part_never_reaches_provider(temp_db, monkeypatch, part):
+        monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+        monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        original = json.dumps([*PHOTO, part])
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', original))
+        def forbidden(**payload):
+            pytest.fail('Malformed historical part reached provider')
+        monkeypatch.setattr(agent.litellm, 'completion', forbidden)
+        with pytest.raises(PrivacyError):
+>           agent.run_agent('Synthetic followup', 'synthetic-owner')
+
+tests/test_photo_history.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:141: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:210: in _run_agent
+    response = chat_completion(litellm.completion,
+outbound_policy.py:94: in chat_completion
+    return completion(**safe)
+           ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+payload = {'model': 'gpt-5.4', 'messages': [{'role': 'system', 'content': 'Synthetic system'}, {'role': 'user', 'content': [{'ty...na z ostatnich N dni.', 'parameters': {'type': 'object', 'properties': {'days': {...}}}}}, ...], 'tool_choice': 'auto'}
+
+    def forbidden(**payload):
+>       pytest.fail('Malformed historical part reached provider')
+E       Failed: Malformed historical part reached provider
+
+tests/test_photo_history.py:36: Failed
+___________ test_invalid_history_part_never_reaches_provider[part6] ____________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_invalid_history_part_neve6/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x745211ef3b50>
+part = {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/file'}}
+
+    @pytest.mark.parametrize('part', [
+        None, 123, 'text', [], [PHOTO[0]], {},
+        {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/file'}},
+        {'type': 'unrecognized_attachment', 'payload': 'synthetic'},
+        {'type': 'text', 'text': 123}, {'type': 'text', 'text': None},
+        {'type': 'text', 'text': ['nested']}, {'type': 'text'},
+        {'type': 'text', 'text': 'safe', 'extra': 'ambiguous'},
+        {'type': ['text'], 'text': 'safe'},
+        {'type': 'image_url', 'image_url': {'url': 'https://synthetic.invalid/image', 'detail': []}},
+    ])
+    def test_invalid_history_part_never_reaches_provider(temp_db, monkeypatch, part):
+        monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+        monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        original = json.dumps([*PHOTO, part])
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', original))
+        def forbidden(**payload):
+            pytest.fail('Malformed historical part reached provider')
+        monkeypatch.setattr(agent.litellm, 'completion', forbidden)
+        with pytest.raises(PrivacyError):
+>           agent.run_agent('Synthetic followup', 'synthetic-owner')
+
+tests/test_photo_history.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:141: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:210: in _run_agent
+    response = chat_completion(litellm.completion,
+outbound_policy.py:94: in chat_completion
+    return completion(**safe)
+           ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+payload = {'model': 'gpt-5.4', 'messages': [{'role': 'system', 'content': 'Synthetic system'}, {'role': 'user', 'content': [{'ty...na z ostatnich N dni.', 'parameters': {'type': 'object', 'properties': {'days': {...}}}}}, ...], 'tool_choice': 'auto'}
+
+    def forbidden(**payload):
+>       pytest.fail('Malformed historical part reached provider')
+E       Failed: Malformed historical part reached provider
+
+tests/test_photo_history.py:36: Failed
+___________ test_invalid_history_part_never_reaches_provider[part7] ____________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_invalid_history_part_neve7/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x745211cb6d50>
+part = {'type': 'unrecognized_attachment', 'payload': 'synthetic'}
+
+    @pytest.mark.parametrize('part', [
+        None, 123, 'text', [], [PHOTO[0]], {},
+        {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/file'}},
+        {'type': 'unrecognized_attachment', 'payload': 'synthetic'},
+        {'type': 'text', 'text': 123}, {'type': 'text', 'text': None},
+        {'type': 'text', 'text': ['nested']}, {'type': 'text'},
+        {'type': 'text', 'text': 'safe', 'extra': 'ambiguous'},
+        {'type': ['text'], 'text': 'safe'},
+        {'type': 'image_url', 'image_url': {'url': 'https://synthetic.invalid/image', 'detail': []}},
+    ])
+    def test_invalid_history_part_never_reaches_provider(temp_db, monkeypatch, part):
+        monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+        monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        original = json.dumps([*PHOTO, part])
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', original))
+        def forbidden(**payload):
+            pytest.fail('Malformed historical part reached provider')
+        monkeypatch.setattr(agent.litellm, 'completion', forbidden)
+        with pytest.raises(PrivacyError):
+>           agent.run_agent('Synthetic followup', 'synthetic-owner')
+
+tests/test_photo_history.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:141: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:210: in _run_agent
+    response = chat_completion(litellm.completion,
+outbound_policy.py:94: in chat_completion
+    return completion(**safe)
+           ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+payload = {'model': 'gpt-5.4', 'messages': [{'role': 'system', 'content': 'Synthetic system'}, {'role': 'user', 'content': [{'ty...na z ostatnich N dni.', 'parameters': {'type': 'object', 'properties': {'days': {...}}}}}, ...], 'tool_choice': 'auto'}
+
+    def forbidden(**payload):
+>       pytest.fail('Malformed historical part reached provider')
+E       Failed: Malformed historical part reached provider
+
+tests/test_photo_history.py:36: Failed
+___________ test_invalid_history_part_never_reaches_provider[part8] ____________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_invalid_history_part_neve8/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x745211c25220>
+part = {'type': 'text', 'text': 123}
+
+    @pytest.mark.parametrize('part', [
+        None, 123, 'text', [], [PHOTO[0]], {},
+        {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/file'}},
+        {'type': 'unrecognized_attachment', 'payload': 'synthetic'},
+        {'type': 'text', 'text': 123}, {'type': 'text', 'text': None},
+        {'type': 'text', 'text': ['nested']}, {'type': 'text'},
+        {'type': 'text', 'text': 'safe', 'extra': 'ambiguous'},
+        {'type': ['text'], 'text': 'safe'},
+        {'type': 'image_url', 'image_url': {'url': 'https://synthetic.invalid/image', 'detail': []}},
+    ])
+    def test_invalid_history_part_never_reaches_provider(temp_db, monkeypatch, part):
+        monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+        monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        original = json.dumps([*PHOTO, part])
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', original))
+        def forbidden(**payload):
+            pytest.fail('Malformed historical part reached provider')
+        monkeypatch.setattr(agent.litellm, 'completion', forbidden)
+        with pytest.raises(PrivacyError):
+>           agent.run_agent('Synthetic followup', 'synthetic-owner')
+
+tests/test_photo_history.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:141: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:210: in _run_agent
+    response = chat_completion(litellm.completion,
+outbound_policy.py:94: in chat_completion
+    return completion(**safe)
+           ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+payload = {'model': 'gpt-5.4', 'messages': [{'role': 'system', 'content': 'Synthetic system'}, {'role': 'user', 'content': [{'ty...na z ostatnich N dni.', 'parameters': {'type': 'object', 'properties': {'days': {...}}}}}, ...], 'tool_choice': 'auto'}
+
+    def forbidden(**payload):
+>       pytest.fail('Malformed historical part reached provider')
+E       Failed: Malformed historical part reached provider
+
+tests/test_photo_history.py:36: Failed
+___________ test_invalid_history_part_never_reaches_provider[part9] ____________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_invalid_history_part_neve9/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x745211d4a270>
+part = {'type': 'text', 'text': None}
+
+    @pytest.mark.parametrize('part', [
+        None, 123, 'text', [], [PHOTO[0]], {},
+        {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/file'}},
+        {'type': 'unrecognized_attachment', 'payload': 'synthetic'},
+        {'type': 'text', 'text': 123}, {'type': 'text', 'text': None},
+        {'type': 'text', 'text': ['nested']}, {'type': 'text'},
+        {'type': 'text', 'text': 'safe', 'extra': 'ambiguous'},
+        {'type': ['text'], 'text': 'safe'},
+        {'type': 'image_url', 'image_url': {'url': 'https://synthetic.invalid/image', 'detail': []}},
+    ])
+    def test_invalid_history_part_never_reaches_provider(temp_db, monkeypatch, part):
+        monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+        monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        original = json.dumps([*PHOTO, part])
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', original))
+        def forbidden(**payload):
+            pytest.fail('Malformed historical part reached provider')
+        monkeypatch.setattr(agent.litellm, 'completion', forbidden)
+        with pytest.raises(PrivacyError):
+>           agent.run_agent('Synthetic followup', 'synthetic-owner')
+
+tests/test_photo_history.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:141: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:210: in _run_agent
+    response = chat_completion(litellm.completion,
+outbound_policy.py:94: in chat_completion
+    return completion(**safe)
+           ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+payload = {'model': 'gpt-5.4', 'messages': [{'role': 'system', 'content': 'Synthetic system'}, {'role': 'user', 'content': [{'ty...na z ostatnich N dni.', 'parameters': {'type': 'object', 'properties': {'days': {...}}}}}, ...], 'tool_choice': 'auto'}
+
+    def forbidden(**payload):
+>       pytest.fail('Malformed historical part reached provider')
+E       Failed: Malformed historical part reached provider
+
+tests/test_photo_history.py:36: Failed
+___________ test_invalid_history_part_never_reaches_provider[part10] ___________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_invalid_history_part_neve10/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x745211c28bb0>
+part = {'type': 'text', 'text': ['nested']}
+
+    @pytest.mark.parametrize('part', [
+        None, 123, 'text', [], [PHOTO[0]], {},
+        {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/file'}},
+        {'type': 'unrecognized_attachment', 'payload': 'synthetic'},
+        {'type': 'text', 'text': 123}, {'type': 'text', 'text': None},
+        {'type': 'text', 'text': ['nested']}, {'type': 'text'},
+        {'type': 'text', 'text': 'safe', 'extra': 'ambiguous'},
+        {'type': ['text'], 'text': 'safe'},
+        {'type': 'image_url', 'image_url': {'url': 'https://synthetic.invalid/image', 'detail': []}},
+    ])
+    def test_invalid_history_part_never_reaches_provider(temp_db, monkeypatch, part):
+        monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+        monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        original = json.dumps([*PHOTO, part])
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', original))
+        def forbidden(**payload):
+            pytest.fail('Malformed historical part reached provider')
+        monkeypatch.setattr(agent.litellm, 'completion', forbidden)
+        with pytest.raises(PrivacyError):
+>           agent.run_agent('Synthetic followup', 'synthetic-owner')
+
+tests/test_photo_history.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:141: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:210: in _run_agent
+    response = chat_completion(litellm.completion,
+outbound_policy.py:94: in chat_completion
+    return completion(**safe)
+           ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+payload = {'model': 'gpt-5.4', 'messages': [{'role': 'system', 'content': 'Synthetic system'}, {'role': 'user', 'content': [{'ty...na z ostatnich N dni.', 'parameters': {'type': 'object', 'properties': {'days': {...}}}}}, ...], 'tool_choice': 'auto'}
+
+    def forbidden(**payload):
+>       pytest.fail('Malformed historical part reached provider')
+E       Failed: Malformed historical part reached provider
+
+tests/test_photo_history.py:36: Failed
+___________ test_invalid_history_part_never_reaches_provider[part11] ___________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_invalid_history_part_neve11/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x745211cd7860>
+part = {'type': 'text'}
+
+    @pytest.mark.parametrize('part', [
+        None, 123, 'text', [], [PHOTO[0]], {},
+        {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/file'}},
+        {'type': 'unrecognized_attachment', 'payload': 'synthetic'},
+        {'type': 'text', 'text': 123}, {'type': 'text', 'text': None},
+        {'type': 'text', 'text': ['nested']}, {'type': 'text'},
+        {'type': 'text', 'text': 'safe', 'extra': 'ambiguous'},
+        {'type': ['text'], 'text': 'safe'},
+        {'type': 'image_url', 'image_url': {'url': 'https://synthetic.invalid/image', 'detail': []}},
+    ])
+    def test_invalid_history_part_never_reaches_provider(temp_db, monkeypatch, part):
+        monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+        monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        original = json.dumps([*PHOTO, part])
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', original))
+        def forbidden(**payload):
+            pytest.fail('Malformed historical part reached provider')
+        monkeypatch.setattr(agent.litellm, 'completion', forbidden)
+        with pytest.raises(PrivacyError):
+>           agent.run_agent('Synthetic followup', 'synthetic-owner')
+
+tests/test_photo_history.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:141: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:210: in _run_agent
+    response = chat_completion(litellm.completion,
+outbound_policy.py:94: in chat_completion
+    return completion(**safe)
+           ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+payload = {'model': 'gpt-5.4', 'messages': [{'role': 'system', 'content': 'Synthetic system'}, {'role': 'user', 'content': [{'ty...na z ostatnich N dni.', 'parameters': {'type': 'object', 'properties': {'days': {...}}}}}, ...], 'tool_choice': 'auto'}
+
+    def forbidden(**payload):
+>       pytest.fail('Malformed historical part reached provider')
+E       Failed: Malformed historical part reached provider
+
+tests/test_photo_history.py:36: Failed
+___________ test_invalid_history_part_never_reaches_provider[part12] ___________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_invalid_history_part_neve12/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x745211b74dd0>
+part = {'type': 'text', 'text': 'safe', 'extra': 'ambiguous'}
+
+    @pytest.mark.parametrize('part', [
+        None, 123, 'text', [], [PHOTO[0]], {},
+        {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/file'}},
+        {'type': 'unrecognized_attachment', 'payload': 'synthetic'},
+        {'type': 'text', 'text': 123}, {'type': 'text', 'text': None},
+        {'type': 'text', 'text': ['nested']}, {'type': 'text'},
+        {'type': 'text', 'text': 'safe', 'extra': 'ambiguous'},
+        {'type': ['text'], 'text': 'safe'},
+        {'type': 'image_url', 'image_url': {'url': 'https://synthetic.invalid/image', 'detail': []}},
+    ])
+    def test_invalid_history_part_never_reaches_provider(temp_db, monkeypatch, part):
+        monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+        monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        original = json.dumps([*PHOTO, part])
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', original))
+        def forbidden(**payload):
+            pytest.fail('Malformed historical part reached provider')
+        monkeypatch.setattr(agent.litellm, 'completion', forbidden)
+        with pytest.raises(PrivacyError):
+>           agent.run_agent('Synthetic followup', 'synthetic-owner')
+
+tests/test_photo_history.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:141: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:210: in _run_agent
+    response = chat_completion(litellm.completion,
+outbound_policy.py:94: in chat_completion
+    return completion(**safe)
+           ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+payload = {'model': 'gpt-5.4', 'messages': [{'role': 'system', 'content': 'Synthetic system'}, {'role': 'user', 'content': [{'ty...na z ostatnich N dni.', 'parameters': {'type': 'object', 'properties': {'days': {...}}}}}, ...], 'tool_choice': 'auto'}
+
+    def forbidden(**payload):
+>       pytest.fail('Malformed historical part reached provider')
+E       Failed: Malformed historical part reached provider
+
+tests/test_photo_history.py:36: Failed
+___________ test_invalid_history_part_never_reaches_provider[part13] ___________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_invalid_history_part_neve13/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x745211b76a50>
+part = {'type': ['text'], 'text': 'safe'}
+
+    @pytest.mark.parametrize('part', [
+        None, 123, 'text', [], [PHOTO[0]], {},
+        {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/file'}},
+        {'type': 'unrecognized_attachment', 'payload': 'synthetic'},
+        {'type': 'text', 'text': 123}, {'type': 'text', 'text': None},
+        {'type': 'text', 'text': ['nested']}, {'type': 'text'},
+        {'type': 'text', 'text': 'safe', 'extra': 'ambiguous'},
+        {'type': ['text'], 'text': 'safe'},
+        {'type': 'image_url', 'image_url': {'url': 'https://synthetic.invalid/image', 'detail': []}},
+    ])
+    def test_invalid_history_part_never_reaches_provider(temp_db, monkeypatch, part):
+        monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+        monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        original = json.dumps([*PHOTO, part])
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', original))
+        def forbidden(**payload):
+            pytest.fail('Malformed historical part reached provider')
+        monkeypatch.setattr(agent.litellm, 'completion', forbidden)
+        with pytest.raises(PrivacyError):
+>           agent.run_agent('Synthetic followup', 'synthetic-owner')
+
+tests/test_photo_history.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:141: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:210: in _run_agent
+    response = chat_completion(litellm.completion,
+outbound_policy.py:94: in chat_completion
+    return completion(**safe)
+           ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+payload = {'model': 'gpt-5.4', 'messages': [{'role': 'system', 'content': 'Synthetic system'}, {'role': 'user', 'content': [{'ty...na z ostatnich N dni.', 'parameters': {'type': 'object', 'properties': {'days': {...}}}}}, ...], 'tool_choice': 'auto'}
+
+    def forbidden(**payload):
+>       pytest.fail('Malformed historical part reached provider')
+E       Failed: Malformed historical part reached provider
+
+tests/test_photo_history.py:36: Failed
+=========================== short test summary info ============================
+FAILED tests/test_photo_history.py::test_invalid_history_part_never_reaches_provider[None]
+FAILED tests/test_photo_history.py::test_invalid_history_part_never_reaches_provider[123]
+FAILED tests/test_photo_history.py::test_invalid_history_part_never_reaches_provider[text]
+FAILED tests/test_photo_history.py::test_invalid_history_part_never_reaches_provider[part3]
+FAILED tests/test_photo_history.py::test_invalid_history_part_never_reaches_provider[part4]
+FAILED tests/test_photo_history.py::test_invalid_history_part_never_reaches_provider[part5]
+FAILED tests/test_photo_history.py::test_invalid_history_part_never_reaches_provider[part6]
+FAILED tests/test_photo_history.py::test_invalid_history_part_never_reaches_provider[part7]
+FAILED tests/test_photo_history.py::test_invalid_history_part_never_reaches_provider[part8]
+FAILED tests/test_photo_history.py::test_invalid_history_part_never_reaches_provider[part9]
+FAILED tests/test_photo_history.py::test_invalid_history_part_never_reaches_provider[part10]
+FAILED tests/test_photo_history.py::test_invalid_history_part_never_reaches_provider[part11]
+FAILED tests/test_photo_history.py::test_invalid_history_part_never_reaches_provider[part12]
+FAILED tests/test_photo_history.py::test_invalid_history_part_never_reaches_provider[part13]
+14 failed, 1 passed, 34 deselected in 10.49s

@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 from responses_api import FunctionCall, ResponsesConversation, uses_responses
 import memory_runtime
 from k90_memory.privacy import strict_json_loads
-from outbound_policy import chat_completion, model_policy
+from outbound_policy import chat_completion, model_policy, project_history
 
 from system_prompt import SYSTEM_PROMPT
 from tools import TOOLS, execute_tool
@@ -76,13 +76,7 @@ def load_history(user_id: str) -> list[dict]:
     conn.close()
     result = []
     for row in reversed(rows):
-        content = model_policy().sanitize_text(row["content"])
-        try:
-            parsed = strict_json_loads(content)
-            if isinstance(parsed, list):
-                content = parsed
-        except (ValueError, TypeError):
-            pass
+        content = project_history(row["content"])
         result.append({"role": row["role"], "content": content})
     return result
 

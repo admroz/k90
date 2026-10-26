@@ -74,9 +74,19 @@ Kontekst zdrowotny jest dozwolony; nie ma automatycznej, kompletnej klasyfikacji
 wszystkich szczególnie wrażliwych kategorii. `local-only` pozwala je lokalnie
 zablokować. Brak rozpoznania dowolnego nazwiska nie dowodzi braku PII.
 
-Zdjęcia do modelu wymagają osobnego, jawnego `K90_ALLOW_MODEL_IMAGES=true`.
-To zgoda na przesłanie, NIE anonimizacja obrazu/EXIF. Nie włącza zdjęć w HS.
-Przy `false` blokada dotyczy także zdjęć obecnych w krótkiej historii rozmowy.
+NOWE zdjęcia do modelu wymagają osobnego, jawnego `K90_ALLOW_MODEL_IMAGES=true`
+ustawionego przez właściciela; domyślnie pozostaje `false`. To zgoda na przesłanie,
+NIE anonimizacja obrazu/EXIF. Nie włącza zdjęć w HS.
+Rozpoznane części `image_url` w krótkiej historii są zawsze zastępowane tekstem
+`[Historical image omitted]`, także przy `true`. Bezpieczny tekst, wcześniejsza
+analiza asystenta i późniejsze doprecyzowania pozostają w kontekście; domyślna
+głębokość `HISTORY_MESSAGES` nie zmienia się. Pełny oryginał przechodzi kontrolę
+sekretów i ograniczeń (także metadanych i kodowanego JSON) przed pominięciem
+obrazu; nieznane załączniki i niejednoznaczne zapisy nadal blokują wysyłkę.
+Oryginały lokalne nie są zmieniane. Nie analizujemy automatycznie archiwum ani
+nie wywołujemy dodatkowego modelu. Stare zdjęcie bez opisu pozostaje bez opisu.
+Rozpoznanie posiłku wymaga ustalenia porcji/przygotowania; ta zmiana nie zapisuje
+automatycznie posiłków. Ostatni zarejestrowany posiłek sprawdzamy narzędziami SQL.
 
 ## Hindsight — osobny bank i oddzielne uprawnienia
 

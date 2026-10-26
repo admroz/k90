@@ -1,0 +1,277 @@
+FF........FFFF..F                                                        [100%]
+=================================== FAILURES ===================================
+________ test_history_projects_photo_without_rewriting_original[false] _________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_history_projects_photo_wi0/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f61f91069e0>
+consent = 'false'
+
+    @pytest.mark.parametrize('consent', ['false', 'true'])
+    def test_history_projects_photo_without_rewriting_original(temp_db, monkeypatch, consent):
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', consent)
+        agent.save_history('synthetic-owner', PHOTO, 'Likely millet; what portion?')
+>       history = agent.load_history('synthetic-owner')
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_photo_history.py:19: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:79: in load_history
+    content = model_policy().sanitize_text(row["content"])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+k90_memory/privacy.py:82: in sanitize_text
+    clean = self.sanitize(text)
+            ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PrivacyPolicy(redact_terms=(), allow_images=False, max_chars=2000000, max_depth=40)
+value = '[{"type": "text", "text": "Synthetic millet lunch"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,c3ludGhldGlj"}}]'
+
+    def sanitize(self, value):
+        """Return a fresh JSON-compatible tree; block unknown/binary objects.
+    
+        Keys are filtered as well as values. Protocol keys remain unchanged unless
+        explicitly matched by a redact term; collisions are rejected, never merged.
+        Images/files are rejected anywhere by default. Image consent is solely for
+        a model boundary, NEVER permission for the memory backend to index images.
+        """
+        budget = [0, 0]
+        def walk(obj, depth, required_json=False, preserve_json=False):
+            budget[0] += 1
+            if depth > self.max_depth or budget[0] > 100_000:
+                raise PrivacyError()
+            if type(obj) is str:
+                budget[1] += len(obj)
+                if budget[1] > self.max_chars:
+                    raise PrivacyError()
+                stripped = obj.lstrip()
+                if required_json or stripped.startswith(('{', '[', '"')):
+                    try:
+                        parsed = strict_json_loads(obj)
+                    except PrivacyError:
+                        raise
+                    except (ValueError, RecursionError):
+                        # Object-like and quoted encodings are always fail-closed.
+                        # Only a complete, plain Markdown label can disambiguate
+                        # a leading '[' from a malformed JSON array. Do not infer
+                        # safety from an unrecognized/broken JSON key prefix.
+                        label, closed, _ = stripped[1:].partition(']')
+                        markdown = (stripped.startswith('[') and closed and label
+                                    and not any(c in label for c in '{}["\'\\,:')
+                                    and (not label.strip() or
+                                         (label.lstrip()[0].isalpha() and
+                                          label.strip() not in ('true', 'false', 'null'))))
+                        if required_json or not markdown:
+                            raise PrivacyError() from None
+                        return self._text(obj)
+                    # Reuse this walk's depth/node/character budgets for every
+                    # decoded layer, and retain the original number of encodings.
+                    clean = walk(parsed, depth + 1)
+                    if preserve_json:
+                        # Names cannot be canonicalized or partially redacted:
+                        # that could rename a protocol field or create a collision.
+                        # A decoded scalar name has no enclosing value here, so
+                        # it cannot safely inherit field-specific restrictions.
+                        # Reject encoded reserved names rather than accepting
+                        # escaped aliases of e.g. api_key/local_only/type/phone.
+                        reserved = (_SECRET_KEYS | _IDENTIFIER_KEYS | _IMAGE_KEYS |
+                                    {'localonly', 'type', 'role', 'mimetype', 'mediatype',
+                                     'arguments', 'toolcallid', 'callid'})
+                        if type(parsed) is str and _key(parsed) in reserved:
+                            raise PrivacyError()
+                        if clean != parsed:
+                            raise PrivacyError()
+                        return obj
+                    return json.dumps(clean, ensure_ascii=False, separators=(',', ':'))
+                return self._text(obj)
+            if obj is None or type(obj) is bool:
+                return obj
+            if type(obj) is int or (type(obj) is float and math.isfinite(obj)):
+                # JSON numbers must not bypass the same identifier rules used
+                # for strings. Preserve the numeric type of ordinary metrics.
+                text = str(int(obj)) if type(obj) is float and obj.is_integer() else str(obj)
+                clean = self._text(text)
+                return clean if clean != text else obj
+            if type(obj) in (list, tuple):
+                return [walk(item, depth + 1) for item in obj]
+            if type(obj) is dict:
+                out = {}
+                for key, item in obj.items():
+                    if type(key) is not str:
+                        raise PrivacyError()
+                    canonical = _key(key)
+                    if canonical in _SECRET_KEYS:
+                        raise PrivacyError()
+                    if canonical == 'localonly' and item is not False:
+                        raise PrivacyError()
+                    if not self.allow_images and (canonical in _IMAGE_KEYS or
+                            (canonical == 'type' and type(item) is str and _key(item) in _IMAGE_KEYS) or
+                            (canonical in ('mimetype', 'mediatype') and type(item) is str and re.match(r'(?i)(?:image|video|audio|application)/', item))):
+                        raise PrivacyError()
+                    clean_key = walk(key, depth + 1, preserve_json=True)
+                    if clean_key in out or budget[1] > self.max_chars:
+                        raise PrivacyError()
+                    clean_item = walk(item, depth + 1, required_json=canonical == 'arguments')
+                    if canonical in _IDENTIFIER_KEYS and type(item) in (int, float):
+                        # Numeric JSON has already discarded any leading zeroes;
+                        # semantic identifier fields cannot use a length heuristic.
+                        clean_item = '[REDACTED]'
+                    if canonical in ('role', 'type', 'toolcallid', 'callid') and (clean_key != key or clean_item != item):
+                        raise PrivacyError()
+                    out[clean_key] = clean_item
+                return out
+            raise PrivacyError()
+        try:
+            return walk(value, 0)
+        except Exception:
+>           raise PrivacyError() from None
+E           k90_memory.privacy.PrivacyError: outbound content blocked
+
+k90_memory/privacy.py:184: PrivacyError
+_________ test_history_projects_photo_without_rewriting_original[true] _________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_history_projects_photo_wi1/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f61f91068b0>
+consent = 'true'
+
+    @pytest.mark.parametrize('consent', ['false', 'true'])
+    def test_history_projects_photo_without_rewriting_original(temp_db, monkeypatch, consent):
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', consent)
+        agent.save_history('synthetic-owner', PHOTO, 'Likely millet; what portion?')
+        history = agent.load_history('synthetic-owner')
+>       assert history[0]['content'] == [PHOTO[0], {'type': 'text', 'text': '[Historical image omitted]'}]
+E       AssertionError: assert [{'type': 'te...ludGhldGlj'}}] == [{'type': 'te...ge omitted]'}]
+E         
+E         At index 1 diff: {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,c3ludGhldGlj'}} != {'type': 'text', 'text': '[Historical image omitted]'}
+E         Use -v to get more diff
+
+tests/test_photo_history.py:20: AssertionError
+___________ test_image_metadata_cannot_launder_restrictions[extra8] ____________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_image_metadata_cannot_lau8/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f61f9135390>
+extra = {'metadata': {'attachment': 'synthetic'}}
+
+    @pytest.mark.parametrize('extra', [
+        {'local_only': True}, {'metadata': {'local_only': True}},
+        {'metadata': json.dumps({'local_only': True})},
+        {'metadata': json.dumps(json.dumps({'password': 'synthetic'}))},
+        {'metadata': '[local-only] synthetic'}, {'metadata': 'Bearer synthetic'},
+        {'metadata': '{"broken":'}, {'metadata': '{"x":1,"x":2}'},
+        {'metadata': {'attachment': 'synthetic'}},
+    ])
+    def test_image_metadata_cannot_launder_restrictions(temp_db, monkeypatch, extra):
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+        photo = [PHOTO[0], dict(PHOTO[1], **extra)]
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', json.dumps(photo)))
+>       with pytest.raises(PrivacyError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE PrivacyError
+
+tests/test_photo_history.py:40: Failed
+_ test_ambiguous_or_arbitrary_history_stays_blocked[[{"type":"attachment","file":"synthetic"}]] _
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_ambiguous_or_arbitrary_hi0/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f61f90f6ea0>
+raw = '[{"type":"attachment","file":"synthetic"}]'
+
+    @pytest.mark.parametrize('raw', [
+        '[{"type":"attachment","file":"synthetic"}]',
+        '[{"type":"image_url","image_url":null}]',
+        '[{"type":"image_url","image_url":{"url":123}}]',
+        '[{"type":"image_url","image_url":{"url":"synthetic","url":"other"}}]',
+        '[{"type":"image_url",',
+        json.dumps(json.dumps(PHOTO)),
+    ])
+    def test_ambiguous_or_arbitrary_history_stays_blocked(temp_db, monkeypatch, raw):
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', raw))
+>       with pytest.raises(PrivacyError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE PrivacyError
+
+tests/test_photo_history.py:57: Failed
+_ test_ambiguous_or_arbitrary_history_stays_blocked[[{"type":"image_url","image_url":null}]] _
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_ambiguous_or_arbitrary_hi1/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f61f9018350>
+raw = '[{"type":"image_url","image_url":null}]'
+
+    @pytest.mark.parametrize('raw', [
+        '[{"type":"attachment","file":"synthetic"}]',
+        '[{"type":"image_url","image_url":null}]',
+        '[{"type":"image_url","image_url":{"url":123}}]',
+        '[{"type":"image_url","image_url":{"url":"synthetic","url":"other"}}]',
+        '[{"type":"image_url",',
+        json.dumps(json.dumps(PHOTO)),
+    ])
+    def test_ambiguous_or_arbitrary_history_stays_blocked(temp_db, monkeypatch, raw):
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', raw))
+>       with pytest.raises(PrivacyError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE PrivacyError
+
+tests/test_photo_history.py:57: Failed
+_ test_ambiguous_or_arbitrary_history_stays_blocked[[{"type":"image_url","image_url":{"url":123}}]] _
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_ambiguous_or_arbitrary_hi2/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f61f9018110>
+raw = '[{"type":"image_url","image_url":{"url":123}}]'
+
+    @pytest.mark.parametrize('raw', [
+        '[{"type":"attachment","file":"synthetic"}]',
+        '[{"type":"image_url","image_url":null}]',
+        '[{"type":"image_url","image_url":{"url":123}}]',
+        '[{"type":"image_url","image_url":{"url":"synthetic","url":"other"}}]',
+        '[{"type":"image_url",',
+        json.dumps(json.dumps(PHOTO)),
+    ])
+    def test_ambiguous_or_arbitrary_history_stays_blocked(temp_db, monkeypatch, raw):
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', raw))
+>       with pytest.raises(PrivacyError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE PrivacyError
+
+tests/test_photo_history.py:57: Failed
+_ test_ambiguous_or_arbitrary_history_stays_blocked["[{\\"type\\": \\"text\\", \\"text\\": \\"Synthetic millet lunch\\"}, {\\"type\\": \\"image_url\\", \\"image_url\\": {\\"url\\": \\"data:image/png;base64,c3ludGhldGlj\\"}}]"] _
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_ambiguous_or_arbitrary_hi5/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f61f9016170>
+raw = '"[{\\"type\\": \\"text\\", \\"text\\": \\"Synthetic millet lunch\\"}, {\\"type\\": \\"image_url\\", \\"image_url\\": {\\"url\\": \\"data:image/png;base64,c3ludGhldGlj\\"}}]"'
+
+    @pytest.mark.parametrize('raw', [
+        '[{"type":"attachment","file":"synthetic"}]',
+        '[{"type":"image_url","image_url":null}]',
+        '[{"type":"image_url","image_url":{"url":123}}]',
+        '[{"type":"image_url","image_url":{"url":"synthetic","url":"other"}}]',
+        '[{"type":"image_url",',
+        json.dumps(json.dumps(PHOTO)),
+    ])
+    def test_ambiguous_or_arbitrary_history_stays_blocked(temp_db, monkeypatch, raw):
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', raw))
+>       with pytest.raises(PrivacyError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE PrivacyError
+
+tests/test_photo_history.py:57: Failed
+=========================== short test summary info ============================
+FAILED tests/test_photo_history.py::test_history_projects_photo_without_rewriting_original[false]
+FAILED tests/test_photo_history.py::test_history_projects_photo_without_rewriting_original[true]
+FAILED tests/test_photo_history.py::test_image_metadata_cannot_launder_restrictions[extra8]
+FAILED tests/test_photo_history.py::test_ambiguous_or_arbitrary_history_stays_blocked[[{"type":"attachment","file":"synthetic"}]]
+FAILED tests/test_photo_history.py::test_ambiguous_or_arbitrary_history_stays_blocked[[{"type":"image_url","image_url":null}]]
+FAILED tests/test_photo_history.py::test_ambiguous_or_arbitrary_history_stays_blocked[[{"type":"image_url","image_url":{"url":123}}]]
+FAILED tests/test_photo_history.py::test_ambiguous_or_arbitrary_history_stays_blocked["[{\\"type\\": \\"text\\", \\"text\\": \\"Synthetic millet lunch\\"}, {\\"type\\": \\"image_url\\", \\"image_url\\": {\\"url\\": \\"data:image/png;base64,c3ludGhldGlj\\"}}]"]
+7 failed, 10 passed in 10.14s

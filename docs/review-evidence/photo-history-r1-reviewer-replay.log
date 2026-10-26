@@ -1,0 +1,96 @@
+[92m23:21:06 - LiteLLM:WARNING[0m: get_model_cost_map.py:271 - LiteLLM: Failed to fetch remote model cost map from https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json: Offline verification blocked non-loopback network. Falling back to local backup.
+....F
+=================================== FAILURES ===================================
+_________ test_actual_chat_unknown_attachment_must_not_reach_provider __________
+
+tmp_path = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_actual_chat_unknown_attac0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78cf0c902f10>
+
+    def test_actual_chat_unknown_attachment_must_not_reach_provider(tmp_path, monkeypatch):
+        data = tmp_path / 'data'
+        data.mkdir()
+        monkeypatch.setenv('DATA_DIR', str(data))
+        monkeypatch.setenv('DB_PATH', str(data / 'test.db'))
+        monkeypatch.setattr(db, '_DB_PATH', str(data / 'test.db'))
+        monkeypatch.setenv('K90_MEMORY_BACKEND', 'local')
+        monkeypatch.setenv('K90_AGENT_AUTH', 'api')
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'false')
+        db.init_db()
+        with db.get_conn() as conn:
+            create_schema(conn)
+            original = json.dumps([
+                {'type': 'text', 'text': 'Synthetic meal'},
+                {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,c3ludGhldGlj'}},
+                {'type': 'file_url', 'file_url': {'url': 'https://synthetic.invalid/private.pdf'}},
+            ])
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)', ('reviewer', 'user', original))
+        monkeypatch.setattr(agent, 'MODEL', 'synthetic')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        monkeypatch.setattr(memory_runtime, 'start_worker', lambda: None)
+        sent = []
+        def completion(**payload):
+            sent.append(payload)
+            msg = SimpleNamespace(content='Synthetic answer', tool_calls=[], model_dump=lambda **kw: {'role': 'assistant', 'content': 'Synthetic answer'})
+            return SimpleNamespace(choices=[SimpleNamespace(message=msg)], usage=None)
+        monkeypatch.setattr(agent.litellm, 'completion', completion)
+>       result = agent.run_agent('Synthetic followup', 'reviewer')
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+../../jobs/k90-photo-history/review-original-probes.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:141: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:154: in _run_agent
+    history = load_history(user_id)
+              ^^^^^^^^^^^^^^^^^^^^^
+agent.py:79: in load_history
+    content = project_history(row["content"])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = '[{"type": "text", "text": "Synthetic meal"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,c3ludGhldGlj"}}, {"type": "file_url", "file_url": {"url": "https://synthetic.invalid/private.pdf"}}]'
+
+    def project_history(raw):
+        """Validate originals before omitting recognized historical image parts.
+    
+        Image permission during the first walk only permits inspection of image
+        fields; all other restrictions and encoded JSON checks still apply. The
+        second walk always forbids images, independently of live-upload consent.
+        Never mutate the stored original or infer an image's contents.
+        """
+        policy = replace(model_policy(), allow_images=False)
+        inspected = replace(policy, allow_images=True).sanitize_text(raw)
+        try:
+            parsed = strict_json_loads(raw)
+        except PrivacyError:
+            raise
+        except (ValueError, TypeError):
+            return policy.sanitize_text(inspected)
+        if not isinstance(parsed, list):
+            return policy.sanitize_text(inspected)
+        projected = []
+        for part in parsed:
+            if type(part) is not dict:
+                raise PrivacyError()
+            if part.get('type') == 'text':
+                if set(part) != {'type', 'text'} or type(part['text']) is not str:
+                    raise PrivacyError()
+                projected.append(part)
+            elif part.get('type') == 'image_url':
+                image = part.get('image_url')
+                if (set(part) != {'type', 'image_url'} or type(image) is not dict
+                        or not {'url'} <= set(image) <= {'url', 'detail'}
+                        or type(image['url']) is not str or not image['url']
+                        or ('detail' in image and image['detail'] not in ('auto', 'low', 'high'))):
+                    raise PrivacyError()
+                _validate_historical_image_url(image['url'])
+                projected.append({'type': 'text', 'text': '[Historical image omitted]'})
+            else:
+>               raise PrivacyError()
+E               k90_memory.privacy.PrivacyError: outbound content blocked
+
+outbound_policy.py:75: PrivacyError
+=========================== short test summary info ============================
+FAILED ../../jobs/k90-photo-history/review-original-probes.py::test_actual_chat_unknown_attachment_must_not_reach_provider
+1 failed, 4 passed in 4.03s

@@ -1,0 +1,1028 @@
+FFFFFFFF                                                                 [100%]
+=================================== FAILURES ===================================
+__________ test_real_agent_upload_then_text_followup[false-local-api] __________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_real_agent_upload_then_te0/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7635569de650>
+auth = 'api', memory = 'local', followup_consent = 'false'
+
+    @pytest.mark.parametrize('auth', ['api', 'chatgpt'])
+    @pytest.mark.parametrize('memory', ['local', 'hindsight'])
+    @pytest.mark.parametrize('followup_consent', ['false', 'true'])
+    def test_real_agent_upload_then_text_followup(temp_db, monkeypatch, auth, memory, followup_consent):
+        import memory_runtime as runtime
+        import subscription_api
+        import subscription_auth
+    
+        monkeypatch.setenv('K90_AGENT_AUTH', auth)
+        monkeypatch.setenv('K90_MEMORY_BACKEND', memory)
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+        monkeypatch.setattr(agent, 'MODEL', 'synthetic-vision')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        monkeypatch.setattr(runtime, 'start_worker', lambda: None)
+        sent, hs_sent, indexed = [], [], []
+        answer = 'Likely millet; what portion and preparation?'
+    
+        def api_request(**payload):
+            sent.append(payload)
+            message = SimpleNamespace(content=answer, tool_calls=[],
+                                      model_dump=lambda **kw: {'role': 'assistant', 'content': answer})
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+    
+        def subscription_request(url, **kwargs):
+            if url.endswith('/models'):
+                return {'models': [{'slug': 'synthetic-vision', 'visibility': 'list'}]}
+            sent.append(kwargs['data'])
+            return {'status': 'completed', 'output': [
+                {'type': 'message', 'content': [{'type': 'output_text', 'text': answer}]}]}
+    
+        def hs_transport(method, url, body, timeout, max_bytes):
+            payload = json.loads(body) if body else None
+            hs_sent.append(payload)
+            if url.endswith('/recall'):
+                return {'results': [{'type': 'world', 'document_id': item['document_id'],
+                                     'metadata': item['metadata']} for item in indexed]}
+            assert method == 'POST' and url.endswith('/memories')
+            indexed.extend(payload['items'])
+            return {'success': True, 'async': False, 'items_count': 1, 'bank_id': 'k90-test-photo-history'}
+    
+        monkeypatch.setattr(agent.litellm, 'completion', api_request)
+        monkeypatch.setattr(subscription_api, 'request_json', subscription_request)
+        monkeypatch.setattr(subscription_auth, 'TokenStore', lambda *a: SimpleNamespace(access_token=lambda: 'synthetic'))
+        if memory == 'hindsight':
+            monkeypatch.setenv('K90_HINDSIGHT_URL', 'http://synthetic.invalid:8888')
+            monkeypatch.setenv('K90_HINDSIGHT_BANK_ID', 'k90-test-photo-history')
+            monkeypatch.setenv('K90_HINDSIGHT_ALLOW_INTERNAL_HTTP', 'true')
+            monkeypatch.setenv('K90_HINDSIGHT_ALLOW_UNAUTHENTICATED', 'true')
+            monkeypatch.setattr(runtime, '_transport', lambda token: hs_transport)
+    
+        assert agent.run_agent(PHOTO, 'synthetic-owner') == (answer, False)
+        assert 'data:image/png;base64,c3ludGhldGlj' in json.dumps(sent[0])
+        if memory == 'hindsight':
+            assert runtime.run_pending(limit=20) == 2
+            assert indexed
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', followup_consent)
+>       assert agent.run_agent('Millet lunch: 150 g, steamed', 'synthetic-owner') == (answer, False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_photo_history.py:118: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:147: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:160: in _run_agent
+    history = load_history(user_id)
+              ^^^^^^^^^^^^^^^^^^^^^
+agent.py:79: in load_history
+    content = model_policy().sanitize_text(row["content"])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+k90_memory/privacy.py:82: in sanitize_text
+    clean = self.sanitize(text)
+            ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PrivacyPolicy(redact_terms=(), allow_images=False, max_chars=2000000, max_depth=40)
+value = '[{"type": "text", "text": "Synthetic millet lunch"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,c3ludGhldGlj"}}]'
+
+    def sanitize(self, value):
+        """Return a fresh JSON-compatible tree; block unknown/binary objects.
+    
+        Keys are filtered as well as values. Protocol keys remain unchanged unless
+        explicitly matched by a redact term; collisions are rejected, never merged.
+        Images/files are rejected anywhere by default. Image consent is solely for
+        a model boundary, NEVER permission for the memory backend to index images.
+        """
+        budget = [0, 0]
+        def walk(obj, depth, required_json=False, preserve_json=False):
+            budget[0] += 1
+            if depth > self.max_depth or budget[0] > 100_000:
+                raise PrivacyError()
+            if type(obj) is str:
+                budget[1] += len(obj)
+                if budget[1] > self.max_chars:
+                    raise PrivacyError()
+                stripped = obj.lstrip()
+                if required_json or stripped.startswith(('{', '[', '"')):
+                    try:
+                        parsed = strict_json_loads(obj)
+                    except PrivacyError:
+                        raise
+                    except (ValueError, RecursionError):
+                        # Object-like and quoted encodings are always fail-closed.
+                        # Only a complete, plain Markdown label can disambiguate
+                        # a leading '[' from a malformed JSON array. Do not infer
+                        # safety from an unrecognized/broken JSON key prefix.
+                        label, closed, _ = stripped[1:].partition(']')
+                        markdown = (stripped.startswith('[') and closed and label
+                                    and not any(c in label for c in '{}["\'\\,:')
+                                    and (not label.strip() or
+                                         (label.lstrip()[0].isalpha() and
+                                          label.strip() not in ('true', 'false', 'null'))))
+                        if required_json or not markdown:
+                            raise PrivacyError() from None
+                        return self._text(obj)
+                    # Reuse this walk's depth/node/character budgets for every
+                    # decoded layer, and retain the original number of encodings.
+                    clean = walk(parsed, depth + 1)
+                    if preserve_json:
+                        # Names cannot be canonicalized or partially redacted:
+                        # that could rename a protocol field or create a collision.
+                        # A decoded scalar name has no enclosing value here, so
+                        # it cannot safely inherit field-specific restrictions.
+                        # Reject encoded reserved names rather than accepting
+                        # escaped aliases of e.g. api_key/local_only/type/phone.
+                        reserved = (_SECRET_KEYS | _IDENTIFIER_KEYS | _IMAGE_KEYS |
+                                    {'localonly', 'type', 'role', 'mimetype', 'mediatype',
+                                     'arguments', 'toolcallid', 'callid'})
+                        if type(parsed) is str and _key(parsed) in reserved:
+                            raise PrivacyError()
+                        if clean != parsed:
+                            raise PrivacyError()
+                        return obj
+                    return json.dumps(clean, ensure_ascii=False, separators=(',', ':'))
+                return self._text(obj)
+            if obj is None or type(obj) is bool:
+                return obj
+            if type(obj) is int or (type(obj) is float and math.isfinite(obj)):
+                # JSON numbers must not bypass the same identifier rules used
+                # for strings. Preserve the numeric type of ordinary metrics.
+                text = str(int(obj)) if type(obj) is float and obj.is_integer() else str(obj)
+                clean = self._text(text)
+                return clean if clean != text else obj
+            if type(obj) in (list, tuple):
+                return [walk(item, depth + 1) for item in obj]
+            if type(obj) is dict:
+                out = {}
+                for key, item in obj.items():
+                    if type(key) is not str:
+                        raise PrivacyError()
+                    canonical = _key(key)
+                    if canonical in _SECRET_KEYS:
+                        raise PrivacyError()
+                    if canonical == 'localonly' and item is not False:
+                        raise PrivacyError()
+                    if not self.allow_images and (canonical in _IMAGE_KEYS or
+                            (canonical == 'type' and type(item) is str and _key(item) in _IMAGE_KEYS) or
+                            (canonical in ('mimetype', 'mediatype') and type(item) is str and re.match(r'(?i)(?:image|video|audio|application)/', item))):
+                        raise PrivacyError()
+                    clean_key = walk(key, depth + 1, preserve_json=True)
+                    if clean_key in out or budget[1] > self.max_chars:
+                        raise PrivacyError()
+                    clean_item = walk(item, depth + 1, required_json=canonical == 'arguments')
+                    if canonical in _IDENTIFIER_KEYS and type(item) in (int, float):
+                        # Numeric JSON has already discarded any leading zeroes;
+                        # semantic identifier fields cannot use a length heuristic.
+                        clean_item = '[REDACTED]'
+                    if canonical in ('role', 'type', 'toolcallid', 'callid') and (clean_key != key or clean_item != item):
+                        raise PrivacyError()
+                    out[clean_key] = clean_item
+                return out
+            raise PrivacyError()
+        try:
+            return walk(value, 0)
+        except Exception:
+>           raise PrivacyError() from None
+E           k90_memory.privacy.PrivacyError: outbound content blocked
+
+k90_memory/privacy.py:184: PrivacyError
+________ test_real_agent_upload_then_text_followup[false-local-chatgpt] ________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_real_agent_upload_then_te1/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7635569de2c0>
+auth = 'chatgpt', memory = 'local', followup_consent = 'false'
+
+    @pytest.mark.parametrize('auth', ['api', 'chatgpt'])
+    @pytest.mark.parametrize('memory', ['local', 'hindsight'])
+    @pytest.mark.parametrize('followup_consent', ['false', 'true'])
+    def test_real_agent_upload_then_text_followup(temp_db, monkeypatch, auth, memory, followup_consent):
+        import memory_runtime as runtime
+        import subscription_api
+        import subscription_auth
+    
+        monkeypatch.setenv('K90_AGENT_AUTH', auth)
+        monkeypatch.setenv('K90_MEMORY_BACKEND', memory)
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+        monkeypatch.setattr(agent, 'MODEL', 'synthetic-vision')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        monkeypatch.setattr(runtime, 'start_worker', lambda: None)
+        sent, hs_sent, indexed = [], [], []
+        answer = 'Likely millet; what portion and preparation?'
+    
+        def api_request(**payload):
+            sent.append(payload)
+            message = SimpleNamespace(content=answer, tool_calls=[],
+                                      model_dump=lambda **kw: {'role': 'assistant', 'content': answer})
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+    
+        def subscription_request(url, **kwargs):
+            if url.endswith('/models'):
+                return {'models': [{'slug': 'synthetic-vision', 'visibility': 'list'}]}
+            sent.append(kwargs['data'])
+            return {'status': 'completed', 'output': [
+                {'type': 'message', 'content': [{'type': 'output_text', 'text': answer}]}]}
+    
+        def hs_transport(method, url, body, timeout, max_bytes):
+            payload = json.loads(body) if body else None
+            hs_sent.append(payload)
+            if url.endswith('/recall'):
+                return {'results': [{'type': 'world', 'document_id': item['document_id'],
+                                     'metadata': item['metadata']} for item in indexed]}
+            assert method == 'POST' and url.endswith('/memories')
+            indexed.extend(payload['items'])
+            return {'success': True, 'async': False, 'items_count': 1, 'bank_id': 'k90-test-photo-history'}
+    
+        monkeypatch.setattr(agent.litellm, 'completion', api_request)
+        monkeypatch.setattr(subscription_api, 'request_json', subscription_request)
+        monkeypatch.setattr(subscription_auth, 'TokenStore', lambda *a: SimpleNamespace(access_token=lambda: 'synthetic'))
+        if memory == 'hindsight':
+            monkeypatch.setenv('K90_HINDSIGHT_URL', 'http://synthetic.invalid:8888')
+            monkeypatch.setenv('K90_HINDSIGHT_BANK_ID', 'k90-test-photo-history')
+            monkeypatch.setenv('K90_HINDSIGHT_ALLOW_INTERNAL_HTTP', 'true')
+            monkeypatch.setenv('K90_HINDSIGHT_ALLOW_UNAUTHENTICATED', 'true')
+            monkeypatch.setattr(runtime, '_transport', lambda token: hs_transport)
+    
+        assert agent.run_agent(PHOTO, 'synthetic-owner') == (answer, False)
+        assert 'data:image/png;base64,c3ludGhldGlj' in json.dumps(sent[0])
+        if memory == 'hindsight':
+            assert runtime.run_pending(limit=20) == 2
+            assert indexed
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', followup_consent)
+>       assert agent.run_agent('Millet lunch: 150 g, steamed', 'synthetic-owner') == (answer, False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_photo_history.py:118: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:147: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:160: in _run_agent
+    history = load_history(user_id)
+              ^^^^^^^^^^^^^^^^^^^^^
+agent.py:79: in load_history
+    content = model_policy().sanitize_text(row["content"])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+k90_memory/privacy.py:82: in sanitize_text
+    clean = self.sanitize(text)
+            ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PrivacyPolicy(redact_terms=(), allow_images=False, max_chars=2000000, max_depth=40)
+value = '[{"type": "text", "text": "Synthetic millet lunch"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,c3ludGhldGlj"}}]'
+
+    def sanitize(self, value):
+        """Return a fresh JSON-compatible tree; block unknown/binary objects.
+    
+        Keys are filtered as well as values. Protocol keys remain unchanged unless
+        explicitly matched by a redact term; collisions are rejected, never merged.
+        Images/files are rejected anywhere by default. Image consent is solely for
+        a model boundary, NEVER permission for the memory backend to index images.
+        """
+        budget = [0, 0]
+        def walk(obj, depth, required_json=False, preserve_json=False):
+            budget[0] += 1
+            if depth > self.max_depth or budget[0] > 100_000:
+                raise PrivacyError()
+            if type(obj) is str:
+                budget[1] += len(obj)
+                if budget[1] > self.max_chars:
+                    raise PrivacyError()
+                stripped = obj.lstrip()
+                if required_json or stripped.startswith(('{', '[', '"')):
+                    try:
+                        parsed = strict_json_loads(obj)
+                    except PrivacyError:
+                        raise
+                    except (ValueError, RecursionError):
+                        # Object-like and quoted encodings are always fail-closed.
+                        # Only a complete, plain Markdown label can disambiguate
+                        # a leading '[' from a malformed JSON array. Do not infer
+                        # safety from an unrecognized/broken JSON key prefix.
+                        label, closed, _ = stripped[1:].partition(']')
+                        markdown = (stripped.startswith('[') and closed and label
+                                    and not any(c in label for c in '{}["\'\\,:')
+                                    and (not label.strip() or
+                                         (label.lstrip()[0].isalpha() and
+                                          label.strip() not in ('true', 'false', 'null'))))
+                        if required_json or not markdown:
+                            raise PrivacyError() from None
+                        return self._text(obj)
+                    # Reuse this walk's depth/node/character budgets for every
+                    # decoded layer, and retain the original number of encodings.
+                    clean = walk(parsed, depth + 1)
+                    if preserve_json:
+                        # Names cannot be canonicalized or partially redacted:
+                        # that could rename a protocol field or create a collision.
+                        # A decoded scalar name has no enclosing value here, so
+                        # it cannot safely inherit field-specific restrictions.
+                        # Reject encoded reserved names rather than accepting
+                        # escaped aliases of e.g. api_key/local_only/type/phone.
+                        reserved = (_SECRET_KEYS | _IDENTIFIER_KEYS | _IMAGE_KEYS |
+                                    {'localonly', 'type', 'role', 'mimetype', 'mediatype',
+                                     'arguments', 'toolcallid', 'callid'})
+                        if type(parsed) is str and _key(parsed) in reserved:
+                            raise PrivacyError()
+                        if clean != parsed:
+                            raise PrivacyError()
+                        return obj
+                    return json.dumps(clean, ensure_ascii=False, separators=(',', ':'))
+                return self._text(obj)
+            if obj is None or type(obj) is bool:
+                return obj
+            if type(obj) is int or (type(obj) is float and math.isfinite(obj)):
+                # JSON numbers must not bypass the same identifier rules used
+                # for strings. Preserve the numeric type of ordinary metrics.
+                text = str(int(obj)) if type(obj) is float and obj.is_integer() else str(obj)
+                clean = self._text(text)
+                return clean if clean != text else obj
+            if type(obj) in (list, tuple):
+                return [walk(item, depth + 1) for item in obj]
+            if type(obj) is dict:
+                out = {}
+                for key, item in obj.items():
+                    if type(key) is not str:
+                        raise PrivacyError()
+                    canonical = _key(key)
+                    if canonical in _SECRET_KEYS:
+                        raise PrivacyError()
+                    if canonical == 'localonly' and item is not False:
+                        raise PrivacyError()
+                    if not self.allow_images and (canonical in _IMAGE_KEYS or
+                            (canonical == 'type' and type(item) is str and _key(item) in _IMAGE_KEYS) or
+                            (canonical in ('mimetype', 'mediatype') and type(item) is str and re.match(r'(?i)(?:image|video|audio|application)/', item))):
+                        raise PrivacyError()
+                    clean_key = walk(key, depth + 1, preserve_json=True)
+                    if clean_key in out or budget[1] > self.max_chars:
+                        raise PrivacyError()
+                    clean_item = walk(item, depth + 1, required_json=canonical == 'arguments')
+                    if canonical in _IDENTIFIER_KEYS and type(item) in (int, float):
+                        # Numeric JSON has already discarded any leading zeroes;
+                        # semantic identifier fields cannot use a length heuristic.
+                        clean_item = '[REDACTED]'
+                    if canonical in ('role', 'type', 'toolcallid', 'callid') and (clean_key != key or clean_item != item):
+                        raise PrivacyError()
+                    out[clean_key] = clean_item
+                return out
+            raise PrivacyError()
+        try:
+            return walk(value, 0)
+        except Exception:
+>           raise PrivacyError() from None
+E           k90_memory.privacy.PrivacyError: outbound content blocked
+
+k90_memory/privacy.py:184: PrivacyError
+________ test_real_agent_upload_then_text_followup[false-hindsight-api] ________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_real_agent_upload_then_te2/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x763556a3cdd0>
+auth = 'api', memory = 'hindsight', followup_consent = 'false'
+
+    @pytest.mark.parametrize('auth', ['api', 'chatgpt'])
+    @pytest.mark.parametrize('memory', ['local', 'hindsight'])
+    @pytest.mark.parametrize('followup_consent', ['false', 'true'])
+    def test_real_agent_upload_then_text_followup(temp_db, monkeypatch, auth, memory, followup_consent):
+        import memory_runtime as runtime
+        import subscription_api
+        import subscription_auth
+    
+        monkeypatch.setenv('K90_AGENT_AUTH', auth)
+        monkeypatch.setenv('K90_MEMORY_BACKEND', memory)
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+        monkeypatch.setattr(agent, 'MODEL', 'synthetic-vision')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        monkeypatch.setattr(runtime, 'start_worker', lambda: None)
+        sent, hs_sent, indexed = [], [], []
+        answer = 'Likely millet; what portion and preparation?'
+    
+        def api_request(**payload):
+            sent.append(payload)
+            message = SimpleNamespace(content=answer, tool_calls=[],
+                                      model_dump=lambda **kw: {'role': 'assistant', 'content': answer})
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+    
+        def subscription_request(url, **kwargs):
+            if url.endswith('/models'):
+                return {'models': [{'slug': 'synthetic-vision', 'visibility': 'list'}]}
+            sent.append(kwargs['data'])
+            return {'status': 'completed', 'output': [
+                {'type': 'message', 'content': [{'type': 'output_text', 'text': answer}]}]}
+    
+        def hs_transport(method, url, body, timeout, max_bytes):
+            payload = json.loads(body) if body else None
+            hs_sent.append(payload)
+            if url.endswith('/recall'):
+                return {'results': [{'type': 'world', 'document_id': item['document_id'],
+                                     'metadata': item['metadata']} for item in indexed]}
+            assert method == 'POST' and url.endswith('/memories')
+            indexed.extend(payload['items'])
+            return {'success': True, 'async': False, 'items_count': 1, 'bank_id': 'k90-test-photo-history'}
+    
+        monkeypatch.setattr(agent.litellm, 'completion', api_request)
+        monkeypatch.setattr(subscription_api, 'request_json', subscription_request)
+        monkeypatch.setattr(subscription_auth, 'TokenStore', lambda *a: SimpleNamespace(access_token=lambda: 'synthetic'))
+        if memory == 'hindsight':
+            monkeypatch.setenv('K90_HINDSIGHT_URL', 'http://synthetic.invalid:8888')
+            monkeypatch.setenv('K90_HINDSIGHT_BANK_ID', 'k90-test-photo-history')
+            monkeypatch.setenv('K90_HINDSIGHT_ALLOW_INTERNAL_HTTP', 'true')
+            monkeypatch.setenv('K90_HINDSIGHT_ALLOW_UNAUTHENTICATED', 'true')
+            monkeypatch.setattr(runtime, '_transport', lambda token: hs_transport)
+    
+        assert agent.run_agent(PHOTO, 'synthetic-owner') == (answer, False)
+        assert 'data:image/png;base64,c3ludGhldGlj' in json.dumps(sent[0])
+        if memory == 'hindsight':
+            assert runtime.run_pending(limit=20) == 2
+            assert indexed
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', followup_consent)
+>       assert agent.run_agent('Millet lunch: 150 g, steamed', 'synthetic-owner') == (answer, False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_photo_history.py:118: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:147: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:160: in _run_agent
+    history = load_history(user_id)
+              ^^^^^^^^^^^^^^^^^^^^^
+agent.py:79: in load_history
+    content = model_policy().sanitize_text(row["content"])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+k90_memory/privacy.py:82: in sanitize_text
+    clean = self.sanitize(text)
+            ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PrivacyPolicy(redact_terms=(), allow_images=False, max_chars=2000000, max_depth=40)
+value = '[{"type": "text", "text": "Synthetic millet lunch"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,c3ludGhldGlj"}}]'
+
+    def sanitize(self, value):
+        """Return a fresh JSON-compatible tree; block unknown/binary objects.
+    
+        Keys are filtered as well as values. Protocol keys remain unchanged unless
+        explicitly matched by a redact term; collisions are rejected, never merged.
+        Images/files are rejected anywhere by default. Image consent is solely for
+        a model boundary, NEVER permission for the memory backend to index images.
+        """
+        budget = [0, 0]
+        def walk(obj, depth, required_json=False, preserve_json=False):
+            budget[0] += 1
+            if depth > self.max_depth or budget[0] > 100_000:
+                raise PrivacyError()
+            if type(obj) is str:
+                budget[1] += len(obj)
+                if budget[1] > self.max_chars:
+                    raise PrivacyError()
+                stripped = obj.lstrip()
+                if required_json or stripped.startswith(('{', '[', '"')):
+                    try:
+                        parsed = strict_json_loads(obj)
+                    except PrivacyError:
+                        raise
+                    except (ValueError, RecursionError):
+                        # Object-like and quoted encodings are always fail-closed.
+                        # Only a complete, plain Markdown label can disambiguate
+                        # a leading '[' from a malformed JSON array. Do not infer
+                        # safety from an unrecognized/broken JSON key prefix.
+                        label, closed, _ = stripped[1:].partition(']')
+                        markdown = (stripped.startswith('[') and closed and label
+                                    and not any(c in label for c in '{}["\'\\,:')
+                                    and (not label.strip() or
+                                         (label.lstrip()[0].isalpha() and
+                                          label.strip() not in ('true', 'false', 'null'))))
+                        if required_json or not markdown:
+                            raise PrivacyError() from None
+                        return self._text(obj)
+                    # Reuse this walk's depth/node/character budgets for every
+                    # decoded layer, and retain the original number of encodings.
+                    clean = walk(parsed, depth + 1)
+                    if preserve_json:
+                        # Names cannot be canonicalized or partially redacted:
+                        # that could rename a protocol field or create a collision.
+                        # A decoded scalar name has no enclosing value here, so
+                        # it cannot safely inherit field-specific restrictions.
+                        # Reject encoded reserved names rather than accepting
+                        # escaped aliases of e.g. api_key/local_only/type/phone.
+                        reserved = (_SECRET_KEYS | _IDENTIFIER_KEYS | _IMAGE_KEYS |
+                                    {'localonly', 'type', 'role', 'mimetype', 'mediatype',
+                                     'arguments', 'toolcallid', 'callid'})
+                        if type(parsed) is str and _key(parsed) in reserved:
+                            raise PrivacyError()
+                        if clean != parsed:
+                            raise PrivacyError()
+                        return obj
+                    return json.dumps(clean, ensure_ascii=False, separators=(',', ':'))
+                return self._text(obj)
+            if obj is None or type(obj) is bool:
+                return obj
+            if type(obj) is int or (type(obj) is float and math.isfinite(obj)):
+                # JSON numbers must not bypass the same identifier rules used
+                # for strings. Preserve the numeric type of ordinary metrics.
+                text = str(int(obj)) if type(obj) is float and obj.is_integer() else str(obj)
+                clean = self._text(text)
+                return clean if clean != text else obj
+            if type(obj) in (list, tuple):
+                return [walk(item, depth + 1) for item in obj]
+            if type(obj) is dict:
+                out = {}
+                for key, item in obj.items():
+                    if type(key) is not str:
+                        raise PrivacyError()
+                    canonical = _key(key)
+                    if canonical in _SECRET_KEYS:
+                        raise PrivacyError()
+                    if canonical == 'localonly' and item is not False:
+                        raise PrivacyError()
+                    if not self.allow_images and (canonical in _IMAGE_KEYS or
+                            (canonical == 'type' and type(item) is str and _key(item) in _IMAGE_KEYS) or
+                            (canonical in ('mimetype', 'mediatype') and type(item) is str and re.match(r'(?i)(?:image|video|audio|application)/', item))):
+                        raise PrivacyError()
+                    clean_key = walk(key, depth + 1, preserve_json=True)
+                    if clean_key in out or budget[1] > self.max_chars:
+                        raise PrivacyError()
+                    clean_item = walk(item, depth + 1, required_json=canonical == 'arguments')
+                    if canonical in _IDENTIFIER_KEYS and type(item) in (int, float):
+                        # Numeric JSON has already discarded any leading zeroes;
+                        # semantic identifier fields cannot use a length heuristic.
+                        clean_item = '[REDACTED]'
+                    if canonical in ('role', 'type', 'toolcallid', 'callid') and (clean_key != key or clean_item != item):
+                        raise PrivacyError()
+                    out[clean_key] = clean_item
+                return out
+            raise PrivacyError()
+        try:
+            return walk(value, 0)
+        except Exception:
+>           raise PrivacyError() from None
+E           k90_memory.privacy.PrivacyError: outbound content blocked
+
+k90_memory/privacy.py:184: PrivacyError
+______ test_real_agent_upload_then_text_followup[false-hindsight-chatgpt] ______
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_real_agent_upload_then_te3/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x763556894380>
+auth = 'chatgpt', memory = 'hindsight', followup_consent = 'false'
+
+    @pytest.mark.parametrize('auth', ['api', 'chatgpt'])
+    @pytest.mark.parametrize('memory', ['local', 'hindsight'])
+    @pytest.mark.parametrize('followup_consent', ['false', 'true'])
+    def test_real_agent_upload_then_text_followup(temp_db, monkeypatch, auth, memory, followup_consent):
+        import memory_runtime as runtime
+        import subscription_api
+        import subscription_auth
+    
+        monkeypatch.setenv('K90_AGENT_AUTH', auth)
+        monkeypatch.setenv('K90_MEMORY_BACKEND', memory)
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+        monkeypatch.setattr(agent, 'MODEL', 'synthetic-vision')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        monkeypatch.setattr(runtime, 'start_worker', lambda: None)
+        sent, hs_sent, indexed = [], [], []
+        answer = 'Likely millet; what portion and preparation?'
+    
+        def api_request(**payload):
+            sent.append(payload)
+            message = SimpleNamespace(content=answer, tool_calls=[],
+                                      model_dump=lambda **kw: {'role': 'assistant', 'content': answer})
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+    
+        def subscription_request(url, **kwargs):
+            if url.endswith('/models'):
+                return {'models': [{'slug': 'synthetic-vision', 'visibility': 'list'}]}
+            sent.append(kwargs['data'])
+            return {'status': 'completed', 'output': [
+                {'type': 'message', 'content': [{'type': 'output_text', 'text': answer}]}]}
+    
+        def hs_transport(method, url, body, timeout, max_bytes):
+            payload = json.loads(body) if body else None
+            hs_sent.append(payload)
+            if url.endswith('/recall'):
+                return {'results': [{'type': 'world', 'document_id': item['document_id'],
+                                     'metadata': item['metadata']} for item in indexed]}
+            assert method == 'POST' and url.endswith('/memories')
+            indexed.extend(payload['items'])
+            return {'success': True, 'async': False, 'items_count': 1, 'bank_id': 'k90-test-photo-history'}
+    
+        monkeypatch.setattr(agent.litellm, 'completion', api_request)
+        monkeypatch.setattr(subscription_api, 'request_json', subscription_request)
+        monkeypatch.setattr(subscription_auth, 'TokenStore', lambda *a: SimpleNamespace(access_token=lambda: 'synthetic'))
+        if memory == 'hindsight':
+            monkeypatch.setenv('K90_HINDSIGHT_URL', 'http://synthetic.invalid:8888')
+            monkeypatch.setenv('K90_HINDSIGHT_BANK_ID', 'k90-test-photo-history')
+            monkeypatch.setenv('K90_HINDSIGHT_ALLOW_INTERNAL_HTTP', 'true')
+            monkeypatch.setenv('K90_HINDSIGHT_ALLOW_UNAUTHENTICATED', 'true')
+            monkeypatch.setattr(runtime, '_transport', lambda token: hs_transport)
+    
+        assert agent.run_agent(PHOTO, 'synthetic-owner') == (answer, False)
+        assert 'data:image/png;base64,c3ludGhldGlj' in json.dumps(sent[0])
+        if memory == 'hindsight':
+            assert runtime.run_pending(limit=20) == 2
+            assert indexed
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', followup_consent)
+>       assert agent.run_agent('Millet lunch: 150 g, steamed', 'synthetic-owner') == (answer, False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_photo_history.py:118: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent.py:147: in run_agent
+    return _run_agent(user_message, user_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent.py:160: in _run_agent
+    history = load_history(user_id)
+              ^^^^^^^^^^^^^^^^^^^^^
+agent.py:79: in load_history
+    content = model_policy().sanitize_text(row["content"])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+k90_memory/privacy.py:82: in sanitize_text
+    clean = self.sanitize(text)
+            ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PrivacyPolicy(redact_terms=(), allow_images=False, max_chars=2000000, max_depth=40)
+value = '[{"type": "text", "text": "Synthetic millet lunch"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,c3ludGhldGlj"}}]'
+
+    def sanitize(self, value):
+        """Return a fresh JSON-compatible tree; block unknown/binary objects.
+    
+        Keys are filtered as well as values. Protocol keys remain unchanged unless
+        explicitly matched by a redact term; collisions are rejected, never merged.
+        Images/files are rejected anywhere by default. Image consent is solely for
+        a model boundary, NEVER permission for the memory backend to index images.
+        """
+        budget = [0, 0]
+        def walk(obj, depth, required_json=False, preserve_json=False):
+            budget[0] += 1
+            if depth > self.max_depth or budget[0] > 100_000:
+                raise PrivacyError()
+            if type(obj) is str:
+                budget[1] += len(obj)
+                if budget[1] > self.max_chars:
+                    raise PrivacyError()
+                stripped = obj.lstrip()
+                if required_json or stripped.startswith(('{', '[', '"')):
+                    try:
+                        parsed = strict_json_loads(obj)
+                    except PrivacyError:
+                        raise
+                    except (ValueError, RecursionError):
+                        # Object-like and quoted encodings are always fail-closed.
+                        # Only a complete, plain Markdown label can disambiguate
+                        # a leading '[' from a malformed JSON array. Do not infer
+                        # safety from an unrecognized/broken JSON key prefix.
+                        label, closed, _ = stripped[1:].partition(']')
+                        markdown = (stripped.startswith('[') and closed and label
+                                    and not any(c in label for c in '{}["\'\\,:')
+                                    and (not label.strip() or
+                                         (label.lstrip()[0].isalpha() and
+                                          label.strip() not in ('true', 'false', 'null'))))
+                        if required_json or not markdown:
+                            raise PrivacyError() from None
+                        return self._text(obj)
+                    # Reuse this walk's depth/node/character budgets for every
+                    # decoded layer, and retain the original number of encodings.
+                    clean = walk(parsed, depth + 1)
+                    if preserve_json:
+                        # Names cannot be canonicalized or partially redacted:
+                        # that could rename a protocol field or create a collision.
+                        # A decoded scalar name has no enclosing value here, so
+                        # it cannot safely inherit field-specific restrictions.
+                        # Reject encoded reserved names rather than accepting
+                        # escaped aliases of e.g. api_key/local_only/type/phone.
+                        reserved = (_SECRET_KEYS | _IDENTIFIER_KEYS | _IMAGE_KEYS |
+                                    {'localonly', 'type', 'role', 'mimetype', 'mediatype',
+                                     'arguments', 'toolcallid', 'callid'})
+                        if type(parsed) is str and _key(parsed) in reserved:
+                            raise PrivacyError()
+                        if clean != parsed:
+                            raise PrivacyError()
+                        return obj
+                    return json.dumps(clean, ensure_ascii=False, separators=(',', ':'))
+                return self._text(obj)
+            if obj is None or type(obj) is bool:
+                return obj
+            if type(obj) is int or (type(obj) is float and math.isfinite(obj)):
+                # JSON numbers must not bypass the same identifier rules used
+                # for strings. Preserve the numeric type of ordinary metrics.
+                text = str(int(obj)) if type(obj) is float and obj.is_integer() else str(obj)
+                clean = self._text(text)
+                return clean if clean != text else obj
+            if type(obj) in (list, tuple):
+                return [walk(item, depth + 1) for item in obj]
+            if type(obj) is dict:
+                out = {}
+                for key, item in obj.items():
+                    if type(key) is not str:
+                        raise PrivacyError()
+                    canonical = _key(key)
+                    if canonical in _SECRET_KEYS:
+                        raise PrivacyError()
+                    if canonical == 'localonly' and item is not False:
+                        raise PrivacyError()
+                    if not self.allow_images and (canonical in _IMAGE_KEYS or
+                            (canonical == 'type' and type(item) is str and _key(item) in _IMAGE_KEYS) or
+                            (canonical in ('mimetype', 'mediatype') and type(item) is str and re.match(r'(?i)(?:image|video|audio|application)/', item))):
+                        raise PrivacyError()
+                    clean_key = walk(key, depth + 1, preserve_json=True)
+                    if clean_key in out or budget[1] > self.max_chars:
+                        raise PrivacyError()
+                    clean_item = walk(item, depth + 1, required_json=canonical == 'arguments')
+                    if canonical in _IDENTIFIER_KEYS and type(item) in (int, float):
+                        # Numeric JSON has already discarded any leading zeroes;
+                        # semantic identifier fields cannot use a length heuristic.
+                        clean_item = '[REDACTED]'
+                    if canonical in ('role', 'type', 'toolcallid', 'callid') and (clean_key != key or clean_item != item):
+                        raise PrivacyError()
+                    out[clean_key] = clean_item
+                return out
+            raise PrivacyError()
+        try:
+            return walk(value, 0)
+        except Exception:
+>           raise PrivacyError() from None
+E           k90_memory.privacy.PrivacyError: outbound content blocked
+
+k90_memory/privacy.py:184: PrivacyError
+__________ test_real_agent_upload_then_text_followup[true-local-api] ___________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_real_agent_upload_then_te4/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7635568947c0>
+auth = 'api', memory = 'local', followup_consent = 'true'
+
+    @pytest.mark.parametrize('auth', ['api', 'chatgpt'])
+    @pytest.mark.parametrize('memory', ['local', 'hindsight'])
+    @pytest.mark.parametrize('followup_consent', ['false', 'true'])
+    def test_real_agent_upload_then_text_followup(temp_db, monkeypatch, auth, memory, followup_consent):
+        import memory_runtime as runtime
+        import subscription_api
+        import subscription_auth
+    
+        monkeypatch.setenv('K90_AGENT_AUTH', auth)
+        monkeypatch.setenv('K90_MEMORY_BACKEND', memory)
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+        monkeypatch.setattr(agent, 'MODEL', 'synthetic-vision')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        monkeypatch.setattr(runtime, 'start_worker', lambda: None)
+        sent, hs_sent, indexed = [], [], []
+        answer = 'Likely millet; what portion and preparation?'
+    
+        def api_request(**payload):
+            sent.append(payload)
+            message = SimpleNamespace(content=answer, tool_calls=[],
+                                      model_dump=lambda **kw: {'role': 'assistant', 'content': answer})
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+    
+        def subscription_request(url, **kwargs):
+            if url.endswith('/models'):
+                return {'models': [{'slug': 'synthetic-vision', 'visibility': 'list'}]}
+            sent.append(kwargs['data'])
+            return {'status': 'completed', 'output': [
+                {'type': 'message', 'content': [{'type': 'output_text', 'text': answer}]}]}
+    
+        def hs_transport(method, url, body, timeout, max_bytes):
+            payload = json.loads(body) if body else None
+            hs_sent.append(payload)
+            if url.endswith('/recall'):
+                return {'results': [{'type': 'world', 'document_id': item['document_id'],
+                                     'metadata': item['metadata']} for item in indexed]}
+            assert method == 'POST' and url.endswith('/memories')
+            indexed.extend(payload['items'])
+            return {'success': True, 'async': False, 'items_count': 1, 'bank_id': 'k90-test-photo-history'}
+    
+        monkeypatch.setattr(agent.litellm, 'completion', api_request)
+        monkeypatch.setattr(subscription_api, 'request_json', subscription_request)
+        monkeypatch.setattr(subscription_auth, 'TokenStore', lambda *a: SimpleNamespace(access_token=lambda: 'synthetic'))
+        if memory == 'hindsight':
+            monkeypatch.setenv('K90_HINDSIGHT_URL', 'http://synthetic.invalid:8888')
+            monkeypatch.setenv('K90_HINDSIGHT_BANK_ID', 'k90-test-photo-history')
+            monkeypatch.setenv('K90_HINDSIGHT_ALLOW_INTERNAL_HTTP', 'true')
+            monkeypatch.setenv('K90_HINDSIGHT_ALLOW_UNAUTHENTICATED', 'true')
+            monkeypatch.setattr(runtime, '_transport', lambda token: hs_transport)
+    
+        assert agent.run_agent(PHOTO, 'synthetic-owner') == (answer, False)
+        assert 'data:image/png;base64,c3ludGhldGlj' in json.dumps(sent[0])
+        if memory == 'hindsight':
+            assert runtime.run_pending(limit=20) == 2
+            assert indexed
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', followup_consent)
+        assert agent.run_agent('Millet lunch: 150 g, steamed', 'synthetic-owner') == (answer, False)
+        assert len(sent) == 2
+        followup = json.dumps(sent[1])
+>       assert 'Historical image omitted' in followup and answer in followup
+E       assert ('Historical image omitted' in '{"model": "synthetic-vision", "messages": [{"role": "system", "content": "Synthetic system"}, {"role": "user", "conte...0f3w, wa\\u017cny nowy fakt medyczny).", "parameters": {"type": "object", "properties": {}}}}], "tool_choice": "auto"}')
+
+tests/test_photo_history.py:121: AssertionError
+________ test_real_agent_upload_then_text_followup[true-local-chatgpt] _________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_real_agent_upload_then_te5/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7635569b3350>
+auth = 'chatgpt', memory = 'local', followup_consent = 'true'
+
+    @pytest.mark.parametrize('auth', ['api', 'chatgpt'])
+    @pytest.mark.parametrize('memory', ['local', 'hindsight'])
+    @pytest.mark.parametrize('followup_consent', ['false', 'true'])
+    def test_real_agent_upload_then_text_followup(temp_db, monkeypatch, auth, memory, followup_consent):
+        import memory_runtime as runtime
+        import subscription_api
+        import subscription_auth
+    
+        monkeypatch.setenv('K90_AGENT_AUTH', auth)
+        monkeypatch.setenv('K90_MEMORY_BACKEND', memory)
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+        monkeypatch.setattr(agent, 'MODEL', 'synthetic-vision')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        monkeypatch.setattr(runtime, 'start_worker', lambda: None)
+        sent, hs_sent, indexed = [], [], []
+        answer = 'Likely millet; what portion and preparation?'
+    
+        def api_request(**payload):
+            sent.append(payload)
+            message = SimpleNamespace(content=answer, tool_calls=[],
+                                      model_dump=lambda **kw: {'role': 'assistant', 'content': answer})
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+    
+        def subscription_request(url, **kwargs):
+            if url.endswith('/models'):
+                return {'models': [{'slug': 'synthetic-vision', 'visibility': 'list'}]}
+            sent.append(kwargs['data'])
+            return {'status': 'completed', 'output': [
+                {'type': 'message', 'content': [{'type': 'output_text', 'text': answer}]}]}
+    
+        def hs_transport(method, url, body, timeout, max_bytes):
+            payload = json.loads(body) if body else None
+            hs_sent.append(payload)
+            if url.endswith('/recall'):
+                return {'results': [{'type': 'world', 'document_id': item['document_id'],
+                                     'metadata': item['metadata']} for item in indexed]}
+            assert method == 'POST' and url.endswith('/memories')
+            indexed.extend(payload['items'])
+            return {'success': True, 'async': False, 'items_count': 1, 'bank_id': 'k90-test-photo-history'}
+    
+        monkeypatch.setattr(agent.litellm, 'completion', api_request)
+        monkeypatch.setattr(subscription_api, 'request_json', subscription_request)
+        monkeypatch.setattr(subscription_auth, 'TokenStore', lambda *a: SimpleNamespace(access_token=lambda: 'synthetic'))
+        if memory == 'hindsight':
+            monkeypatch.setenv('K90_HINDSIGHT_URL', 'http://synthetic.invalid:8888')
+            monkeypatch.setenv('K90_HINDSIGHT_BANK_ID', 'k90-test-photo-history')
+            monkeypatch.setenv('K90_HINDSIGHT_ALLOW_INTERNAL_HTTP', 'true')
+            monkeypatch.setenv('K90_HINDSIGHT_ALLOW_UNAUTHENTICATED', 'true')
+            monkeypatch.setattr(runtime, '_transport', lambda token: hs_transport)
+    
+        assert agent.run_agent(PHOTO, 'synthetic-owner') == (answer, False)
+        assert 'data:image/png;base64,c3ludGhldGlj' in json.dumps(sent[0])
+        if memory == 'hindsight':
+            assert runtime.run_pending(limit=20) == 2
+            assert indexed
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', followup_consent)
+        assert agent.run_agent('Millet lunch: 150 g, steamed', 'synthetic-owner') == (answer, False)
+        assert len(sent) == 2
+        followup = json.dumps(sent[1])
+>       assert 'Historical image omitted' in followup and answer in followup
+E       assert ('Historical image omitted' in '{"model": "synthetic-vision", "input": [{"role": "user", "content": [{"type": "input_text", "text": "Synthetic millet... medyczny).", "parameters": {"type": "object", "properties": {}}, "strict": false}]}], "reasoning": {"effort": "low"}}')
+
+tests/test_photo_history.py:121: AssertionError
+________ test_real_agent_upload_then_text_followup[true-hindsight-api] _________
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_real_agent_upload_then_te6/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7635569b2650>
+auth = 'api', memory = 'hindsight', followup_consent = 'true'
+
+    @pytest.mark.parametrize('auth', ['api', 'chatgpt'])
+    @pytest.mark.parametrize('memory', ['local', 'hindsight'])
+    @pytest.mark.parametrize('followup_consent', ['false', 'true'])
+    def test_real_agent_upload_then_text_followup(temp_db, monkeypatch, auth, memory, followup_consent):
+        import memory_runtime as runtime
+        import subscription_api
+        import subscription_auth
+    
+        monkeypatch.setenv('K90_AGENT_AUTH', auth)
+        monkeypatch.setenv('K90_MEMORY_BACKEND', memory)
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+        monkeypatch.setattr(agent, 'MODEL', 'synthetic-vision')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        monkeypatch.setattr(runtime, 'start_worker', lambda: None)
+        sent, hs_sent, indexed = [], [], []
+        answer = 'Likely millet; what portion and preparation?'
+    
+        def api_request(**payload):
+            sent.append(payload)
+            message = SimpleNamespace(content=answer, tool_calls=[],
+                                      model_dump=lambda **kw: {'role': 'assistant', 'content': answer})
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+    
+        def subscription_request(url, **kwargs):
+            if url.endswith('/models'):
+                return {'models': [{'slug': 'synthetic-vision', 'visibility': 'list'}]}
+            sent.append(kwargs['data'])
+            return {'status': 'completed', 'output': [
+                {'type': 'message', 'content': [{'type': 'output_text', 'text': answer}]}]}
+    
+        def hs_transport(method, url, body, timeout, max_bytes):
+            payload = json.loads(body) if body else None
+            hs_sent.append(payload)
+            if url.endswith('/recall'):
+                return {'results': [{'type': 'world', 'document_id': item['document_id'],
+                                     'metadata': item['metadata']} for item in indexed]}
+            assert method == 'POST' and url.endswith('/memories')
+            indexed.extend(payload['items'])
+            return {'success': True, 'async': False, 'items_count': 1, 'bank_id': 'k90-test-photo-history'}
+    
+        monkeypatch.setattr(agent.litellm, 'completion', api_request)
+        monkeypatch.setattr(subscription_api, 'request_json', subscription_request)
+        monkeypatch.setattr(subscription_auth, 'TokenStore', lambda *a: SimpleNamespace(access_token=lambda: 'synthetic'))
+        if memory == 'hindsight':
+            monkeypatch.setenv('K90_HINDSIGHT_URL', 'http://synthetic.invalid:8888')
+            monkeypatch.setenv('K90_HINDSIGHT_BANK_ID', 'k90-test-photo-history')
+            monkeypatch.setenv('K90_HINDSIGHT_ALLOW_INTERNAL_HTTP', 'true')
+            monkeypatch.setenv('K90_HINDSIGHT_ALLOW_UNAUTHENTICATED', 'true')
+            monkeypatch.setattr(runtime, '_transport', lambda token: hs_transport)
+    
+        assert agent.run_agent(PHOTO, 'synthetic-owner') == (answer, False)
+        assert 'data:image/png;base64,c3ludGhldGlj' in json.dumps(sent[0])
+        if memory == 'hindsight':
+            assert runtime.run_pending(limit=20) == 2
+            assert indexed
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', followup_consent)
+        assert agent.run_agent('Millet lunch: 150 g, steamed', 'synthetic-owner') == (answer, False)
+        assert len(sent) == 2
+        followup = json.dumps(sent[1])
+>       assert 'Historical image omitted' in followup and answer in followup
+E       assert ('Historical image omitted' in '{"model": "synthetic-vision", "messages": [{"role": "system", "content": "Synthetic system\\n\\nOdnalezione lokalne \...0f3w, wa\\u017cny nowy fakt medyczny).", "parameters": {"type": "object", "properties": {}}}}], "tool_choice": "auto"}')
+
+tests/test_photo_history.py:121: AssertionError
+______ test_real_agent_upload_then_text_followup[true-hindsight-chatgpt] _______
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_real_agent_upload_then_te7/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x763556919130>
+auth = 'chatgpt', memory = 'hindsight', followup_consent = 'true'
+
+    @pytest.mark.parametrize('auth', ['api', 'chatgpt'])
+    @pytest.mark.parametrize('memory', ['local', 'hindsight'])
+    @pytest.mark.parametrize('followup_consent', ['false', 'true'])
+    def test_real_agent_upload_then_text_followup(temp_db, monkeypatch, auth, memory, followup_consent):
+        import memory_runtime as runtime
+        import subscription_api
+        import subscription_auth
+    
+        monkeypatch.setenv('K90_AGENT_AUTH', auth)
+        monkeypatch.setenv('K90_MEMORY_BACKEND', memory)
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+        monkeypatch.setattr(agent, 'MODEL', 'synthetic-vision')
+        monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+        monkeypatch.setattr(runtime, 'start_worker', lambda: None)
+        sent, hs_sent, indexed = [], [], []
+        answer = 'Likely millet; what portion and preparation?'
+    
+        def api_request(**payload):
+            sent.append(payload)
+            message = SimpleNamespace(content=answer, tool_calls=[],
+                                      model_dump=lambda **kw: {'role': 'assistant', 'content': answer})
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+    
+        def subscription_request(url, **kwargs):
+            if url.endswith('/models'):
+                return {'models': [{'slug': 'synthetic-vision', 'visibility': 'list'}]}
+            sent.append(kwargs['data'])
+            return {'status': 'completed', 'output': [
+                {'type': 'message', 'content': [{'type': 'output_text', 'text': answer}]}]}
+    
+        def hs_transport(method, url, body, timeout, max_bytes):
+            payload = json.loads(body) if body else None
+            hs_sent.append(payload)
+            if url.endswith('/recall'):
+                return {'results': [{'type': 'world', 'document_id': item['document_id'],
+                                     'metadata': item['metadata']} for item in indexed]}
+            assert method == 'POST' and url.endswith('/memories')
+            indexed.extend(payload['items'])
+            return {'success': True, 'async': False, 'items_count': 1, 'bank_id': 'k90-test-photo-history'}
+    
+        monkeypatch.setattr(agent.litellm, 'completion', api_request)
+        monkeypatch.setattr(subscription_api, 'request_json', subscription_request)
+        monkeypatch.setattr(subscription_auth, 'TokenStore', lambda *a: SimpleNamespace(access_token=lambda: 'synthetic'))
+        if memory == 'hindsight':
+            monkeypatch.setenv('K90_HINDSIGHT_URL', 'http://synthetic.invalid:8888')
+            monkeypatch.setenv('K90_HINDSIGHT_BANK_ID', 'k90-test-photo-history')
+            monkeypatch.setenv('K90_HINDSIGHT_ALLOW_INTERNAL_HTTP', 'true')
+            monkeypatch.setenv('K90_HINDSIGHT_ALLOW_UNAUTHENTICATED', 'true')
+            monkeypatch.setattr(runtime, '_transport', lambda token: hs_transport)
+    
+        assert agent.run_agent(PHOTO, 'synthetic-owner') == (answer, False)
+        assert 'data:image/png;base64,c3ludGhldGlj' in json.dumps(sent[0])
+        if memory == 'hindsight':
+            assert runtime.run_pending(limit=20) == 2
+            assert indexed
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', followup_consent)
+        assert agent.run_agent('Millet lunch: 150 g, steamed', 'synthetic-owner') == (answer, False)
+        assert len(sent) == 2
+        followup = json.dumps(sent[1])
+>       assert 'Historical image omitted' in followup and answer in followup
+E       assert ('Historical image omitted' in '{"model": "synthetic-vision", "input": [{"role": "user", "content": [{"type": "input_text", "text": "Synthetic millet... medyczny).", "parameters": {"type": "object", "properties": {}}, "strict": false}]}], "reasoning": {"effort": "low"}}')
+
+tests/test_photo_history.py:121: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_photo_history.py::test_real_agent_upload_then_text_followup[false-local-api]
+FAILED tests/test_photo_history.py::test_real_agent_upload_then_text_followup[false-local-chatgpt]
+FAILED tests/test_photo_history.py::test_real_agent_upload_then_text_followup[false-hindsight-api]
+FAILED tests/test_photo_history.py::test_real_agent_upload_then_text_followup[false-hindsight-chatgpt]
+FAILED tests/test_photo_history.py::test_real_agent_upload_then_text_followup[true-local-api]
+FAILED tests/test_photo_history.py::test_real_agent_upload_then_text_followup[true-local-chatgpt]
+FAILED tests/test_photo_history.py::test_real_agent_upload_then_text_followup[true-hindsight-api]
+FAILED tests/test_photo_history.py::test_real_agent_upload_then_text_followup[true-hindsight-chatgpt]
+8 failed, 19 deselected in 7.91s

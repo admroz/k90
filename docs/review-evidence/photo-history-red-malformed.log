@@ -1,0 +1,58 @@
+...FF...                                                                 [100%]
+=================================== FAILURES ===================================
+_ test_ambiguous_or_arbitrary_history_stays_blocked[[{"type":"image_url","image_url":{"url":"not-an-image-url"}}]] _
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_ambiguous_or_arbitrary_hi3/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7579583a3350>
+raw = '[{"type":"image_url","image_url":{"url":"not-an-image-url"}}]'
+
+    @pytest.mark.parametrize('raw', [
+        '[{"type":"attachment","file":"synthetic"}]',
+        '[{"type":"image_url","image_url":null}]',
+        '[{"type":"image_url","image_url":{"url":123}}]',
+        '[{"type":"image_url","image_url":{"url":"not-an-image-url"}}]',
+        '[{"type":"image_url","image_url":{"url":"data:image/png;base64,!!!"}}]',
+        '[{"type":"image_url","image_url":{"url":"synthetic","url":"other"}}]',
+        '[{"type":"image_url",',
+        json.dumps(json.dumps(PHOTO)),
+    ])
+    def test_ambiguous_or_arbitrary_history_stays_blocked(temp_db, monkeypatch, raw):
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', raw))
+>       with pytest.raises(PrivacyError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE PrivacyError
+
+tests/test_photo_history.py:60: Failed
+_ test_ambiguous_or_arbitrary_history_stays_blocked[[{"type":"image_url","image_url":{"url":"data:image/png;base64,!!!"}}]] _
+
+temp_db = PosixPath('/opt/data/cache/scratch/k90-verification-20261025/photo-pytest/test_ambiguous_or_arbitrary_hi4/test.db')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7579583a3790>
+raw = '[{"type":"image_url","image_url":{"url":"data:image/png;base64,!!!"}}]'
+
+    @pytest.mark.parametrize('raw', [
+        '[{"type":"attachment","file":"synthetic"}]',
+        '[{"type":"image_url","image_url":null}]',
+        '[{"type":"image_url","image_url":{"url":123}}]',
+        '[{"type":"image_url","image_url":{"url":"not-an-image-url"}}]',
+        '[{"type":"image_url","image_url":{"url":"data:image/png;base64,!!!"}}]',
+        '[{"type":"image_url","image_url":{"url":"synthetic","url":"other"}}]',
+        '[{"type":"image_url",',
+        json.dumps(json.dumps(PHOTO)),
+    ])
+    def test_ambiguous_or_arbitrary_history_stays_blocked(temp_db, monkeypatch, raw):
+        monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES', 'true')
+        with get_conn() as conn:
+            conn.execute('INSERT INTO conversations(user_id,role,content) VALUES (?,?,?)',
+                         ('synthetic-owner', 'user', raw))
+>       with pytest.raises(PrivacyError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE PrivacyError
+
+tests/test_photo_history.py:60: Failed
+=========================== short test summary info ============================
+FAILED tests/test_photo_history.py::test_ambiguous_or_arbitrary_history_stays_blocked[[{"type":"image_url","image_url":{"url":"not-an-image-url"}}]]
+FAILED tests/test_photo_history.py::test_ambiguous_or_arbitrary_history_stays_blocked[[{"type":"image_url","image_url":{"url":"data:image/png;base64,!!!"}}]]
+2 failed, 6 passed, 21 deselected in 6.25s

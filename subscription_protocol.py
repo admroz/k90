@@ -186,7 +186,6 @@ def authorize(state_dir, open_browser=None, request=None):
     import hashlib
     import secrets
     import threading
-    import uuid
     import webbrowser
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from urllib.parse import urlencode
@@ -200,10 +199,10 @@ def authorize(state_dir, open_browser=None, request=None):
     if any(metadata.get(key) != value for key, value in expected.items()):
         raise ProbeError('unexpected_oidc_configuration')
     registration_path = state_dir / 'registration.json'
-    registration = json.loads(registration_path.read_text()) if registration_path.exists() else {}
+    from subscription_host import initialize_host
+    registration = initialize_host(state_dir)
     selected = registration.get('client_id')
-    host_id = registration.get('host_id') or 'urn:uuid:' + str(uuid.uuid4())
-    save_private(registration_path, {**registration, 'host_id': host_id})
+    host_id = registration['host_id']
     verifier, state, nonce = secrets.token_urlsafe(48), secrets.token_urlsafe(32), secrets.token_urlsafe(32)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
     finished = threading.Event()
