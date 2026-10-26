@@ -505,3 +505,20 @@ def test_telegram_delivery_outage_does_not_block_shared_web_conversation(web_cli
     deliver_pending(telegram, backend)
     assert backend.call("GET", "/internal/deliveries") == []
     assert len(web_client.get("/api/messages").json()) == 4
+
+
+def test_jobs_contract_keeps_terminal_failures_and_active_work_without_mutation(web_client):
+    from web_runtime import enqueue
+    states = ['queued', 'running', 'failed', 'interrupted', 'done']
+    for i, state in enumerate(states):
+        request_id = f'web:contract-{i}'
+        enqueue(request_id, 'synthetic')
+        with closing(get_conn()) as conn, conn:
+            conn.execute('UPDATE chat_jobs SET state=? WHERE request_id=?', (state, request_id))
+    login(web_client)
+    for _ in range(2):
+        jobs = web_client.get('/api/jobs').json()
+        assert [j['state'] for j in jobs] == states[:-1]
+        assert [j['request_id'] for j in jobs] == [f'web:contract-{i}' for i in range(4)]
+    with closing(get_conn()) as conn:
+        assert [r[0] for r in conn.execute('SELECT state FROM chat_jobs ORDER BY seq')] == states

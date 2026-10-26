@@ -195,3 +195,13 @@ def test_unexpected_sync_exception_still_allows_answer(runtime, monkeypatch):
     assert job["state"] == "done"
     assert "Garmin" in job["response"] and "Answer from stored data" in job["response"]
     assert saved == job["response"]
+
+
+def test_claim_log_contains_only_sequence_and_channel(runtime, caplog):
+    import logging
+    enqueue("web:synthetic-log", "synthetic-private-message")
+    with caplog.at_level(logging.INFO):
+        assert ConversationWorker(lambda _: "ok").run_once()
+    claims = [r.getMessage() for r in caplog.records if r.getMessage().startswith("conversation.claim")]
+    assert claims == ["conversation.claim seq=1 channel=web"]
+    assert "synthetic-private-message" not in caplog.text

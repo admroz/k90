@@ -1,5 +1,18 @@
 # k90 — bieżący status zadania
 
+## Image performance checkout — 2026-10-26
+
+Branch fix/image-history-performance, base 5f90fec (PR13). Local implementation
+ready for independent coordinator review; no push/PR/merge/deployment.
+Linear email scan, content-free preparation/provider phase logs and explicit
+browser-local failure/interruption dismissal. Synthetic verification:
+491 Python passed / 1 existing skip, 153 privacy probes passed / 1 warning,
+24 frontend passed and JS syntax OK. No production/provider/HS access.
+Evidence: [image-history-performance.md](review-evidence/image-history-performance.md).
+Quota 08:02:32Z: session 39%, weekly 6%; not paused.
+The historical status below concerns the previous memory task.
+
+
 Stan: READY_FOR_REVIEW — revised personal self-hosted preparation PASS.
 Aktualizacja: 2026-10-25 17:10 UTC. Branch feat/long-term-memory, fork hermesinski/k90.
 Nie jest to full live acceptance, zgoda na merge ani wdrożenie. PR nie utworzony;

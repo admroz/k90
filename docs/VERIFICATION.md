@@ -1,5 +1,21 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+## 2026-10-26 — image history performance checkout
+
+Branch fix/image-history-performance, base 5f90fec. Parent regression RED before
+implementation (128 KiB subprocess >3s). Preserved original-history validation;
+replaced quadratic email suffix retry with equivalent bounded scans. Added
+content-free claim/preparation/provider logs and explicit browser-local dismissal
+of terminal failure/interruption cards. No queue/history/audit mutations or retry.
+Full Python 491 PASS / 1 existing skip (123.08s), privacy probes153 PASS / 1
+existing warning (22.51s), extra synthetic probes13 PASS (5.21s), frontend24 PASS,
+JS syntax and diff checks PASS. Precise isolated commands, measurements,
+changed behavior and limits: review-evidence/image-history-performance.md.
+Latest quota 08:02:32Z session39/week6. No quota pause, reset, provider calls,
+HS writes, production reads, Docker access, push, merge or deployment.
+Next: independent coordinator review; image CI after review.
+
+
 ## Końcowy odbiór revised preparation — 2026-10-25 17:10 UTC
 
 Koordynator wykonał validate_preparation.py: PASS — wspólny source/PASS obu

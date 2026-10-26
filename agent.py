@@ -14,7 +14,8 @@ from __future__ import annotations
 import json
 import logging
 import os
-from contextlib import closing
+from contextlib import closing, contextmanager
+from time import perf_counter
 import litellm
 from dotenv import load_dotenv
 
@@ -132,9 +133,21 @@ def _message_kind(user_message: str | list) -> str:
     return "text"
 
 
+@contextmanager
+def _phase(stage):
+    started = perf_counter()
+    try:
+        yield
+    finally:
+        log.info("agent.phase stage=%s elapsed_ms=%.3f", stage,
+                 (perf_counter() - started) * 1000)
+
+
 def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool]:
     """Capture originals durably before any outbound work, even if a provider fails."""
-    turn = memory_runtime.begin_turn(user_id, user_message)
+    log.info("agent.phase stage=begin elapsed_ms=0")
+    with _phase("capture"):
+        turn = memory_runtime.begin_turn(user_id, user_message)
     token = memory_runtime.TURN_CONTEXT.set(turn)
     try:
         memory_runtime.start_worker()
@@ -151,11 +164,14 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
 
 def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool]:
     """Uruchamia agenta i zwraca (odpowiedź, czy_odświeżyć_podsumowanie)."""
-    history = load_history(user_id)
-    system, context_stats = _build_system_message()
+    with _phase("history"):
+        history = load_history(user_id)
+    with _phase("context"):
+        system, context_stats = _build_system_message()
     turn = memory_runtime.TURN_CONTEXT.get() or {}
-    recalled, memory_stats = memory_runtime.recall_context(user_id, user_message,
-                                                        exclude=[turn.get('source_id')])
+    with _phase("recall"):
+        recalled, memory_stats = memory_runtime.recall_context(user_id, user_message,
+                                                            exclude=[turn.get('source_id')])
     context_stats.update(memory_stats)
     if recalled:
         system += "\n\n" + recalled
@@ -198,30 +214,32 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
         )
 
     for round_index in range(1, MAX_TOOL_ROUNDS + 1):
-        if responses is not None:
-            turn = responses.complete()
-            # A truncated response may contain partial arguments. Never run its tools.
-            if not turn.complete:
-                _save_usage(MODEL, turn.input_tokens, turn.output_tokens)
-                raise RuntimeError("Odpowiedź modelu została przerwana przez limit tokenów; zwiększ AGENT_MAX_OUTPUT_TOKENS.")
-            calls, answer = turn.calls, turn.text
-            prompt_tokens, completion_tokens = turn.input_tokens, turn.output_tokens
-        else:
-            response = chat_completion(litellm.completion,
-                model=MODEL,
-                messages=messages,
-                tools=TOOLS,
-                tool_choice="auto",
-                **completion_options,
-            )
-            msg = response.choices[0].message
-            messages.append(msg.model_dump(exclude_none=True))
-            calls = [FunctionCall(call.id, call.function.name, call.function.arguments)
-                     for call in (msg.tool_calls or [])]
-            answer = msg.content or ""
-            usage = getattr(response, "usage", None)
-            prompt_tokens = usage.prompt_tokens if usage else 0
-            completion_tokens = usage.completion_tokens if usage else 0
+        log.info("agent.phase stage=provider.start round=%d", round_index)
+        with _phase("provider"):
+            if responses is not None:
+                turn = responses.complete()
+                # A truncated response may contain partial arguments. Never run its tools.
+                if not turn.complete:
+                    _save_usage(MODEL, turn.input_tokens, turn.output_tokens)
+                    raise RuntimeError("Odpowiedź modelu została przerwana przez limit tokenów; zwiększ AGENT_MAX_OUTPUT_TOKENS.")
+                calls, answer = turn.calls, turn.text
+                prompt_tokens, completion_tokens = turn.input_tokens, turn.output_tokens
+            else:
+                response = chat_completion(litellm.completion,
+                    model=MODEL,
+                    messages=messages,
+                    tools=TOOLS,
+                    tool_choice="auto",
+                    **completion_options,
+                )
+                msg = response.choices[0].message
+                messages.append(msg.model_dump(exclude_none=True))
+                calls = [FunctionCall(call.id, call.function.name, call.function.arguments)
+                         for call in (msg.tool_calls or [])]
+                answer = msg.content or ""
+                usage = getattr(response, "usage", None)
+                prompt_tokens = usage.prompt_tokens if usage else 0
+                completion_tokens = usage.completion_tokens if usage else 0
         if prompt_tokens or completion_tokens:
             _save_usage(MODEL, prompt_tokens, completion_tokens)
             log.info(

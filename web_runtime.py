@@ -222,6 +222,7 @@ class ConversationWorker:
             conn.execute(
                 "UPDATE chat_jobs SET state = 'running' WHERE seq = ?", (job["seq"],)
             )
+        log.info("conversation.claim seq=%d channel=%s", job["seq"], job["channel"])
         token = MESSAGE_CONTEXT.set(
             {"channel": job["channel"], "request_id": job["request_id"]}
         )

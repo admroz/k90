@@ -15,7 +15,8 @@ class PrivacyError(ValueError):
 
 
 _SECRET = re.compile(r'(?i)\bbearer\s+\S+|\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|secret)[\"\x27]?\s*[=:]\s*\S+|\bsk-[\w-]{16,}|-----BEGIN [^-]*PRIVATE KEY-----')
-_EMAIL = re.compile(r'(?i)[\w.!#$%&\x27*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+')
+_EMAIL_LOCAL = re.compile(r'[\w.!#$%&\x27*+/=?^`{|}~-]+')
+_EMAIL_DOMAIN = re.compile(r'@[\w-]+(?:\.[\w-]+)+')
 _PESEL = re.compile(r'(?<!\d)\d{11}(?!\d)')
 _PHONE = re.compile(r'(?<!\w)(?:\+?48[ .-]?)?(?:\(?\d{3}\)?[ .-]?){2}\d{3}(?!\w)')
 _PHONE_INTL = re.compile(r'(?<!\w)\+\d{1,3}[ .-]?(?:\(?\d\)?[ .-]?){6,14}(?!\w)')
@@ -24,6 +25,27 @@ _LOCAL_ONLY = re.compile(r'(?i)(?:\[|<)local[_ -]only(?:\]|>)')
 _SECRET_KEYS = {'authorization', 'proxyauthorization', 'apikey', 'password', 'passwd', 'secret', 'clientsecret', 'accesstoken', 'refreshtoken', 'privatekey', 'cookie', 'setcookie'}
 _IDENTIFIER_KEYS = {'pesel', 'phone', 'phonenumber', 'telephone', 'telephonenumber', 'mobile', 'mobilenumber', 'nationalid', 'nationalidentifier', 'ssn', 'socialsecuritynumber'}
 _IMAGE_KEYS = {'image', 'imageurl', 'inputimage', 'imagedata', 'file', 'filedata', 'inputfile', 'attachment', 'attachments', 'audio', 'inputaudio', 'video', 'inputvideo', 'document', 'pdf', 'base64'}
+
+
+def _redact_emails(text):
+    """Same leftmost non-overlapping matches as the original email expression.
+
+    Consume each maximal local-part run once instead of retrying every suffix.
+    Every suffix has the same following @ and domain, so none can succeed if
+    the maximal run fails. Resume at a successful domain's end, as re.sub does
+    (including adjacent local punctuation). Domain attempts are disjoint runs.
+    """
+    pieces = []
+    position = copied = 0
+    while local := _EMAIL_LOCAL.search(text, position):
+        domain = _EMAIL_DOMAIN.match(text, local.end())
+        if domain is None:
+            position = local.end()
+            continue
+        pieces.extend((text[copied:local.start()], '[REDACTED]'))
+        position = copied = domain.end()
+    pieces.append(text[copied:])
+    return ''.join(pieces)
 
 
 def _key(key):
@@ -73,7 +95,8 @@ class PrivacyPolicy:
             raise PrivacyError()
         for term in sorted(self.redact_terms, key=len, reverse=True):
             text = re.sub(re.escape(term), '[REDACTED]', text, flags=re.IGNORECASE)
-        for pattern in (_EMAIL, _PHONE_INTL, _PESEL, _PHONE_US, _PHONE):
+        text = _redact_emails(text)
+        for pattern in (_PHONE_INTL, _PESEL, _PHONE_US, _PHONE):
             text = pattern.sub('[REDACTED]', text)
         return text
 
