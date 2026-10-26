@@ -9,6 +9,9 @@ import uuid
 
 CHECK = r"""
 import json, time, urllib.request, http.cookiejar
+import subscription_login
+import subscription_host
+import summary
 base = 'http://127.0.0.1:8000'
 client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 def call(path, body=None):
