@@ -20,6 +20,10 @@ from logging_setup import configure_logging, event
 import profiling
 configure_logging()
 import litellm
+from logging_setup import silence_libraries
+litellm.set_verbose = False
+litellm.suppress_debug_info = True
+silence_libraries()
 from dotenv import load_dotenv
 
 from responses_api import FunctionCall, ResponsesConversation, uses_responses
@@ -38,7 +42,6 @@ from tools.time_utils import now_local
 
 load_dotenv()
 
-log = logging.getLogger('agent')
 
 MODEL = os.getenv("AGENT_MODEL", "gpt-5.4")
 HISTORY_MESSAGES = int(os.getenv("HISTORY_MESSAGES", "10"))
@@ -157,7 +160,7 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
         try:
             memory_runtime.record_failure(type(exc).__name__)
         except Exception:
-            log.warning("agent.failure_record.unavailable")
+            event('agent.failure_record.unavailable', component='agent', level=logging.WARNING)
         raise
     finally:
         memory_runtime.TURN_CONTEXT.reset(token)
@@ -176,24 +179,12 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
     context_stats.update(memory_stats)
     if recalled:
         system += "\n\n" + recalled
-    log_user = "event:" + str(turn.get('user_event_id', 'unknown'))
 
     messages = [{"role": "system", "content": system}] + history
     messages.append({"role": "user", "content": user_message})
 
     completion_options = _completion_options(MODEL)
-    log.info(
-        "agent.start user=%s model=%s reasoning_effort=%s input=%s history_records=%d context_sections=%d context_chars=%d summary_chars=%d",
-        log_user,
-        MODEL,
-        (os.getenv("AGENT_REASONING_EFFORT", "low") if uses_responses(MODEL)
-         else completion_options.get("reasoning_effort", "default")),
-        _message_kind(user_message),
-        len(history),
-        context_stats.get("sections", 0),
-        context_stats.get("chars", 0),
-        context_stats.get("summary_chars", 0),
-    )
+    event('agent.start', component='agent', history_records=len(history), context_sections=context_stats.get("sections", 0), context_chars=context_stats.get("chars", 0), summary_chars=context_stats.get("summary_chars", 0))
 
     should_refresh = False
     responses = None
@@ -243,29 +234,16 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
                 completion_tokens = usage.completion_tokens if usage else 0
         if prompt_tokens or completion_tokens:
             _save_usage(MODEL, prompt_tokens, completion_tokens)
-            log.info(
-                "agent.usage user=%s round=%d prompt_tokens=%s completion_tokens=%s",
-                log_user,
-                round_index,
-                prompt_tokens,
-                completion_tokens,
-            )
+            event('agent.usage', component='agent', prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
 
         if not calls:
             if responses is not None and not answer.strip():
                 raise RuntimeError("Model nie zwrócił tekstu odpowiedzi.")
             save_history(user_id, user_message, answer)
-            log.info(
-                "agent.finish user=%s round=%d response_chars=%d refresh=%s",
-                log_user,
-                round_index,
-                len(answer),
-                should_refresh,
-            )
+            event('agent.finish', component='agent', response_chars=len(answer))
             return answer, should_refresh
 
-        tool_names = [tool_call.name for tool_call in calls]
-        log.info("agent.tools user=%s round=%d tool_calls=%s", log_user, round_index, ",".join(tool_names))
+        event('agent.tools', component='agent')
 
         for tool_index, tool_call in enumerate(calls, 1):
             profiling.indices(round_index, tool_index)
@@ -279,12 +257,6 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
             event('tool.completed', mutation_outcome='unknown',
                   tool_outcome='error' if 'error' in result else 'returned')
             memory_runtime.record_tool(tool_call.name, args, result)
-            log.info(
-                "agent.tool_result user=%s tool=%s ok=%s",
-                log_user,
-                tool_call.name,
-                "error" not in result,
-            )
             if responses is not None:
                 responses.add_tool_result(tool_call.call_id, result)
             else:
@@ -296,7 +268,7 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
 
     answer = "Przepraszam, nie mogłem przetworzyć Twojego zapytania."
     save_history(user_id, user_message, answer)
-    log.warning("agent.max_rounds user=%s rounds=%d", log_user, MAX_TOOL_ROUNDS)
+    event('agent.max_rounds', component='agent', level=logging.WARNING)
     return answer, should_refresh
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import base64
 import logging
 import os
@@ -22,9 +23,8 @@ from tools.libre import should_auto_sync as should_auto_sync_libre, sync_libre_d
 
 load_dotenv()
 
-from logging_setup import configure_logging, SafeTransportError
+from logging_setup import configure_logging, SafeTransportError, event
 configure_logging()
-log = logging.getLogger('server')
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_ALLOWED_USER_ID = os.getenv("TELEGRAM_ALLOWED_USER_ID", "")
@@ -67,7 +67,7 @@ class TelegramAPI:
     def send_text(self, chat_id: int, message: str) -> None:
         for chunk in split_message(message):
             self.call("sendMessage", chat_id=chat_id, text=chunk)
-            log.info("telegram.sent chat_id=%s chars=%d", chat_id, len(chunk))
+            event('telegram.sent', component='server', chars=len(chunk))
 
     def download_file(self, file_id: str) -> tuple[bytes, str]:
         file_info = self.call("getFile", file_id=file_id)
@@ -118,22 +118,22 @@ def _sync_health_data(api: TelegramAPI, chat_id: int, sender: str) -> tuple[str,
         garmin_result = sync_garmin_data(trigger="auto_daily")
         if "error" in garmin_result:
             errors.append("Garmin")
-            log.warning("garmin.auto_sync_failed sender=%s error=%s", sender, garmin_result["error"])
+            event('garmin.auto_sync_failed', component='server', level=logging.WARNING)
         elif sync_has_changes(garmin_result):
             changed_sources.append("Garmin")
             mark_summary_refreshed()
         else:
-            log.info("garmin.auto_sync_no_changes sender=%s", sender)
+            event('garmin.auto_sync_no_changes', component='server')
 
     if libre_due:
         libre_result = sync_libre_data(trigger="auto_stale")
         if "error" in libre_result:
             errors.append("Libre")
-            log.warning("libre.auto_sync_failed sender=%s error=%s", sender, libre_result["error"])
+            event('libre.auto_sync_failed', component='server', level=logging.WARNING)
         elif libre_sync_has_changes(libre_result):
             changed_sources.append("Libre")
         else:
-            log.info("libre.auto_sync_no_changes sender=%s", sender)
+            event('libre.auto_sync_no_changes', component='server')
 
     if changed_sources:
         if "Garmin" in changed_sources:
@@ -172,17 +172,17 @@ def _handle_telegram_message(api: TelegramAPI, message: dict) -> None:
     if chat_id is None or sender_id is None:
         return
     if chat.get("type") != "private":
-        log.warning("telegram.reject reason=non_private chat_id=%s user_id=%s", chat_id, sender_id)
+        event('telegram.reject', component='server', level=logging.WARNING)
         return
     if str(sender_id) != TELEGRAM_ALLOWED_USER_ID:
-        log.warning("telegram.reject reason=not_allowed chat_id=%s user_id=%s", chat_id, sender_id)
+        event('telegram.reject', component='server', level=logging.WARNING)
         return
 
     text = (message.get("text") or message.get("caption") or "").strip()
     image = _image_from_message(message)
     if not text and not image:
         return
-    log.info("telegram.message chat_id=%s user_id=%s text_chars=%d image=%s", chat_id, sender_id, len(text), bool(image))
+    event('telegram.message', component='server', text_chars=len(text))
 
     command_response = handle_command(text) if text else None
     if command_response is not None:
@@ -215,9 +215,9 @@ def _handle_telegram_message(api: TelegramAPI, message: dict) -> None:
             )
             encoded = base64.b64encode(image_bytes).decode()
             content_parts.append({"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{encoded}"}})
-            log.info("telegram.image mime=%s bytes=%d", mime_type, len(image_bytes))
+            event('telegram.image', component='server', bytes=len(image_bytes))
         except Exception as exc:
-            log.error("telegram.image_error error=%s", exc)
+            event('telegram.image_error', component='server', level=logging.ERROR, error=exc)
             if not text:
                 api.send_text(chat_id, "Nie udało mi się pobrać załączonego obrazu. Spróbuj wysłać go ponownie.")
                 return
@@ -231,7 +231,7 @@ def _handle_telegram_message(api: TelegramAPI, message: dict) -> None:
     try:
         response, should_refresh = run_agent(user_message, user_id=sender)
     except Exception as exc:
-        log.exception("agent.error sender=%s error=%s", sender, exc)
+        event('agent.error', component='server', level=logging.ERROR, error=sys.exception())
         response = "Przepraszam, wystąpił błąd. Spróbuj ponownie."
         should_refresh = False
 
@@ -242,9 +242,9 @@ def _handle_telegram_message(api: TelegramAPI, message: dict) -> None:
     api.send_text(chat_id, response)
 
     if should_refresh:
-        log.info("summary.async_refresh trigger=tool_call sender=%s", sender)
+        event('summary.async_refresh', component='server')
         threading.Thread(target=refresh_patient_summary, kwargs={"trigger": "tool_call"}, daemon=True).start()
-    log.info("telegram.response chat_id=%s chars=%d refresh=%s", chat_id, len(response), should_refresh)
+    event('telegram.response', component='server', chars=len(response))
 
 
 def run_polling(api: TelegramAPI) -> None:
@@ -261,12 +261,12 @@ def run_polling(api: TelegramAPI) -> None:
                     if message:
                         handle_telegram_message(api, message)
                 except Exception as exc:
-                    log.exception("telegram.update_error update_id=%s error=%s", update_id, exc)
+                    event('telegram.update_error', component='server', level=logging.ERROR, error=sys.exception())
                 finally:
                     if isinstance(update_id, int):
                         offset = update_id + 1
         except TelegramAPIError as exc:
-            log.error("telegram.poll_error error=%s retry_in=%s", exc, retry_delay)
+            event('telegram.poll_error', component='server', level=logging.ERROR, error=exc)
             time.sleep(retry_delay)
             retry_delay = min(retry_delay * 2, 30)
 
@@ -275,22 +275,19 @@ def main() -> None:
     if not TELEGRAM_BOT_TOKEN:
         raise SystemExit("TELEGRAM_BOT_TOKEN is required")
     if not TELEGRAM_ALLOWED_USER_ID:
-        log.warning(
-            "telegram.allowed_user_missing; messages will be rejected. "
-            "Send a message to the bot, read user_id from the log, set TELEGRAM_ALLOWED_USER_ID and restart."
-        )
+        event('telegram.allowed_user_missing', component='server', level=logging.WARNING)
     init_db()
     try:
         maybe_refresh_summary()
     except Exception as exc:
-        log.exception("summary.startup_refresh_failed error=%s", exc)
+        event('summary.startup_refresh_failed', component='server', level=logging.ERROR, error=sys.exception())
     api = TelegramAPI(TELEGRAM_BOT_TOKEN)
     bot = api.call("getMe")
-    log.info("telegram.connected bot=@%s", bot.get("username", "unknown"))
+    event('telegram.connected', component='server')
     try:
         run_polling(api)
     except KeyboardInterrupt:
-        log.info("telegram.stopped")
+        event('telegram.stopped', component='server')
 
 
 if __name__ == "__main__":

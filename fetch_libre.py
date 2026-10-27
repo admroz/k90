@@ -8,9 +8,8 @@ Synchronizuje dane glukozy bezpośrednio do SQLite.
 from __future__ import annotations
 
 import logging
-from logging_setup import configure_logging
+from logging_setup import configure_logging, event
 configure_logging()
-log = logging.getLogger('fetch_libre')
 
 import os
 import sqlite3
@@ -210,8 +209,8 @@ def sync_libre_to_db(client: LibreLinkUpClient | None = None) -> dict:
     ensure_agent_tables(conn)
     conn.commit()
 
-    log.info('libre.sync.progress')
-    log.info('libre.sync.progress')
+    event('libre.sync.progress', component='fetch_libre')
+    event('libre.sync.progress', component='fetch_libre')
 
     own_client = client is None
     if own_client:
@@ -235,12 +234,12 @@ def sync_libre_to_db(client: LibreLinkUpClient | None = None) -> dict:
 def main() -> None:
     result = sync_libre_to_db()
     if "error" in result:
-        log.error('libre.fetch_failed')
+        event('libre.fetch_failed', component='fetch_libre', level=logging.ERROR)
         raise SystemExit(1)
 
-    log.info('libre.sync.progress')
+    event('libre.sync.progress', component='fetch_libre')
     for name, stats in result.get("datasets", {}).items():
-        log.info('libre.sync.progress')
+        event('libre.sync.progress', component='fetch_libre')
 
 
 if __name__ == "__main__":

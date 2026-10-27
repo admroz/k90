@@ -223,12 +223,16 @@ odrębne. Zakończona dostawa Telegrama oznacza przyjęcie fragmentów przez API
 lokalne potwierdzenie, a pomiar WWW jedynie przygotowanie projekcji odpowiedzi.
 Nie mierzymy przeczytania odpowiedzi przez użytkownika.
 
-Granica logowania odrzuca argumenty dawnych komunikatów, surowe komunikaty bibliotek,
-nieznane nazwy wyjątków, tracebacki i dodatkowe pola spoza listy. Pozostają stałe
-zdarzenia, kategorie i kody, poprawny liczbowy status HTTP oraz ograniczony request ID
-z udokumentowanego pola SDK lub nagłówka `x-request-id` protokołu subskrypcji.
-Nie eksportuje body, URL, pozostałych nagłówków, rozmów, pomiarów ani obrazów.
-Nieobsłużone wyjątki procesu/wątku również korzystają z tej bezpiecznej granicy.
+Aplikacja emituje jawne zdarzenia przez własne loggery `k90.app` i `k90.profile`.
+Dozwolone są stałe nazwy, poziomy, kategorie i kody, ograniczone liczniki, status
+HTTP oraz request ID z udokumentowanego pola SDK lub nagłówka `x-request-id`
+protokołu subskrypcji. Nie eksportujemy body, URL, pozostałych nagłówków, rozmów,
+pomiarów ani obrazów. Opisy wyjątków i tracebacki nie są formatowane.
+Znane loggery SDK/transportu są wyciszone; `uvicorn.error` oraz nieobsłużone
+wyjątki procesu/wątku mają wąskie adaptery zapisujące wyłącznie kategorię.
+Nie przechwytujemy globalnie Python logging ani dowolnego kodu bibliotek,
+niestandardowych handlerów lub `print`. Interaktywny wynik CLI i instrukcje
+lokalnego logowania OAuth pozostają wyjściem użytkowym, poza logami operacyjnymi.
 Lokalne dane i audyt SQLite pozostają oddzielne. Sam ten format nie rozstrzyga
 przyczyny awarii dostawcy.
 
@@ -250,13 +254,13 @@ przed wyjściem z kontekstu. Transport zachowuje wyłącznie zwalidowaną katego
 kod i status HTTP; opis odpowiedzi Telegrama i dane żądania nie są przenoszone do
 wyjątku diagnostycznego. Komponenty wykonywane jako skrypty mają stałe nazwy.
 
-Bootstrap najpierw ustanawia wspólną granicę emisji standardowego logging,
-niezależną od fabryki rekordów. Normalizacja następuje po dołączeniu `extra`
-i filtrach loggera, także dla rekordów z obcej fabryki. Dowolne handlery i formatery
-bibliotek nie są wyjściami aplikacji: emisję przejmują kontrolowane sinki app/errors
-oraz bezpieczna konsola, także przy `propagate=False`. Granica nie skanuje rejestru
-loggerów i działa również przy częściowym błędzie dalszej konfiguracji; błąd
-logowania nie blokuje wykonania zadania. Profilowanie zachowuje osobny sink.
+Bootstrap konfiguruje standardowe handlery własnych loggerów i skończoną listę
+znanych loggerów bibliotek. `Logger.callHandlers` i fabryka rekordów pozostają
+standardowe. Pliki obsługuje `RotatingFileHandler` z `flock`: każdy zapis pod
+blokadą ponownie otwiera aktualny plik, wykonuje rotację i zamyka uchwyt.
+Błąd logowania daje jeden stały alarm stderr na proces i nie blokuje zadania;
+pozostałe sinki są nadal próbowane. Nie gwarantujemy kompletnego końca pliku
+po awarii procesu ani fsync każdego rekordu. Profilowanie ma osobny sink.
 Rozszerzony smoke CI uruchamia dwa procesy zapisujące logi i sprawdza ich limity,
 prawa, kopię błędów i izolację profilowania. Następnie porównuje snapshot logów po
 restart i recreate z tym samym, unikalnym wolumenem syntetycznym `/data`, który

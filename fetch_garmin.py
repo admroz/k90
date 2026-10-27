@@ -9,9 +9,8 @@ CSV nie są już częścią standardowego flow synchronizacji.
 from __future__ import annotations
 
 import logging
-from logging_setup import configure_logging
+from logging_setup import configure_logging, event
 configure_logging()
-log = logging.getLogger('fetch_garmin')
 
 import os
 import math
@@ -131,19 +130,19 @@ def login() -> garminconnect.Garmin:
     )
     tokenstore = get_tokenstore()
     if tokenstore.exists():
-        log.info('garmin.sync.progress')
+        event('garmin.sync.progress', component='fetch_garmin')
         try:
             client.login(tokenstore=str(tokenstore))
-            log.info('garmin.sync.progress')
+            event('garmin.sync.progress', component='fetch_garmin')
             return client
         except Exception:
-            log.warning('garmin.login_failed', exc_info=True)
+            event('garmin.login_failed', component='fetch_garmin', level=logging.WARNING, error=sys.exception())
     else:
-        log.info('garmin.sync.progress')
+        event('garmin.sync.progress', component='fetch_garmin')
     client.login()
     tokenstore.mkdir(exist_ok=True)
     client.garth.dump(str(tokenstore))
-    log.info('garmin.sync.progress')
+    event('garmin.sync.progress', component='fetch_garmin')
     return client
 
 
@@ -237,7 +236,7 @@ def _insert_or_update_many(conn: sqlite3.Connection, table: str, records: list[d
 def fetch_weight(client, start: str, end: str) -> list[dict]:
     records = []
     for chunk_start, chunk_end in date_chunks(start, end):
-        log.info('garmin.sync.progress')
+        event('garmin.sync.progress', component='fetch_garmin')
         try:
             data = client.get_weigh_ins(chunk_start, chunk_end)
             count = 0
@@ -251,16 +250,16 @@ def fetch_weight(client, start: str, end: str) -> list[dict]:
                         "zrodlo": metric.get("sourceType", "garmin") or "garmin",
                     })
                     count += 1
-            log.info('garmin.sync.progress')
+            event('garmin.sync.progress', component='fetch_garmin')
         except Exception:
-            log.exception('garmin.fetch_failed')
+            event('garmin.fetch_failed', component='fetch_garmin', level=logging.ERROR, error=sys.exception())
     return sorted(records, key=lambda row: row["data"])
 
 
 def fetch_blood_pressure(client, start: str, end: str) -> list[dict]:
     records = []
     for chunk_start, chunk_end in date_chunks(start, end, chunk_days=365):
-        log.info('garmin.sync.progress')
+        event('garmin.sync.progress', component='fetch_garmin')
         try:
             data = client.get_blood_pressure(chunk_start, chunk_end)
             days = (data or {}).get("measurementSummaries", [])
@@ -277,14 +276,14 @@ def fetch_blood_pressure(client, start: str, end: str) -> list[dict]:
                         "zrodlo": measurement.get("sourceType", "garmin") or "garmin",
                         "uwagi": measurement.get("notes", ""),
                     })
-            log.info('garmin.sync.progress')
+            event('garmin.sync.progress', component='fetch_garmin')
         except Exception:
-            log.exception('garmin.fetch_failed')
+            event('garmin.fetch_failed', component='fetch_garmin', level=logging.ERROR, error=sys.exception())
     return sorted(records, key=lambda row: (row["data"], row["czas"]))
 
 
 def fetch_activities(client, start: str, end: str) -> list[dict]:
-    log.info('garmin.sync.progress')
+    event('garmin.sync.progress', component='fetch_garmin')
     records = []
     try:
         for activity in client.get_activities_by_date(start, end) or []:
@@ -301,9 +300,9 @@ def fetch_activities(client, start: str, end: str) -> list[dict]:
                 "max_tetno": activity.get("maxHR"),
                 "kroki": activity.get("steps"),
             })
-        log.info('garmin.sync.progress')
+        event('garmin.sync.progress', component='fetch_garmin')
     except Exception:
-        log.exception('garmin.fetch_failed')
+        event('garmin.fetch_failed', component='fetch_garmin', level=logging.ERROR, error=sys.exception())
     return sorted(records, key=lambda row: (row["data"], row["czas"]))
 
 
@@ -311,11 +310,11 @@ def fetch_sleep(client, start: str, end: str) -> list[dict]:
     records = []
     dates = list(date_range(start, end))
     total = len(dates)
-    log.info('garmin.sync.progress')
+    event('garmin.sync.progress', component='fetch_garmin')
     ok = 0
     for index, day in enumerate(dates):
         if index % 30 == 0:
-            log.info('garmin.sync.progress')
+            event('garmin.sync.progress', component='fetch_garmin')
         try:
             data = client.get_sleep_data(day)
             dto = (data or {}).get("dailySleepDTO") or {}
@@ -354,7 +353,7 @@ def fetch_sleep(client, start: str, end: str) -> list[dict]:
             pass
         if index % 30 == 29:
             time.sleep(0.2)
-    log.info('garmin.sync.progress')
+    event('garmin.sync.progress', component='fetch_garmin')
     return sorted(records, key=lambda row: row["data"])
 
 
@@ -362,11 +361,11 @@ def fetch_daily_metrics(client, start: str, end: str) -> list[dict]:
     records = []
     dates = list(date_range(start, end))
     total = len(dates)
-    log.info('garmin.sync.progress')
+    event('garmin.sync.progress', component='fetch_garmin')
     ok = 0
     for index, day in enumerate(dates):
         if index % 30 == 0:
-            log.info('garmin.sync.progress')
+            event('garmin.sync.progress', component='fetch_garmin')
         row = {"data": day, "rhr": None, "avg_stres": None, "max_stres": None, "avg_oddech": None, "min_oddech": None, "max_oddech": None}
         any_data = False
         try:
@@ -400,7 +399,7 @@ def fetch_daily_metrics(client, start: str, end: str) -> list[dict]:
             ok += 1
         if index % 30 == 29:
             time.sleep(0.2)
-    log.info('garmin.sync.progress')
+    event('garmin.sync.progress', component='fetch_garmin')
     return sorted(records, key=lambda row: row["data"])
 
 
@@ -445,11 +444,11 @@ def fetch_hrv(client, start: str, end: str) -> list[dict]:
     records = []
     dates = list(date_range(start, end))
     total = len(dates)
-    log.info('garmin.sync.progress')
+    event('garmin.sync.progress', component='fetch_garmin')
     ok = 0
     for index, day in enumerate(dates):
         if index % 30 == 0:
-            log.info('garmin.sync.progress')
+            event('garmin.sync.progress', component='fetch_garmin')
         try:
             data = client.get_hrv_data(day)
             summary = (data or {}).get("hrvSummary") or {}
@@ -470,7 +469,7 @@ def fetch_hrv(client, start: str, end: str) -> list[dict]:
             pass
         if index % 30 == 29:
             time.sleep(0.2)
-    log.info('garmin.sync.progress')
+    event('garmin.sync.progress', component='fetch_garmin')
     return sorted(records, key=lambda row: row["data"])
 
 
@@ -478,11 +477,11 @@ def fetch_body_battery(client, start: str, end: str) -> list[dict]:
     records = []
     dates = list(date_range(start, end))
     total = len(dates)
-    log.info('garmin.sync.progress')
+    event('garmin.sync.progress', component='fetch_garmin')
     ok = 0
     for index, day in enumerate(dates):
         if index % 30 == 0:
-            log.info('garmin.sync.progress')
+            event('garmin.sync.progress', component='fetch_garmin')
         try:
             stats = client.get_stats(day) or {}
             charged = stats.get("bodyBatteryChargedValue")
@@ -500,7 +499,7 @@ def fetch_body_battery(client, start: str, end: str) -> list[dict]:
             pass
         if index % 30 == 29:
             time.sleep(0.2)
-    log.info('garmin.sync.progress')
+    event('garmin.sync.progress', component='fetch_garmin')
     return sorted(records, key=lambda row: row["data"])
 
 
@@ -528,8 +527,8 @@ def sync_garmin_to_db(client=None, full_mode: bool = False, end_date: str | None
         "kalorie_dzienne": FULL_START if full_mode else _start_date_for_table(conn, "kalorie_dzienne"),
     }
 
-    log.info('garmin.sync.progress')
-    log.info('garmin.sync.progress')
+    event('garmin.sync.progress', component='fetch_garmin')
+    event('garmin.sync.progress', component='fetch_garmin')
 
     own_client = client is None
     if own_client:
@@ -549,7 +548,7 @@ def sync_garmin_to_db(client=None, full_mode: bool = False, end_date: str | None
     results = {"ok": True, "datasets": {}, "end_date": target_end}
     try:
         for table, fetcher in dataset_fetchers:
-            log.info('garmin.sync.progress')
+            event('garmin.sync.progress', component='fetch_garmin')
             start = starts.get(table, FULL_START)
             chunks = date_chunks(start, target_end, chunk_days=30) if table == "kalorie_dzienne" else [(start, target_end)]
             stats = {"fetched": 0, "inserted": 0, "updated": 0, "unchanged": 0}
@@ -560,9 +559,9 @@ def sync_garmin_to_db(client=None, full_mode: bool = False, end_date: str | None
                 for key in stats:
                     stats[key] += batch[key]
                 if table == "kalorie_dzienne":
-                    log.info('garmin.sync.progress')
+                    event('garmin.sync.progress', component='fetch_garmin')
             results["datasets"][table] = stats
-            log.info('garmin.sync.progress')
+            event('garmin.sync.progress', component='fetch_garmin')
     except Exception as exc:
         results = {"error": str(exc)}
     finally:
@@ -579,12 +578,12 @@ def main() -> None:
     full_mode = "--full" in sys.argv
     result = sync_garmin_to_db(full_mode=full_mode)
     if "error" in result:
-        log.error('garmin.fetch_failed')
+        event('garmin.fetch_failed', component='fetch_garmin', level=logging.ERROR)
         raise SystemExit(1)
 
-    log.info('garmin.sync.progress')
+    event('garmin.sync.progress', component='fetch_garmin')
     for name, stats in result.get("datasets", {}).items():
-        log.info('garmin.sync.progress')
+        event('garmin.sync.progress', component='fetch_garmin')
 
 
 if __name__ == "__main__":

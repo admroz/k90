@@ -26,12 +26,12 @@ def test_operational_sinks_are_safe_and_errors_are_copied(tmp_path, monkeypatch)
     root.addHandler(handler)
     try:
         with profiling.request_scope('web'):
-            logger = logging.getLogger('web_runtime')
-            logger.warning('conversation.claim seq=%d channel=%s', 1, 'SECRET_HEALTH')
+            from logging_setup import event
+            event('conversation.claim', component='web_runtime', level=logging.WARNING)
             try:
                 raise ValueError('SECRET_HEALTH https://private.invalid TOKEN base64')
-            except ValueError:
-                logger.exception('conversation.worker_error')
+            except ValueError as exc:
+                event('conversation.worker_error', component='web_runtime', error=exc)
             logging.getLogger('httpx').warning('SECRET_HEALTH https://private.invalid TOKEN base64')
         app = tmp_path / 'logs' / 'app.log'
         assert app.exists(), 'operational logs must be durable with profiling disabled'
@@ -341,8 +341,9 @@ os.environ.pop('K90_PROFILING_ENABLED', None)
 importlib.import_module(sys.argv[1])
 try:
     raise ValueError('SECRET_BOOTSTRAP')
-except ValueError:
-    logging.getLogger(sys.argv[1]).exception('conversation.worker_error')
+except ValueError as exc:
+    from logging_setup import event
+    event('conversation.worker_error', component=sys.argv[1], error=exc)
 '''
     for module in ('webapp', 'telegram_adapter', 'agent', 'server'):
         directory = tmp_path/module
@@ -392,7 +393,7 @@ def test_cli_command_and_legacy_telegram_have_generated_scope(temp_db, tmp_path,
     answers = iter(['/help','quit'])
     monkeypatch.setattr('builtins.input', lambda _: next(answers))
     def command(_):
-        logging.getLogger('agent').info('agent.failure_record.unavailable')
+        __import__('logging_setup').event('agent.failure_record.unavailable')
         return 'synthetic help'
     monkeypatch.setattr(agent, 'handle_command', command)
     start = len((tmp_path/'logs'/'app.log').read_text().splitlines()) if (tmp_path/'logs'/'app.log').exists() else 0
@@ -401,7 +402,7 @@ def test_cli_command_and_legacy_telegram_have_generated_scope(temp_db, tmp_path,
     monkeypatch.setattr(server, 'handle_command', command)
     class API:
         def send_text(self, *args):
-            logging.getLogger('server').info('telegram.stopped')
+            __import__('logging_setup').event('telegram.stopped', component='server')
     server.handle_telegram_message(API(), {'chat':{'id':321,'type':'private'}, 'from':{'id':321}, 'text':'/help'})
     rows = [json.loads(s) for s in (tmp_path/'logs'/'app.log').read_text().splitlines()]
     rows = rows[start:]
@@ -412,35 +413,6 @@ def test_cli_command_and_legacy_telegram_have_generated_scope(temp_db, tmp_path,
     assert not (tmp_path/'logs'/'profiling.jsonl').exists()
 
 
-def test_arbitrary_objects_and_extra_fields_never_reach_any_sink(tmp_path, monkeypatch, capsys):
-    import json
-    import logging_setup as logs
-    import profiling
-    monkeypatch.setenv('DATA_DIR', str(tmp_path))
-    monkeypatch.setenv('K90_PROFILING_ENABLED', 'true')
-    class Secret:
-        def __str__(self): raise AssertionError('formatter touched private object')
-        def __repr__(self): raise AssertionError('formatter touched private object')
-    class SecretError(Exception):
-        def __str__(self): raise AssertionError('formatter touched private exception')
-    with profiling.request_scope('web'):
-        try:
-            raise SecretError()
-        except SecretError:
-            logging.getLogger('SECRET_COMPONENT').exception(Secret(), Secret(), stack_info=True)
-        logging.getLogger('web_runtime').error('conversation.worker_error', extra={'k90_fields':{
-            'http_status':True, 'provider_request_id':'https://SECRET_URL.invalid',
-            'exception_category':'SECRET_CLASS', 'error_code':'SECRET_CODE',
-            'mutation_outcome':'ok', 'body':'data:image/png;base64,U0VDUkVUX0lNQUdF',
-            'response_outcome':{'SECRET':'BODY'}}})
-    content = capsys.readouterr().err
-    for name in logs.LIMITS:
-        path = tmp_path/'logs'/name
-        content += path.read_text() if path.exists() else ''
-    assert not any(s in content for s in ('SECRET', 'U0VDUkVU', 'Traceback', 'base64', 'AssertionError'))
-    rows = [json.loads(s) for s in (tmp_path/'logs'/'errors.log').read_text().splitlines()]
-    assert rows[0]['exception_category'] == 'unknown'
-    assert not any(key in rows[1] for key in ('http_status','provider_request_id','mutation_outcome','response_outcome'))
 
 
 def test_dispatcher_caught_exception_has_safe_category_and_error_copy(tmp_path, monkeypatch):

@@ -99,60 +99,51 @@ def check_photo_history_in_runtime():
 check_photo_history_in_runtime()
 
 def check_observability_in_runtime():
-    import io, json, logging, os, tempfile
+    import json, os, tempfile
     from unittest.mock import patch
     from k90_memory import PrivacyError, PrivacyPolicy
     from outbound_policy import sanitize_payload
     from web_runtime import init_runtime, enqueue, ConversationWorker, timeline
     from agent import save_history
-    capture = io.StringIO()
-    logger = logging.getLogger('agent')
-    handler = logging.StreamHandler(capture)
-    previous = logger.level
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-    try:
-        with tempfile.TemporaryDirectory() as scratch, patch.dict(os.environ, {
-                'DB_PATH': scratch + '/synthetic.db', 'DATA_DIR': scratch,
-                'CONVERSATION_USER_ID': 'synthetic-smoke',
-                'K90_TEXT_FILTER_ENABLED': 'false', 'K90_PROFILING_ENABLED': 'true',
-                'K90_MEMORY_BACKEND': 'disabled'}):
-            assert sanitize_payload('synthetic@example.invalid') == 'synthetic@example.invalid'
-            try:
-                PrivacyPolicy().sanitize_text('Bearer synthetic-secret')
-            except PrivacyError:
-                pass
-            else:
-                raise AssertionError('HS baseline was disabled')
-            init_runtime()
-            first = enqueue('web:synthetic-failed', 'synthetic first')
-            def fail(_):
-                raise RuntimeError('private diagnostic must not escape')
-            assert ConversationWorker(fail).run_once()
-            second = enqueue('telegram:synthetic-later', 'synthetic later', 'telegram', 123)
-            def succeed(content):
-                save_history('synthetic-smoke', content, 'synthetic answer')
-                return 'synthetic answer'
-            assert ConversationWorker(succeed).run_once()
-            rows = timeline('synthetic-smoke')
-            assert len(rows) == 4 and rows[1]['state'] == 'failed' and rows[-1]['state'] == 'done'
-            assert rows[-1]['content'] == 'synthetic answer'
-            assert timeline('synthetic-other') == []
-            assert timeline('synthetic-smoke', rows[2]['id']) == rows[:2]
-            assert timeline('synthetic-smoke') == rows
-            from pathlib import Path
-            events = [json.loads(line) for line in (Path(scratch)/'logs'/'profiling.jsonl').read_text().splitlines()]
-            assert 'agent.phase' not in capture.getvalue()
-            assert 'logging_setup.py' in __import__('sys').modules['logging_setup'].__file__
-            ids = {first['profile_id'], second['profile_id']}
-            correlated = [r for r in events if r['request_id'] in ids]
-            assert {r['request_id'] for r in correlated} == ids
-            assert {'queue_wait', 'processing', 'persistence'} <= {r['stage'] for r in correlated}
-            assert 'private diagnostic' not in capture.getvalue()
-            assert 'synthetic@example.invalid' not in capture.getvalue()
-    finally:
-        logger.removeHandler(handler)
-        logger.setLevel(previous)
+    with tempfile.TemporaryDirectory() as scratch, patch.dict(os.environ, {
+            'DB_PATH': scratch + '/synthetic.db', 'DATA_DIR': scratch,
+            'CONVERSATION_USER_ID': 'synthetic-smoke',
+            'K90_TEXT_FILTER_ENABLED': 'false', 'K90_PROFILING_ENABLED': 'true',
+            'K90_MEMORY_BACKEND': 'disabled'}):
+        assert sanitize_payload('synthetic@example.invalid') == 'synthetic@example.invalid'
+        try:
+            PrivacyPolicy().sanitize_text('Bearer synthetic-secret')
+        except PrivacyError:
+            pass
+        else:
+            raise AssertionError('HS baseline was disabled')
+        init_runtime()
+        first = enqueue('web:synthetic-failed', 'synthetic first')
+        def fail(_):
+            raise RuntimeError('private diagnostic must not escape')
+        assert ConversationWorker(fail).run_once()
+        second = enqueue('telegram:synthetic-later', 'synthetic later', 'telegram', 123)
+        def succeed(content):
+            save_history('synthetic-smoke', content, 'synthetic answer')
+            return 'synthetic answer'
+        assert ConversationWorker(succeed).run_once()
+        rows = timeline('synthetic-smoke')
+        assert len(rows) == 4 and rows[1]['state'] == 'failed' and rows[-1]['state'] == 'done'
+        assert rows[-1]['content'] == 'synthetic answer'
+        assert timeline('synthetic-other') == []
+        assert timeline('synthetic-smoke', rows[2]['id']) == rows[:2]
+        assert timeline('synthetic-smoke') == rows
+        from pathlib import Path
+        events = [json.loads(line) for line in (Path(scratch)/'logs'/'profiling.jsonl').read_text().splitlines()]
+        operational = (Path(scratch)/'logs/app.log').read_text()
+        assert '"component":"profiling"' not in operational
+        assert 'logging_setup.py' in __import__('sys').modules['logging_setup'].__file__
+        ids = {first['profile_id'], second['profile_id']}
+        correlated = [r for r in events if r['request_id'] in ids]
+        assert {r['request_id'] for r in correlated} == ids
+        assert {'queue_wait', 'processing', 'persistence'} <= {r['stage'] for r in correlated}
+        assert 'private diagnostic' not in operational + (Path(scratch)/'logs/errors.log').read_text()
+        assert 'synthetic@example.invalid' not in operational + (Path(scratch)/'logs/errors.log').read_text()
     print('Timeline, model filter switch, HS baseline and profiling runtime passed (synthetic offline).')
 
 check_observability_in_runtime()

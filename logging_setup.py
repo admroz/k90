@@ -5,7 +5,7 @@ Logging failures are deliberately isolated from application results.
 """
 import fcntl
 import logging
-import math
+from logging.handlers import RotatingFileHandler
 import re
 from datetime import datetime, timezone
 import json
@@ -43,112 +43,6 @@ def _open(path):
     except BaseException:
         os.close(fd)
         raise
-
-
-def write_record(name, record):
-    """Internal sink. Callers supply validated, content-free records only."""
-    try:
-        limit = LIMITS[name]
-        payload = (json.dumps(record, separators=(',', ':'), allow_nan=False) + '\n').encode('utf-8')
-        if len(payload) > min(limit, 8192):
-            return
-        directory = Path(os.getenv('DATA_DIR', str(Path(__file__).parent / 'data'))) / 'logs'
-        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-        if directory.is_symlink():
-            raise OSError('invalid_log_directory')
-        directory.chmod(0o700)
-        lock = _open(directory / (name + '.lock'))
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            path = directory / name
-            fd = _open(path)
-            try:
-                if os.fstat(fd).st_size + len(payload) > limit:
-                    os.close(fd)
-                    fd = None
-                    for index in range(BACKUPS, 0, -1):
-                        source = path if index == 1 else directory / (name + '.' + str(index - 1))
-                        target = directory / (name + '.' + str(index))
-                        if source.exists() or source.is_symlink():
-                            os.replace(source, target)
-                    fd = _open(path)
-                view = memoryview(payload)
-                while view:
-                    count = os.write(fd, view)
-                    if count <= 0:
-                        raise OSError('log_write_failed')
-                    view = view[count:]
-            finally:
-                if fd is not None:
-                    os.close(fd)
-        finally:
-            os.close(lock)
-    except Exception:
-        _alarm()
-
-# Exact repository templates: arguments are never interpolated.
-TEMPLATES = {'agent.error sender=%s error=%s': 'agent.error',
- 'agent.failure_record.unavailable': 'agent.failure_record.unavailable',
- 'agent.finish user=%s round=%d response_chars=%d refresh=%s': 'agent.finish',
- 'agent.max_rounds user=%s rounds=%d': 'agent.max_rounds',
- 'agent.start user=%s model=%s reasoning_effort=%s input=%s history_records=%d context_sections=%d context_chars=%d summary_chars=%d': 'agent.start',
- 'agent.tool_result user=%s tool=%s ok=%s': 'agent.tool_result',
- 'agent.tools user=%s round=%d tool_calls=%s': 'agent.tools',
- 'agent.usage user=%s round=%d prompt_tokens=%s completion_tokens=%s': 'agent.usage',
- 'conversation.claim seq=%d channel=%s': 'conversation.claim',
- 'conversation.failed job_id=%d': 'conversation.failed',
- 'conversation.sync_failed source=%s': 'conversation.sync_failed',
- 'conversation.worker_error': 'conversation.worker_error',
- 'garmin.auto_sync_failed sender=%s error=%s': 'garmin.auto_sync_failed',
- 'garmin.auto_sync_no_changes sender=%s': 'garmin.auto_sync_no_changes',
- 'garmin.fetch_failed': 'garmin.fetch_failed',
- 'garmin.login_failed': 'garmin.login_failed',
- 'garmin.sync finish trigger=%s fetched=%d inserted=%d updated=%d unchanged=%d changed=%s': 'garmin.sync',
- 'garmin.sync start trigger=%s': 'garmin.sync',
- 'garmin.sync trigger=%s dataset=%s fetched=%d inserted=%d updated=%d unchanged=%d': 'garmin.sync',
- 'garmin.sync trigger=%s error=%s': 'garmin.sync',
- 'garmin.sync.progress': 'garmin.sync.progress',
- 'libre.auto_sync_failed sender=%s error=%s': 'libre.auto_sync_failed',
- 'libre.auto_sync_no_changes sender=%s': 'libre.auto_sync_no_changes',
- 'libre.fetch_failed': 'libre.fetch_failed',
- 'libre.sync finish trigger=%s fetched=%d inserted=%d updated=%d unchanged=%d changed=%s': 'libre.sync',
- 'libre.sync skipped trigger=%s reason=disabled': 'libre.sync',
- 'libre.sync start trigger=%s': 'libre.sync',
- 'libre.sync trigger=%s dataset=%s fetched=%d inserted=%d updated=%d unchanged=%d': 'libre.sync',
- 'libre.sync trigger=%s error=%s': 'libre.sync',
- 'libre.sync.progress': 'libre.sync.progress',
- 'memory.worker.unavailable': 'memory.worker.unavailable',
- 'summary.async_refresh trigger=tool_call sender=%s': 'summary.async_refresh',
- 'summary.attempt model=%s attempt=%d finish_reason=%s chars=%d': 'summary.attempt',
- 'summary.auto_sync_refresh_failed': 'summary.auto_sync_refresh_failed',
- 'summary.fallback trigger=%s finish_reason=%s': 'summary.fallback',
- 'summary.refresh trigger=%s input_chars=%d files=%d': 'summary.refresh',
- 'summary.refresh_failed': 'summary.refresh_failed',
- 'summary.saved trigger=%s chars=%d attempts=%d': 'summary.saved',
- 'summary.startup_refresh_failed': 'summary.startup_refresh_failed',
- 'summary.startup_refresh_failed error=%s': 'summary.startup_refresh_failed',
- 'telegram.allowed_user_missing; messages will be rejected. Send a message to the bot, read user_id from the log, set TELEGRAM_ALLOWED_USER_ID and restart.': 'telegram.allowed_user_missing;',
- 'telegram.connected bot=@%s': 'telegram.connected',
- 'telegram.disabled reason=missing_configuration': 'telegram.disabled',
- 'telegram.image mime=%s bytes=%d': 'telegram.image',
- 'telegram.image_error error=%s': 'telegram.image_error',
- 'telegram.image_rejected reason=%s bytes=%d': 'telegram.image_rejected',
- 'telegram.message chat_id=%s user_id=%s text_chars=%d image=%s': 'telegram.message',
- 'telegram.poll_error error=%s retry_in=%s': 'telegram.poll_error',
- 'telegram.reject reason=non_private chat_id=%s user_id=%s': 'telegram.reject',
- 'telegram.reject reason=not_allowed chat_id=%s user_id=%s': 'telegram.reject',
- 'telegram.response chat_id=%s chars=%d refresh=%s': 'telegram.response',
- 'telegram.sent chat_id=%s chars=%d': 'telegram.sent',
- 'telegram.stopped': 'telegram.stopped',
- 'telegram.unavailable error_type=%s retry=%s': 'telegram.unavailable',
- 'telegram.update_error update_id=%s error=%s': 'telegram.update_error'}
-
-
-COMPONENTS = frozenset(('agent', 'web_runtime', 'webapp', 'telegram_adapter', 'server',
-    'summary', 'memory_runtime', 'tools', 'tools.garmin', 'tools.libre',
-    'outbound_policy', 'responses_api', 'subscription_api', 'fetch_garmin', 'fetch_libre', 'runtime'))
-_CONFIG_LOCK = threading.RLock()
-_CONFIGURED = False
 
 
 class SafeTransportError(RuntimeError):
@@ -230,121 +124,6 @@ def _context():
     return module.CURRENT.get() if module else None
 
 
-def _fields(value):
-    # Foreign factories/extra fields are untrusted even when keys look internal.
-    return safe_fields({key:item for key,item in value.items() if type(key) is str}) if type(value) is dict else {}
-
-
-def _normalize(record):
-    """Copy only validated fields AFTER Logger.makeRecord has merged extra."""
-    data = vars(record)
-    name, message = data.get('name'), data.get('msg')
-    component = name if type(name) is str and name in COMPONENTS else 'library'
-    allowed = EVENTS | frozenset(TEMPLATES.values())
-    event_name = (message if message in allowed else TEMPLATES.get(message, 'runtime.notice')) if type(message) is str else 'runtime.notice'
-    level = data.get('levelno')
-    level = level if type(level) is int and level in (10,20,30,40,50) else 40
-    safe = logging.LogRecord(component, level, '', 0, event_name, (), None)
-    safe.levelname = {10:'DEBUG',20:'INFO',30:'WARNING',40:'ERROR',50:'CRITICAL'}[level]
-    created = data.get('created')
-    if type(created) in (int, float) and math.isfinite(created) and 0 <= created <= 32503680000:
-        safe.created = created
-    safe.threadName, safe.processName = 'worker', 'process'
-    state = _context() or {}
-    context = {}
-    for key in ('request_id', 'scope_id'):
-        value = state.get(key)
-        context[key] = value if type(value) is str and re.fullmatch(r'[0-9a-f]{32}', value) else None
-    job = state.get('job_id')
-    context['job_id'] = job if type(job) is int and job > 0 else None
-    context['channel'] = state.get('channel') if state.get('channel') in ('web','telegram','cli','background') else None
-    context['scope'] = state.get('scope') if state.get('scope') in ('processing','submission','delivery','background') else None
-    context.update(_fields({key:state.get(key) for key in ('round_index','tool_index','operation_id')}))
-    safe.k90_context = context
-    exc_info = data.get('exc_info')
-    if type(exc_info) is tuple and len(exc_info) == 3 and isinstance(exc_info[1], BaseException):
-        safe.k90_meta = exception_metadata(exc_info[1])
-    else:
-        safe.k90_meta = _fields(data.get('k90_meta'))
-    safe.k90_fields = _fields(data.get('k90_fields'))
-    return safe
-
-
-def _operational_record(record):
-    safe = _normalize(record)
-    value = dict(utc=datetime.fromtimestamp(safe.created, timezone.utc).isoformat(),
-                 level=safe.levelname, component=safe.name, event=safe.msg)
-    value.update(safe.k90_meta)
-    value.update(safe.k90_fields)
-    value.update(safe.k90_context)
-    return value
-
-
-class SafeHandler(logging.Handler):
-    def emit(self, record):
-        try:
-            value = _operational_record(record)
-            write_record('app.log', value)
-            if record.levelno >= logging.ERROR:
-                write_record('errors.log', value)
-        except Exception:
-            _alarm()
-
-
-class SafeConsole(logging.StreamHandler):
-    def emit(self, record):
-        try:
-            sys.stderr.write(json.dumps(_operational_record(record), separators=(',', ':')) + '\n')
-            sys.stderr.flush()
-        except Exception:
-            _alarm()
-
-
-def _dispatch(logger, record):
-    """Own standard logging emission, including late non-propagating loggers.
-
-    Arbitrary library handlers/formatters are not output sinks. This boundary is
-    after extra and logger filters, and is independent of the record factory.
-    """
-    try:
-        safe = _normalize(record)
-        _DURABLE.handle(safe)
-        _CONSOLE.handle(safe)
-        # Preserve pytest's in-memory observers with the sanitized copy only.
-        # Production output is exclusively the two controlled handlers above.
-        for handler in tuple(logging.getLogger().handlers):
-            if handler.__class__.__module__.startswith('_pytest.') and safe.levelno >= handler.level:
-                try:
-                    handler.handle(safe)
-                except Exception:
-                    _alarm()
-    except Exception:
-        _alarm()
-
-
-_DURABLE = SafeHandler()
-_CONSOLE = SafeConsole()
-
-
-def configure_logging():
-    """Establish safe output first, with no dependency on factory installation."""
-    global _CONFIGURED
-    # One class-level dispatch boundary covers existing and future standard
-    # loggers without scanning the registry or calling arbitrary handlers.
-    logging.Logger.callHandlers = _dispatch
-    try:
-        with _CONFIG_LOCK:
-            sys.excepthook = _uncaught
-            threading.excepthook = _thread_uncaught
-            if not _CONFIGURED:
-                logging.getLogger().setLevel(logging.INFO)
-                _CONFIGURED = True
-    except Exception:
-        _alarm()
-
-
-EVENTS = frozenset(('telegram.submitted', 'telegram.ingress_failed', 'telegram.unavailable', 'provider.failed', 'stage.failed', 'tool.failed', 'tool.completed', 'response.completed',
-    'runtime.unhandled', 'response.failed', 'delivery.completed', 'delivery.failed', 'job.completed', 'job.failed'))
 CODES = frozenset(('runtime_failure', 'provider_request_failed', 'stage_failed', 'tool_returned_error', 'transport_request_failed'))
 CATEGORIES = frozenset(('unknown','timeout','connection','validation','permission','io','http','protocol'))
 
@@ -352,7 +131,9 @@ CATEGORIES = frozenset(('unknown','timeout','connection','validation','permissio
 def safe_fields(fields):
     result = {}
     for key, value in fields.items():
-        if key == 'backend_request_id' and type(value) is str and re.fullmatch(r'[0-9a-f]{32}', value):
+        if key in ('fetched','inserted','updated','unchanged','attempts','prompt_tokens','completion_tokens','history_records','context_sections','context_chars','summary_chars','input_chars','response_chars','text_chars','chars','files','bytes') and type(value) is int and 0 <= value <= 10**12:
+            result[key] = value
+        elif key == 'backend_request_id' and type(value) is str and re.fullmatch(r'[0-9a-f]{32}', value):
             result[key] = value
         elif key == 'backend_job_id' and type(value) is int and value > 0:
             result[key] = value
@@ -377,22 +158,188 @@ def safe_fields(fields):
     return result
 
 
-def event(name, *, component='agent', error=None, **fields):
-    """Emit a fixed event and typed fields. No caller-supplied message is accepted."""
+EVENTS = frozenset((
+    'agent.error', 'agent.failure_record.unavailable', 'agent.finish',
+    'agent.max_rounds', 'agent.start', 'agent.tool_result',
+    'agent.tools', 'agent.usage', 'conversation.claim',
+    'conversation.failed', 'conversation.sync_failed', 'conversation.worker_error',
+    'delivery.completed', 'delivery.failed', 'garmin.auto_sync_failed',
+    'garmin.auto_sync_no_changes', 'garmin.fetch_failed', 'garmin.login_failed',
+    'garmin.sync', 'garmin.sync.progress', 'job.completed',
+    'job.failed', 'libre.auto_sync_failed', 'libre.auto_sync_no_changes',
+    'libre.fetch_failed', 'libre.sync', 'libre.sync.progress',
+    'memory.worker.unavailable', 'provider.failed', 'response.completed',
+    'response.failed', 'runtime.unhandled', 'stage.failed',
+    'summary.async_refresh', 'summary.attempt', 'summary.auto_sync_refresh_failed',
+    'summary.fallback', 'summary.refresh', 'summary.refresh_failed',
+    'summary.saved', 'summary.startup_refresh_failed', 'telegram.allowed_user_missing',
+    'telegram.connected', 'telegram.disabled', 'telegram.image',
+    'telegram.image_error', 'telegram.image_rejected', 'telegram.ingress_failed',
+    'telegram.message', 'telegram.poll_error', 'telegram.reject',
+    'telegram.response', 'telegram.sent', 'telegram.stopped',
+    'telegram.submitted', 'telegram.unavailable', 'telegram.update_error',
+    'tool.completed', 'tool.failed',
+))
+COMPONENTS = frozenset(('agent', 'web_runtime', 'webapp', 'telegram_adapter', 'server',
+    'summary', 'memory_runtime', 'tools', 'tools.garmin', 'tools.libre',
+    'outbound_policy', 'responses_api', 'subscription_api', 'fetch_garmin', 'fetch_libre', 'runtime'))
+_CONFIG_LOCK = threading.RLock()
+_CONFIGURED = False
+
+
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        payload = json.dumps(record.safe_record, separators=(',', ':'), allow_nan=False)
+        if len((payload+'\n').encode('utf-8')) > 8192:
+            raise ValueError('record_too_large')
+        return payload
+
+
+class FlockRotatingFileHandler(RotatingFileHandler):
+    """Reopen under the shared lock so both container processes rotate together."""
+    def _open(self):
+        return os.fdopen(_open(self.baseFilename), 'a', encoding='utf-8')
+
+    def emit(self, record):
+        lock = None
+        try:
+            directory = Path(self.baseFilename).parent
+            directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+            if directory.is_symlink():
+                raise OSError('invalid_log_directory')
+            directory.chmod(0o700)
+            lock = _open(self.baseFilename + '.lock')
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            # BaseRotatingHandler handles format/rollover/write failures here.
+            super().emit(record)
+        except Exception:
+            self.handleError(record)
+        finally:
+            try:
+                if self.stream is not None:
+                    self.stream.close()
+            except Exception:
+                _alarm()
+            finally:
+                self.stream = None
+                if lock is not None:
+                    os.close(lock)
+
+    def handleError(self, record):
+        _alarm()
+
+
+class ConsoleHandler(logging.StreamHandler):
+    def emit(self, record):
+        # Resolve stderr at emission, including application launch/test capture.
+        self.stream = sys.stderr
+        super().emit(record)
+
+    def handleError(self, record):
+        _alarm()
+
+
+class FrameworkErrorHandler(logging.Handler):
+    def emit(self, record):
+        error = record.exc_info[1] if record.exc_info else None
+        event('runtime.unhandled', component='runtime', error=error, level=logging.ERROR)
+
+
+KNOWN_LIBRARIES = ('litellm', 'LiteLLM', 'LiteLLM Router', 'LiteLLM Proxy',
+    'openai', 'httpx', 'httpcore', 'requests', 'urllib3', 'garminconnect', 'garth', 'libre_link_up')
+_DESTINATION = None
+
+
+def silence_libraries():
+    """Known SDK settings, also applied after LiteLLM's import-time setup."""
+    for name in KNOWN_LIBRARIES:
+        logger = logging.getLogger(name)
+        logger.handlers[:] = [logging.NullHandler()]
+        logger.setLevel(logging.CRITICAL + 1)
+        logger.propagate = False
+        logger.disabled = True
+
+
+def configure_logging():
+    """Configure owned sinks and the finite SDK/framework launch boundaries."""
+    global _CONFIGURED, _DESTINATION
+    try:
+        with _CONFIG_LOCK:
+            directory = Path(os.getenv('DATA_DIR', str(Path(__file__).parent/'data'))) / 'logs'
+            destination = (str(directory), tuple(LIMITS.items()), BACKUPS)
+            if _CONFIGURED and destination == _DESTINATION:
+                return
+            for name in ('k90.app', 'k90.profile'):
+                logger = logging.getLogger(name)
+                for handler in logger.handlers:
+                    handler.close()
+                logger.handlers.clear()
+                logger.setLevel(logging.DEBUG)
+                logger.propagate = False
+            formatter = JsonFormatter()
+            for filename, limit in LIMITS.items():
+                handler = FlockRotatingFileHandler(directory/filename, maxBytes=limit,
+                    backupCount=BACKUPS, delay=True, encoding='utf-8')
+                handler.setFormatter(formatter)
+                handler.setLevel(logging.ERROR if filename == 'errors.log' else logging.DEBUG)
+                logging.getLogger('k90.profile' if filename == 'profiling.jsonl' else 'k90.app').addHandler(handler)
+            console = ConsoleHandler()
+            console.setFormatter(formatter)
+            logging.getLogger('k90.app').addHandler(console)
+            root = logging.getLogger()
+            root.handlers[:] = [logging.NullHandler()]
+            silence_libraries()
+            access = logging.getLogger('uvicorn.access')
+            access.handlers[:] = [logging.NullHandler()]
+            access.propagate = False
+            access.disabled = True
+            framework = logging.getLogger('uvicorn.error')
+            framework.handlers[:] = [FrameworkErrorHandler()]
+            framework.setLevel(logging.ERROR)
+            framework.propagate = False
+            sys.excepthook = _uncaught
+            threading.excepthook = _thread_uncaught
+            _DESTINATION = destination
+            _CONFIGURED = True
+    except Exception:
+        _alarm()
+
+
+def write_record(name, record):
+    """Internal bridge: callers supply a constructed content-free record."""
+    try:
+        configure_logging()
+        logger = logging.getLogger('k90.profile' if name == 'profiling.jsonl' else 'k90.app')
+        level = {'DEBUG':10, 'INFO':20, 'WARNING':30, 'ERROR':40, 'CRITICAL':50}.get(record.get('level'), 20)
+        logger.log(level, '', extra={'safe_record': record})
+    except Exception:
+        _alarm()
+
+
+def event(name, *, component='agent', error=None, level=None, **fields):
+    """Explicit application event; never interpolate private messages or errors."""
     try:
         if name not in EVENTS or component not in COMPONENTS:
             return
-        configure_logging()
+        if level is None:
+            level = logging.ERROR if error is not None or name.endswith('.failed') or fields.get('tool_outcome') == 'error' else logging.INFO
+        if level not in (10,20,30,40,50):
+            return
+        record = dict(utc=datetime.now(timezone.utc).isoformat(),
+            level={10:'DEBUG',20:'INFO',30:'WARNING',40:'ERROR',50:'CRITICAL'}[level], component=component, event=name)
         if error is not None:
-            fields = {**exception_metadata(error), **fields}
-        logging.getLogger(component).log(logging.ERROR if error is not None or name.endswith('.failed') or fields.get('tool_outcome') == 'error' else logging.INFO,
-            name, extra={'k90_fields':safe_fields(fields)})
+            record.update(exception_metadata(error))
+        record.update(safe_fields(fields))
+        state = _context() or {}
+        for key in ('request_id','scope_id','job_id','channel','scope'):
+            record[key] = state.get(key)
+        record.update(safe_fields({key:state.get(key) for key in ('round_index','tool_index','operation_id')}))
+        write_record('app.log', record)
     except Exception:
         _alarm()
 
 
 def _uncaught(exc_type, exc, traceback):
-    # Python's default hook prints arbitrary exception text and source lines.
     event('runtime.unhandled', component='runtime', error=exc)
 
 

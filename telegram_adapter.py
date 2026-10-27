@@ -14,7 +14,6 @@ import requests
 from server import TelegramAPI, _image_from_message, split_message
 from tools.images import MAX_IMAGE_BYTES, image_mime_type
 
-log = logging.getLogger('telegram_adapter')
 
 
 class BackendClient:
@@ -65,11 +64,7 @@ def _accept_update(api, backend, update):
         # Detect the same signatures checked by the backend before enqueueing.
         mime = image_mime_type(raw)
         if mime is None or len(raw) > MAX_IMAGE_BYTES:
-            log.warning(
-                "telegram.image_rejected reason=%s bytes=%d",
-                "too_large" if len(raw) > MAX_IMAGE_BYTES else "unsupported_format",
-                len(raw),
-            )
+            event('telegram.image_rejected', component='telegram_adapter', level=logging.WARNING, bytes=len(raw))
             # Acknowledge unsupported input without getting stuck on the same update forever.
             body["text"] = (
                 "Użytkownik przesłał obraz w nieobsługiwanym formacie lub większy niż 5 MB. Poproś o JPG, PNG lub WebP do 5 MB. "
@@ -77,7 +72,7 @@ def _accept_update(api, backend, update):
             )
         else:
             body["image"] = f"data:{mime};base64," + base64.b64encode(raw).decode()
-            log.info("telegram.image mime=%s bytes=%d", mime, len(raw))
+            event('telegram.image', component='telegram_adapter', bytes=len(raw))
     accepted = backend.call("POST", "/internal/messages", json=body)
     if type(accepted) is dict:
         event('telegram.submitted', component='telegram_adapter',
@@ -109,7 +104,7 @@ def main():
     if os.getenv("TELEGRAM_ENABLED", "true") == "false":
         return
     if not os.getenv("TELEGRAM_BOT_TOKEN") or not os.getenv("TELEGRAM_ALLOWED_USER_ID"):
-        log.error("telegram.disabled reason=missing_configuration")
+        event('telegram.disabled', component='telegram_adapter', level=logging.ERROR)
         return
     backend = BackendClient()
     api = TelegramAPI(os.environ["TELEGRAM_BOT_TOKEN"])

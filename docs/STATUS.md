@@ -1,5 +1,17 @@
 # k90 — bieżący status zadania
 
+## Safe runtime logs — simplification, 2026-10-27
+
+Author implementation replaces the historical global logging interception below:
+standard owned loggers, explicit application events, stdlib rotating handler
+with a shared per-stream flock, finite SDK settings and narrow runtime hooks.
+Historical reports remain evidence for their old source only; their arbitrary
+foreign-handler/factory guarantees are superseded. Current source verification
+and remaining independent review/image gates are recorded in
+[the new evidence entry](review-evidence/safe-runtime-logs-simplified.md).
+No PR, image publication or deployment.
+
+
 ## Safe runtime logs — 2026-10-27
 
 Emission-boundary author checkpoint on feat/safe-runtime-logs-20261027; tested
