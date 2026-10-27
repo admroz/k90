@@ -32,3 +32,16 @@ assertions now inspect actual operational files. Docker COPY still includes
 Remaining gates: fresh independent same-source review, exact-image CI/build
 and network-none smoke with persistent-volume restart/recreate, then the
 coordinator's PR decision. No image publication, merge or deployment.
+
+## Fetcher diagnostic correction — 2026-10-27
+
+Fresh independent review found HTTP diagnostics lost when the Libre fetcher
+caught a client error and returned its string. The analogous outer Garmin
+fetcher catch had the same loss. Both catches now emit their existing safe
+failure event with the exception before preserving the original error result.
+No auth, retry, provider or result behavior changed. Real synthetic client
+regressions cover both boundaries with profiling on/off, HTTP503/category/code,
+correlation, error copies and private canaries. Tight RED reproduced all four
+cases plus the unchanged independent Libre probe. Focused GREEN evidence and
+final SHA are in the private point3-simplify-fix1 artifacts; independent follow-up
+and final normal CI/image acceptance remain pending. No duplicate full suite.

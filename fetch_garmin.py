@@ -563,6 +563,7 @@ def sync_garmin_to_db(client=None, full_mode: bool = False, end_date: str | None
             results["datasets"][table] = stats
             event('garmin.sync.progress', component='fetch_garmin')
     except Exception as exc:
+        event('garmin.fetch_failed', component='fetch_garmin', level=logging.ERROR, error=exc)
         results = {"error": str(exc)}
     finally:
         try:

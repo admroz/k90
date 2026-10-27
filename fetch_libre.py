@@ -222,6 +222,7 @@ def sync_libre_to_db(client: LibreLinkUpClient | None = None) -> dict:
         conn.commit()
         return {"ok": True, "datasets": {"glukoza_libre": stats}}
     except Exception as exc:
+        event('libre.fetch_failed', component='fetch_libre', level=logging.ERROR, error=exc)
         return {"error": str(exc)}
     finally:
         try:
