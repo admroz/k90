@@ -37,6 +37,8 @@ def test_sync_garmin_data_updates_status_and_totals(monkeypatch, temp_db):
         },
     )
 
+    # Explicit opt-in only after the source function above is replaced by a fake.
+    monkeypatch.setenv("K90_SYNC_ENABLED", "true")
     result = sync_garmin_data(trigger="test")
 
     assert result["changed"] is True
@@ -85,6 +87,8 @@ def test_garmin_sync_converts_unexpected_exception_to_error(monkeypatch, temp_db
         lambda: (_ for _ in ()).throw(RuntimeError("rate limited")),
     )
 
+    # Explicit opt-in only after the source function above is replaced by a fake.
+    monkeypatch.setenv("K90_SYNC_ENABLED", "true")
     result = sync_garmin_data(trigger="test")
 
     assert result == {"error": "RuntimeError: rate limited"}
