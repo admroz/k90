@@ -1,5 +1,16 @@
 # k90 — bieżący status zadania
 
+## Safe runtime logs — 2026-10-27
+
+Author implementation checkpoint on feat/safe-runtime-logs-20261027; tested source
+`77f7fbc06f7486d79ad5a21a86f8bc7f889f113b`. Offline synthetic regression:
+680 Python passed / 1 existing skip; Node25 passed and JS syntax exit0.
+Separate bounded app/error/profiling files, safe exception boundary and generated
+correlation even with profiling disabled. Mutation outcome remains unknown without
+transaction evidence; tool success is not proof of commit. Fresh independent
+verification, exact-image CI/smoke and owner deployment/live checks remain pending.
+No PR, publication or deployment. Evidence: [safe-runtime-logs.md](review-evidence/safe-runtime-logs.md).
+
 ## Feature base integration — 2026-10-26
 
 Feature-only synchronization of approved catalog HEAD `3be6b1395133ed006caece859a5b058ed215b4d7`
