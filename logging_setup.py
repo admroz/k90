@@ -245,6 +245,7 @@ def _normalize(record):
     level = data.get('levelno')
     level = level if type(level) is int and level in (10,20,30,40,50) else 40
     safe = logging.LogRecord(component, level, '', 0, event_name, (), None)
+    safe.levelname = {10:'DEBUG',20:'INFO',30:'WARNING',40:'ERROR',50:'CRITICAL'}[level]
     created = data.get('created')
     if type(created) in (int, float) and math.isfinite(created) and 0 <= created <= 32503680000:
         safe.created = created

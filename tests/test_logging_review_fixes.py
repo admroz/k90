@@ -116,3 +116,21 @@ assert rows and all('PRIVATE' not in json.dumps(row) for row in rows)
     child = _child(code, tmp_path)
     assert child.wait(timeout=90) == 0
     assert 'PRIVATE' not in child.output_log.read_text()
+
+
+def test_foreign_level_labels_are_closed_vocabulary(tmp_path):
+    from test_logging import _child
+    code = """
+import json, logging, os
+from pathlib import Path
+import profiling
+with profiling.request_scope('web'):
+    logging.addLevelName(40, 'PRIVATE_LEVEL_LABEL')
+    logging.getLogger('library').error('PRIVATE_BODY')
+rows = [json.loads(line) for line in (Path(os.environ['DATA_DIR'])/'logs/errors.log').read_text().splitlines()]
+assert rows and rows[0]['level'] == 'ERROR'
+assert 'PRIVATE' not in json.dumps(rows)
+"""
+    child = _child(code, tmp_path)
+    assert child.wait(timeout=90) == 0
+    assert 'PRIVATE' not in child.output_log.read_text()
