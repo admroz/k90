@@ -35,6 +35,7 @@ def test_should_auto_sync_depends_on_last_success_date(monkeypatch, temp_db):
 
 
 def test_sync_libre_data_updates_status_and_totals(monkeypatch, temp_db):
+    monkeypatch.setenv("K90_SYNC_ENABLED", "true")  # Fetch boundary is mocked below.
     monkeypatch.setenv("LIBRE_ENABLED", "true")
     fixed_now = datetime(2026, 3, 19, 18, 30, 0)
     monkeypatch.setattr("tools.libre.now_local", lambda: fixed_now)
@@ -65,6 +66,7 @@ def test_sync_libre_data_updates_status_and_totals(monkeypatch, temp_db):
 
 
 def test_libre_disabled_skips_auto_and_manual_sync(monkeypatch, temp_db):
+    monkeypatch.setenv("K90_SYNC_ENABLED", "true")  # Fetch boundary is mocked below.
     monkeypatch.setenv("LIBRE_ENABLED", "false")
     monkeypatch.setattr(
         "tools.libre.sync_libre_to_db",
@@ -81,6 +83,7 @@ def test_libre_disabled_skips_auto_and_manual_sync(monkeypatch, temp_db):
 
 
 def test_libre_sync_converts_unexpected_exception_to_error(monkeypatch, temp_db):
+    monkeypatch.setenv("K90_SYNC_ENABLED", "true")  # Fetch boundary is mocked below.
     monkeypatch.setenv("LIBRE_ENABLED", "true")
     monkeypatch.setattr(
         "tools.libre.sync_libre_to_db",

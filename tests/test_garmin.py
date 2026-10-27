@@ -23,6 +23,7 @@ def test_should_auto_sync_today_depends_on_last_success_date(monkeypatch, temp_d
 
 
 def test_sync_garmin_data_updates_status_and_totals(monkeypatch, temp_db):
+    monkeypatch.setenv("K90_SYNC_ENABLED", "true")  # Fetch boundary is mocked below.
     fixed_now = datetime(2026, 3, 18, 15, 30, 0)
     monkeypatch.setattr("tools.garmin.now_local", lambda: fixed_now)
     monkeypatch.setattr("tools.garmin.today_local", lambda: "2026-03-18")
@@ -80,6 +81,7 @@ def test_sync_garmin_to_db_uses_fresh_end_date_each_call(monkeypatch, temp_db):
 
 
 def test_garmin_sync_converts_unexpected_exception_to_error(monkeypatch, temp_db):
+    monkeypatch.setenv("K90_SYNC_ENABLED", "true")  # Fetch boundary is mocked below.
     monkeypatch.setattr(
         "tools.garmin.sync_garmin_to_db",
         lambda: (_ for _ in ()).throw(RuntimeError("rate limited")),
