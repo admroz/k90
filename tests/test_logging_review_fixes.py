@@ -15,6 +15,10 @@ def test_bootstrap_failure_does_not_prevent_request_entry(monkeypatch):
 
 
 def test_ingress_links_generated_identity_to_actual_backend_job(temp_db, tmp_path, monkeypatch):
+    # Configure this TestClient independently of the shell or other web fixtures.
+    monkeypatch.setenv('WEB_PASSWORD', 'synthetic-password-only')
+    monkeypatch.setenv('WEB_COOKIE_SECURE', 'false')
+    monkeypatch.setenv('K90_INTERNAL_TOKEN', 'synthetic-internal-only')
     import telegram_adapter as adapter
     from fastapi.testclient import TestClient
     from webapp import create_app
