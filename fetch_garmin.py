@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from logging_setup import configure_logging
 configure_logging()
-log = logging.getLogger(__name__)
+log = logging.getLogger('fetch_garmin')
 
 import os
 import math

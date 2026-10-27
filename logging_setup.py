@@ -147,6 +147,19 @@ COMPONENTS = frozenset(('agent', 'web_runtime', 'webapp', 'telegram_adapter', 's
     'summary', 'memory_runtime', 'tools', 'tools.garmin', 'tools.libre',
     'outbound_policy', 'responses_api', 'subscription_api', 'fetch_garmin', 'fetch_libre', 'runtime'))
 _CONFIG_LOCK = threading.RLock()
+_CONFIGURED = False
+
+
+class SafeTransportError(RuntimeError):
+    """A fixed wrapper carrying only validated diagnostics across transport layers."""
+    def __init__(self, *, cause=None, http_status=None):
+        super().__init__('transport_request_failed')
+        fields = exception_metadata(cause) if cause is not None else {'exception_category':'unknown'}
+        fields.update(safe_fields({'http_status':http_status}))
+        if fields.get('http_status', 0) >= 400:
+            fields['exception_category'] = 'http'
+        fields['error_code'] = 'transport_request_failed'
+        self.diagnostics = safe_fields(fields)
 
 
 def exception_metadata(exc):
@@ -181,6 +194,8 @@ def _exception_metadata(exc):
                     category = value
                     break
     result = {'exception_category':category, 'error_code':'runtime_failure'}
+    if isinstance(exc, SafeTransportError):
+        result.update(safe_fields(exc.diagnostics))
     # SDK status/request_id are documented fields; never scan headers or body.
     loaded = sys.modules.get('openai')
     cls = getattr(loaded, 'APIStatusError', None) if loaded else None
@@ -261,35 +276,49 @@ class SafeConsole(logging.StreamHandler):
 
 
 def configure_logging():
-    """Idempotent bootstrap, including replacement of preconfigured SDK handlers."""
-    with _CONFIG_LOCK:
-        logging.setLogRecordFactory(_factory)
-        sys.excepthook = _uncaught
-        threading.excepthook = _thread_uncaught
-        root = logging.getLogger()
-        # Keep application/test observers; the factory sanitizes before any handler.
-        if not any(isinstance(h, SafeHandler) for h in root.handlers):
-            for handler in list(root.handlers):
-                if not handler.__class__.__module__.startswith('_pytest.'):
-                    root.removeHandler(handler)
-            root.addHandler(SafeHandler())
-            root.addHandler(SafeConsole())
-        root.setLevel(logging.INFO)
-        for name, logger in logging.root.manager.loggerDict.items():
-            if isinstance(logger, logging.Logger):
-                logger.handlers.clear()
-                logger.propagate = True
+    """Install the boundary once; diagnostics must never prevent workload entry."""
+    global _CONFIGURED
+    try:
+        with _CONFIG_LOCK:
+            # Keep the factory safe even if a later SDK changes its configuration.
+            logging.setLogRecordFactory(_factory)
+            sys.excepthook = _uncaught
+            threading.excepthook = _thread_uncaught
+            root = logging.getLogger()
+            if _CONFIGURED and any(isinstance(h, SafeHandler) for h in root.handlers):
+                return
+            with logging._lock:
+                # getLogger uses the same registry lock; never iterate a live dict.
+                loggers = tuple(logging.root.manager.loggerDict.values())
+                for handler in list(root.handlers):
+                    if not handler.__class__.__module__.startswith('_pytest.'):
+                        root.removeHandler(handler)
+                root.addHandler(SafeHandler())
+                root.addHandler(SafeConsole())
+                root.setLevel(logging.INFO)
+                for logger in loggers:
+                    if isinstance(logger, logging.Logger):
+                        logger.handlers.clear()
+                        logger.propagate = True
+                _CONFIGURED = True
+    except Exception:
+        _alarm()
 
-EVENTS = frozenset(('provider.failed', 'stage.failed', 'tool.failed', 'tool.completed', 'response.completed',
+
+EVENTS = frozenset(('telegram.submitted', 'telegram.ingress_failed', 'telegram.unavailable', 'provider.failed', 'stage.failed', 'tool.failed', 'tool.completed', 'response.completed',
     'runtime.unhandled', 'response.failed', 'delivery.completed', 'delivery.failed', 'job.completed', 'job.failed'))
-CODES = frozenset(('runtime_failure', 'provider_request_failed', 'stage_failed', 'tool_returned_error'))
+CODES = frozenset(('runtime_failure', 'provider_request_failed', 'stage_failed', 'tool_returned_error', 'transport_request_failed'))
 CATEGORIES = frozenset(('unknown','timeout','connection','validation','permission','io','http','protocol'))
 
 
 def safe_fields(fields):
     result = {}
     for key, value in fields.items():
-        if key in ('round_index', 'tool_index') and type(value) is int and 0 < value <= 4096:
+        if key == 'backend_request_id' and type(value) is str and re.fullmatch(r'[0-9a-f]{32}', value):
+            result[key] = value
+        elif key == 'backend_job_id' and type(value) is int and value > 0:
+            result[key] = value
+        elif key in ('round_index', 'tool_index') and type(value) is int and 0 < value <= 4096:
             result[key] = value
         elif key == 'http_status' and type(value) is int and 100 <= value <= 599:
             result[key] = value

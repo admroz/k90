@@ -14,7 +14,7 @@ import requests
 from server import TelegramAPI, _image_from_message, split_message
 from tools.images import MAX_IMAGE_BYTES, image_mime_type
 
-log = logging.getLogger(__name__)
+log = logging.getLogger('telegram_adapter')
 
 
 class BackendClient:
@@ -34,6 +34,15 @@ class BackendClient:
 
 
 def accept_update(api, backend, update):
+    with request_scope('telegram', scope='submission'):
+        try:
+            return _accept_update(api, backend, update)
+        except Exception as exc:
+            event('telegram.ingress_failed', component='telegram_adapter', error=exc)
+            raise
+
+
+def _accept_update(api, backend, update):
     message = update.get("message") or {}
     chat = message.get("chat") or {}
     sender = message.get("from") or {}
@@ -69,7 +78,10 @@ def accept_update(api, backend, update):
         else:
             body["image"] = f"data:{mime};base64," + base64.b64encode(raw).decode()
             log.info("telegram.image mime=%s bytes=%d", mime, len(raw))
-    backend.call("POST", "/internal/messages", json=body)
+    accepted = backend.call("POST", "/internal/messages", json=body)
+    if type(accepted) is dict:
+        event('telegram.submitted', component='telegram_adapter',
+              backend_request_id=accepted.get('profile_id'), backend_job_id=accepted.get('job_id'))
 
 
 def deliver_pending(api, backend):
@@ -119,9 +131,8 @@ def main():
             retry = 1
         except Exception as exc:
             # Do not log request URLs, tokens or private message bodies.
-            log.warning(
-                "telegram.unavailable error_type=%s retry=%s", type(exc).__name__, retry
-            )
+            with request_scope('telegram', background=True, scope='background'):
+                event('telegram.unavailable', component='telegram_adapter', error=exc)
             try:
                 backend.call(
                     "POST", "/internal/status", json={"status": "ponawianie połączenia"}

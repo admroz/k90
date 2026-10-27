@@ -222,7 +222,10 @@ def create_app(*, start_worker=True, processor=None):
             raise HTTPException(409, str(exc)) from None
         except OverflowError as exc:
             raise HTTPException(429, str(exc)) from None
-        return {"request_id": job["request_id"], "state": job["state"]}
+        result = {"request_id": job["request_id"], "state": job["state"]}
+        if channel == "telegram":
+            result.update(profile_id=job["profile_id"], job_id=job["seq"])
+        return result
 
     @app.get("/healthz")
     def health():

@@ -38,7 +38,7 @@ from tools.time_utils import now_local
 
 load_dotenv()
 
-log = logging.getLogger(__name__)
+log = logging.getLogger('agent')
 
 MODEL = os.getenv("AGENT_MODEL", "gpt-5.4")
 HISTORY_MESSAGES = int(os.getenv("HISTORY_MESSAGES", "10"))
