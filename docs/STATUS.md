@@ -2,14 +2,14 @@
 
 ## Safe runtime logs — 2026-10-27
 
-Follow-up author checkpoint on feat/safe-runtime-logs-20261027; tested source
-`67b121bf22a8054a64d3a3e896605303106e94ca`. Offline synthetic regression:
-684 Python passed / 1 skip; Node25 passed and JS syntax exit0. Fourteen selected
-unchanged external probes replayed successfully by the implementer. Bootstrap
-registry synchronization/noninterference, executable component identity and
-Telegram ingress/transport attribution corrected. Image smoke now includes split
-log concurrency/rotation/permissions and persistent synthetic /data lifecycle.
-Actual image execution and fresh independent review remain pending. No PR,
+Emission-boundary author checkpoint on feat/safe-runtime-logs-20261027; tested
+source `51e9de06fad0f249fa5baab7f19b2705aaa1f2b8`. Offline synthetic regression:
+687 Python passed / 1 skip; Node25 passed and JS syntax exit0. Nineteen selected
+unchanged external probes replayed successfully by the implementer. Standard
+logging emission now normalizes foreign records after extra merge and routes
+only to controlled sinks, independent of factory installation and late library
+handlers. First-setup privacy and workload noninterference are both covered.
+Fresh independent review and actual image execution remain pending. No PR,
 publication or deployment. Evidence: [safe-runtime-logs.md](review-evidence/safe-runtime-logs.md).
 
 ## Feature base integration — 2026-10-26

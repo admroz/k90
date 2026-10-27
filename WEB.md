@@ -250,9 +250,13 @@ przed wyjściem z kontekstu. Transport zachowuje wyłącznie zwalidowaną katego
 kod i status HTTP; opis odpowiedzi Telegrama i dane żądania nie są przenoszone do
 wyjątku diagnostycznego. Komponenty wykonywane jako skrypty mają stałe nazwy.
 
-Bootstrap pobiera spójny snapshot rejestru loggerów pod blokadą biblioteki logging.
-Kolejne wejścia zachowują bezpieczną fabrykę rekordów bez ponownego skanowania
-całego rejestru; błąd konfiguracji logowania nie blokuje wykonania zadania.
+Bootstrap najpierw ustanawia wspólną granicę emisji standardowego logging,
+niezależną od fabryki rekordów. Normalizacja następuje po dołączeniu `extra`
+i filtrach loggera, także dla rekordów z obcej fabryki. Dowolne handlery i formatery
+bibliotek nie są wyjściami aplikacji: emisję przejmują kontrolowane sinki app/errors
+oraz bezpieczna konsola, także przy `propagate=False`. Granica nie skanuje rejestru
+loggerów i działa również przy częściowym błędzie dalszej konfiguracji; błąd
+logowania nie blokuje wykonania zadania. Profilowanie zachowuje osobny sink.
 Rozszerzony smoke CI uruchamia dwa procesy zapisujące logi i sprawdza ich limity,
 prawa, kopię błędów i izolację profilowania. Następnie porównuje snapshot logów po
 restart i recreate z tym samym, unikalnym wolumenem syntetycznym `/data`, który

@@ -64,3 +64,22 @@ and snapshot helper ran successfully on the host as part of the Python suite.
 Actual image build/lifecycle execution remains a coordinator CI gate. Subsequent
 changes to this tested source are documentation only; production/live checks and
 the undetermined provider failure cause remain unchanged.
+
+## Emission boundary follow-up
+
+Implementation tested at `51e9de06fad0f249fa5baab7f19b2705aaa1f2b8`:
+**687 Python passed, 1 skipped** (234.55 seconds), JavaScript syntax exit0 and
+**25 Node passed**. Nineteen selected unchanged external probes replayed
+successfully by the implementer; this is not independent approval.
+
+Standard logger dispatch now owns emission after `extra` and logger filters.
+It constructs a new closed-schema record for controlled durable/console sinks,
+including foreign records, rather than relying on factory installation. Late
+library handlers and formatters are not application output sinks. Context comes
+from the current scope; arbitrary extra fields, paths and dynamic severity labels
+are discarded. Fresh-interpreter tests cover first setup failure together with
+workload completion/privacy, active-scope factory/handler changes and direct
+foreign records. Existing concurrency, rotation, sink-failure, profiling and
+transport tests remain covered. The image helper is unchanged; actual image CI
+and fresh independent source review remain pending. Changes after this tested
+implementation are documentation only.
