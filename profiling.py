@@ -28,7 +28,7 @@ def enabled():
 
 
 def _emit(state, stage, event, **numbers):
-    if not state['timing']:
+    if not state['timing'] or stage not in STAGES or event not in ('start', 'finish', 'summary', 'error', 'timeout', 'first_event', 'first_text'):
         return
     from logging_setup import safe_fields
     numbers.update(safe_fields({key:state.get(key) for key in ('round_index','tool_index','operation_id')}))
@@ -139,6 +139,8 @@ def first_provider_event(*, text=False):
 def queue_event(event, started=None, clock_id=None):
     state = CURRENT.get()
     if state is None or not state['timing']:
+        return
+    if event not in ('start', 'finish'):
         return
     elapsed = max(0, (perf_counter() - started) * 1000) if started is not None and clock_id == CLOCK_ID else None
     _emit(state, 'queue_wait', event, elapsed_ms=elapsed, clock_reset=event != 'start' and elapsed is None)

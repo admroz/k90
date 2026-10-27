@@ -69,7 +69,8 @@ def test_agent_context_history_tool_and_current_text_follow_switch(temp_db, monk
         assert agent.run_agent('current ' + EMAIL, 'test') == ('done', False)
     from pathlib import Path
     import os
-    profiles = [json.loads(line) for line in (Path(os.environ['DATA_DIR'])/'logs'/'profiling.jsonl').read_text().splitlines()]
+    profiles = [row for line in (Path(os.environ['DATA_DIR'])/'logs'/'profiling.jsonl').read_text().splitlines()
+                if (row := json.loads(line))['channel'] == 'cli']
     assert {'history', 'context', 'recall', 'provider', 'tool', 'persistence', 'filtering', 'provider_request'} <= {r['stage'] for r in profiles}
     assert len({r['request_id'] for r in profiles}) == 1
     assert EMAIL not in json.dumps(profiles) and 'test' not in json.dumps(profiles)

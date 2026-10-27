@@ -319,56 +319,58 @@ def cli() -> None:
             print("Do widzenia.")
             break
 
-        command_response = handle_command(user_input)
-        if command_response is not None:
-            print(f"\nAgent: {command_response}\n")
-            continue
+        with profiling.request_scope('cli'):
+            command_response = handle_command(user_input)
+            if command_response is not None:
+                print(f"\nAgent: {command_response}\n")
+                continue
 
-        sync_prefix = ""
-        garmin_due = should_auto_sync_today()
-        libre_due = should_auto_sync_libre()
-        if garmin_due or libre_due:
-            print("\nAgent: Aktualizuję dane zdrowotne, odpowiem za chwilę.\n")
+            sync_prefix = ""
+            garmin_due = should_auto_sync_today()
+            libre_due = should_auto_sync_libre()
+            if garmin_due or libre_due:
+                print("\nAgent: Aktualizuję dane zdrowotne, odpowiem za chwilę.\n")
 
-            errors = []
-            changed_sources = []
+                errors = []
+                changed_sources = []
 
-            if garmin_due:
-                garmin_result = sync_garmin_data(trigger="auto_daily_cli")
-                if "error" in garmin_result:
-                    errors.append("Garmin")
-                elif sync_has_changes(garmin_result):
-                    changed_sources.append("Garmin")
-                    mark_summary_refreshed()
+                if garmin_due:
+                    garmin_result = sync_garmin_data(trigger="auto_daily_cli")
+                    if "error" in garmin_result:
+                        errors.append("Garmin")
+                    elif sync_has_changes(garmin_result):
+                        changed_sources.append("Garmin")
+                        mark_summary_refreshed()
 
-            if libre_due:
-                libre_result = sync_libre_data(trigger="auto_stale_cli")
-                if "error" in libre_result:
-                    errors.append("Libre")
-                elif libre_sync_has_changes(libre_result):
-                    changed_sources.append("Libre")
+                if libre_due:
+                    libre_result = sync_libre_data(trigger="auto_stale_cli")
+                    if "error" in libre_result:
+                        errors.append("Libre")
+                    elif libre_sync_has_changes(libre_result):
+                        changed_sources.append("Libre")
 
-            if changed_sources:
-                if "Garmin" in changed_sources:
+                if changed_sources:
+                    if "Garmin" in changed_sources:
+                        from summary import refresh_patient_summary
+
+                        refresh_patient_summary(trigger="auto_sync_cli")
+                    sync_prefix = f"Mam nowe dane ({', '.join(changed_sources)}) i uwzględniam je w odpowiedzi.\n\n"
+                elif errors:
+                    sync_prefix = f"Uwaga: synchronizacja danych ({', '.join(errors)}) nie powiodła się; odpowiedź może bazować na starszych danych.\n\n"
+
+            try:
+                response, should_refresh = run_agent(user_input, user_id="cli")
+                if sync_prefix:
+                    response = sync_prefix + response
+                print(f"\nAgent: {response}\n")
+                if should_refresh:
+                    print("[Auto-odświeżanie podsumowania pacjenta...]")
                     from summary import refresh_patient_summary
 
-                    refresh_patient_summary(trigger="auto_sync_cli")
-                sync_prefix = f"Mam nowe dane ({', '.join(changed_sources)}) i uwzględniam je w odpowiedzi.\n\n"
-            elif errors:
-                sync_prefix = f"Uwaga: synchronizacja danych ({', '.join(errors)}) nie powiodła się; odpowiedź może bazować na starszych danych.\n\n"
-
-        try:
-            response, should_refresh = run_agent(user_input, user_id="cli")
-            if sync_prefix:
-                response = sync_prefix + response
-            print(f"\nAgent: {response}\n")
-            if should_refresh:
-                print("[Auto-odświeżanie podsumowania pacjenta...]")
-                from summary import refresh_patient_summary
-
-                refresh_patient_summary(trigger="tool_call_cli")
-        except Exception as exc:  # pragma: no cover - CLI path
-            print(f"\n[Błąd]: {exc}\n")
+                    refresh_patient_summary(trigger="tool_call_cli")
+            except Exception as exc:  # pragma: no cover - CLI path
+                event('response.failed', error=exc, response_outcome='failed')
+                print("\n[Błąd]: Nie udało się zakończyć odpowiedzi. Sprawdź bezpieczne logi.\n")
 
 
 if __name__ == "__main__":

@@ -160,6 +160,12 @@ def _image_from_message(message: dict) -> tuple[str, str] | None:
 
 
 def handle_telegram_message(api: TelegramAPI, message: dict) -> None:
+    from profiling import request_scope
+    with request_scope('telegram'):
+        return _handle_telegram_message(api, message)
+
+
+def _handle_telegram_message(api: TelegramAPI, message: dict) -> None:
     chat = message.get("chat") or {}
     sender_data = message.get("from") or {}
     chat_id = chat.get("id")

@@ -4,6 +4,9 @@ Every write reopens under flock so backend and Telegram share rotation safely.
 Logging failures are deliberately isolated from application results.
 """
 import fcntl
+import logging
+import re
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -83,20 +86,77 @@ def write_record(name, record):
         _alarm()
 
 # Exact repository templates: arguments are never interpolated.
-TEMPLATES = {'agent.start user=%s model=%s reasoning_effort=%s input=%s history_records=%d context_sections=%d context_chars=%d summary_chars=%d': 'agent.start', 'agent.max_rounds user=%s rounds=%d': 'agent.max_rounds', 'agent.tools user=%s round=%d tool_calls=%s': 'agent.tools', 'agent.usage user=%s round=%d prompt_tokens=%s completion_tokens=%s': 'agent.usage', 'agent.finish user=%s round=%d response_chars=%d refresh=%s': 'agent.finish', 'agent.tool_result user=%s tool=%s ok=%s': 'agent.tool_result', 'agent.failure_record.unavailable': 'agent.failure_record.unavailable', 'conversation.claim seq=%d channel=%s': 'conversation.claim', 'conversation.failed job_id=%d': 'conversation.failed', 'summary.startup_refresh_failed': 'summary.startup_refresh_failed', 'conversation.worker_error': 'conversation.worker_error', 'summary.auto_sync_refresh_failed': 'summary.auto_sync_refresh_failed', 'summary.refresh_failed': 'summary.refresh_failed', 'conversation.sync_failed source=%s': 'conversation.sync_failed', 'telegram.message chat_id=%s user_id=%s text_chars=%d image=%s': 'telegram.message', 'telegram.response chat_id=%s chars=%d refresh=%s': 'telegram.response', 'telegram.connected bot=@%s': 'telegram.connected', 'telegram.reject reason=non_private chat_id=%s user_id=%s': 'telegram.reject', 'telegram.reject reason=not_allowed chat_id=%s user_id=%s': 'telegram.reject', 'summary.async_refresh trigger=tool_call sender=%s': 'summary.async_refresh', 'telegram.allowed_user_missing; messages will be rejected. Send a message to the bot, read user_id from the log, set TELEGRAM_ALLOWED_USER_ID and restart.': 'telegram.allowed_user_missing;', 'telegram.sent chat_id=%s chars=%d': 'telegram.sent', 'garmin.auto_sync_failed sender=%s error=%s': 'garmin.auto_sync_failed', 'libre.auto_sync_failed sender=%s error=%s': 'libre.auto_sync_failed', 'telegram.image mime=%s bytes=%d': 'telegram.image', 'agent.error sender=%s error=%s': 'agent.error', 'summary.startup_refresh_failed error=%s': 'summary.startup_refresh_failed', 'telegram.stopped': 'telegram.stopped', 'garmin.auto_sync_no_changes sender=%s': 'garmin.auto_sync_no_changes', 'libre.auto_sync_no_changes sender=%s': 'libre.auto_sync_no_changes', 'telegram.image_error error=%s': 'telegram.image_error', 'telegram.poll_error error=%s retry_in=%s': 'telegram.poll_error', 'telegram.update_error update_id=%s error=%s': 'telegram.update_error', 'telegram.disabled reason=missing_configuration': 'telegram.disabled', 'telegram.image_rejected reason=%s bytes=%d': 'telegram.image_rejected', 'telegram.unavailable error_type=%s retry=%s': 'telegram.unavailable', 'summary.refresh trigger=%s input_chars=%d files=%d': 'summary.refresh', 'summary.saved trigger=%s chars=%d attempts=%d': 'summary.saved', 'summary.attempt model=%s attempt=%d finish_reason=%s chars=%d': 'summary.attempt', 'summary.fallback trigger=%s finish_reason=%s': 'summary.fallback', 'memory.worker.unavailable': 'memory.worker.unavailable', 'garmin.sync start trigger=%s': 'garmin.sync', 'garmin.sync finish trigger=%s fetched=%d inserted=%d updated=%d unchanged=%d changed=%s': 'garmin.sync', 'garmin.sync trigger=%s error=%s': 'garmin.sync', 'garmin.sync trigger=%s dataset=%s fetched=%d inserted=%d updated=%d unchanged=%d': 'garmin.sync', 'libre.sync start trigger=%s': 'libre.sync', 'libre.sync finish trigger=%s fetched=%d inserted=%d updated=%d unchanged=%d changed=%s': 'libre.sync', 'libre.sync skipped trigger=%s reason=disabled': 'libre.sync', 'libre.sync trigger=%s error=%s': 'libre.sync', 'libre.sync trigger=%s dataset=%s fetched=%d inserted=%d updated=%d unchanged=%d': 'libre.sync'}
+TEMPLATES = {'agent.error sender=%s error=%s': 'agent.error',
+ 'agent.failure_record.unavailable': 'agent.failure_record.unavailable',
+ 'agent.finish user=%s round=%d response_chars=%d refresh=%s': 'agent.finish',
+ 'agent.max_rounds user=%s rounds=%d': 'agent.max_rounds',
+ 'agent.start user=%s model=%s reasoning_effort=%s input=%s history_records=%d context_sections=%d context_chars=%d summary_chars=%d': 'agent.start',
+ 'agent.tool_result user=%s tool=%s ok=%s': 'agent.tool_result',
+ 'agent.tools user=%s round=%d tool_calls=%s': 'agent.tools',
+ 'agent.usage user=%s round=%d prompt_tokens=%s completion_tokens=%s': 'agent.usage',
+ 'conversation.claim seq=%d channel=%s': 'conversation.claim',
+ 'conversation.failed job_id=%d': 'conversation.failed',
+ 'conversation.sync_failed source=%s': 'conversation.sync_failed',
+ 'conversation.worker_error': 'conversation.worker_error',
+ 'garmin.auto_sync_failed sender=%s error=%s': 'garmin.auto_sync_failed',
+ 'garmin.auto_sync_no_changes sender=%s': 'garmin.auto_sync_no_changes',
+ 'garmin.fetch_failed': 'garmin.fetch_failed',
+ 'garmin.login_failed': 'garmin.login_failed',
+ 'garmin.sync finish trigger=%s fetched=%d inserted=%d updated=%d unchanged=%d changed=%s': 'garmin.sync',
+ 'garmin.sync start trigger=%s': 'garmin.sync',
+ 'garmin.sync trigger=%s dataset=%s fetched=%d inserted=%d updated=%d unchanged=%d': 'garmin.sync',
+ 'garmin.sync trigger=%s error=%s': 'garmin.sync',
+ 'garmin.sync.progress': 'garmin.sync.progress',
+ 'libre.auto_sync_failed sender=%s error=%s': 'libre.auto_sync_failed',
+ 'libre.auto_sync_no_changes sender=%s': 'libre.auto_sync_no_changes',
+ 'libre.fetch_failed': 'libre.fetch_failed',
+ 'libre.sync finish trigger=%s fetched=%d inserted=%d updated=%d unchanged=%d changed=%s': 'libre.sync',
+ 'libre.sync skipped trigger=%s reason=disabled': 'libre.sync',
+ 'libre.sync start trigger=%s': 'libre.sync',
+ 'libre.sync trigger=%s dataset=%s fetched=%d inserted=%d updated=%d unchanged=%d': 'libre.sync',
+ 'libre.sync trigger=%s error=%s': 'libre.sync',
+ 'libre.sync.progress': 'libre.sync.progress',
+ 'memory.worker.unavailable': 'memory.worker.unavailable',
+ 'summary.async_refresh trigger=tool_call sender=%s': 'summary.async_refresh',
+ 'summary.attempt model=%s attempt=%d finish_reason=%s chars=%d': 'summary.attempt',
+ 'summary.auto_sync_refresh_failed': 'summary.auto_sync_refresh_failed',
+ 'summary.fallback trigger=%s finish_reason=%s': 'summary.fallback',
+ 'summary.refresh trigger=%s input_chars=%d files=%d': 'summary.refresh',
+ 'summary.refresh_failed': 'summary.refresh_failed',
+ 'summary.saved trigger=%s chars=%d attempts=%d': 'summary.saved',
+ 'summary.startup_refresh_failed': 'summary.startup_refresh_failed',
+ 'summary.startup_refresh_failed error=%s': 'summary.startup_refresh_failed',
+ 'telegram.allowed_user_missing; messages will be rejected. Send a message to the bot, read user_id from the log, set TELEGRAM_ALLOWED_USER_ID and restart.': 'telegram.allowed_user_missing;',
+ 'telegram.connected bot=@%s': 'telegram.connected',
+ 'telegram.disabled reason=missing_configuration': 'telegram.disabled',
+ 'telegram.image mime=%s bytes=%d': 'telegram.image',
+ 'telegram.image_error error=%s': 'telegram.image_error',
+ 'telegram.image_rejected reason=%s bytes=%d': 'telegram.image_rejected',
+ 'telegram.message chat_id=%s user_id=%s text_chars=%d image=%s': 'telegram.message',
+ 'telegram.poll_error error=%s retry_in=%s': 'telegram.poll_error',
+ 'telegram.reject reason=non_private chat_id=%s user_id=%s': 'telegram.reject',
+ 'telegram.reject reason=not_allowed chat_id=%s user_id=%s': 'telegram.reject',
+ 'telegram.response chat_id=%s chars=%d refresh=%s': 'telegram.response',
+ 'telegram.sent chat_id=%s chars=%d': 'telegram.sent',
+ 'telegram.stopped': 'telegram.stopped',
+ 'telegram.unavailable error_type=%s retry=%s': 'telegram.unavailable',
+ 'telegram.update_error update_id=%s error=%s': 'telegram.update_error'}
 
-import logging
-import re
-from datetime import datetime, timezone
-from uuid import uuid4
 
 COMPONENTS = frozenset(('agent', 'web_runtime', 'webapp', 'telegram_adapter', 'server',
     'summary', 'memory_runtime', 'tools', 'tools.garmin', 'tools.libre',
-    'outbound_policy', 'responses_api', 'subscription_api'))
+    'outbound_policy', 'responses_api', 'subscription_api', 'fetch_garmin', 'fetch_libre', 'runtime'))
 _CONFIG_LOCK = threading.RLock()
 
 
 def exception_metadata(exc):
+    try:
+        return _exception_metadata(exc)
+    except Exception:
+        return {'exception_category':'unknown', 'error_code':'runtime_failure'}
+
+
+def _exception_metadata(exc):
     """Classify by trusted hierarchy; never format an exception or its body."""
     category = 'unknown'
     if isinstance(exc, TimeoutError):
@@ -125,13 +185,27 @@ def exception_metadata(exc):
     loaded = sys.modules.get('openai')
     cls = getattr(loaded, 'APIStatusError', None) if loaded else None
     if isinstance(cls, type) and isinstance(exc, cls):
-        result.update(safe_fields({'http_status':exc.status_code, 'provider_request_id':exc.request_id}))
+        try:
+            result.update(safe_fields({'http_status':exc.status_code, 'provider_request_id':exc.request_id}))
+        except Exception:
+            pass
+    for module, name in (('httpx', 'HTTPStatusError'), ('requests.exceptions', 'HTTPError')):
+        loaded = sys.modules.get(module)
+        cls = getattr(loaded, name, None) if loaded else None
+        if isinstance(cls, type) and isinstance(exc, cls):
+            try:
+                result.update(safe_fields({'http_status':exc.response.status_code}))
+            except Exception:
+                pass
     protocol = sys.modules.get('subscription_protocol')
     cls = getattr(protocol, 'ProbeError', None) if protocol else None
     if isinstance(cls, type) and isinstance(exc, cls):
         result['exception_category'] = 'protocol'
-        result.update(safe_fields({'http_status':getattr(exc, 'http_status', None),
-                                  'provider_request_id':getattr(exc, 'provider_request_id', None)}))
+        try:
+            result.update(safe_fields({'http_status':getattr(exc, 'http_status', None),
+                                      'provider_request_id':getattr(exc, 'provider_request_id', None)}))
+        except Exception:
+            pass
     return result
 
 
@@ -145,7 +219,9 @@ def _factory(*args, **kwargs):
     component = record.name if record.name in COMPONENTS else 'library'
     event = (record.msg if record.msg in EVENTS else TEMPLATES.get(record.msg, 'runtime.notice')) if type(record.msg) is str else 'runtime.notice'
     state = _context() or {}
-    record.name = component
+    record.name = record.module = component
+    record.levelname = {10:'DEBUG', 20:'INFO', 30:'WARNING', 40:'ERROR', 50:'CRITICAL'}.get(record.levelno, 'INFO')
+    record.threadName, record.processName = 'worker', 'process'
     record.msg, record.args = event, ()
     record.k90_meta = exception_metadata(record.exc_info[1]) if record.exc_info and record.exc_info[1] else {}
     record.exc_info = record.exc_text = record.stack_info = None
@@ -178,8 +254,8 @@ class SafeHandler(logging.Handler):
 class SafeConsole(logging.StreamHandler):
     def emit(self, record):
         try:
-            self.stream.write(json.dumps(_operational_record(record), separators=(',', ':')) + '\n')
-            self.flush()
+            sys.stderr.write(json.dumps(_operational_record(record), separators=(',', ':')) + '\n')
+            sys.stderr.flush()
         except Exception:
             _alarm()
 
@@ -188,6 +264,8 @@ def configure_logging():
     """Idempotent bootstrap, including replacement of preconfigured SDK handlers."""
     with _CONFIG_LOCK:
         logging.setLogRecordFactory(_factory)
+        sys.excepthook = _uncaught
+        threading.excepthook = _thread_uncaught
         root = logging.getLogger()
         # Keep application/test observers; the factory sanitizes before any handler.
         if not any(isinstance(h, SafeHandler) for h in root.handlers):
@@ -202,8 +280,8 @@ def configure_logging():
                 logger.handlers.clear()
                 logger.propagate = True
 
-EVENTS = frozenset(('provider.failed', 'stage.failed', 'tool.completed', 'response.completed',
-    'response.failed', 'delivery.completed', 'delivery.failed', 'job.completed', 'job.failed'))
+EVENTS = frozenset(('provider.failed', 'stage.failed', 'tool.failed', 'tool.completed', 'response.completed',
+    'runtime.unhandled', 'response.failed', 'delivery.completed', 'delivery.failed', 'job.completed', 'job.failed'))
 CODES = frozenset(('runtime_failure', 'provider_request_failed', 'stage_failed', 'tool_returned_error'))
 CATEGORIES = frozenset(('unknown','timeout','connection','validation','permission','io','http','protocol'))
 
@@ -219,15 +297,15 @@ def safe_fields(fields):
             result[key] = value
         elif key == 'operation_id' and type(value) is str and re.fullmatch(r'[0-9a-f]{32}:[1-9][0-9]{0,3}:[1-9][0-9]{0,3}', value):
             result[key] = value
-        elif key == 'exception_category' and value in CATEGORIES:
+        elif key == 'exception_category' and type(value) is str and value in CATEGORIES:
             result[key] = value
-        elif key == 'error_code' and value in CODES:
+        elif key == 'error_code' and type(value) is str and value in CODES:
             result[key] = value
-        elif key == 'mutation_outcome' and value in ('committed','rolled_back','none','unknown'):
+        elif key == 'mutation_outcome' and type(value) is str and value in ('committed','rolled_back','none','unknown'):
             result[key] = value
-        elif key in ('response_outcome','delivery_outcome') and value in ('completed','failed','pending','unknown','none'):
+        elif key in ('response_outcome','delivery_outcome') and type(value) is str and value in ('completed','failed','pending','unknown','none'):
             result[key] = value
-        elif key == 'tool_outcome' and value in ('returned','error'):
+        elif key == 'tool_outcome' and type(value) is str and value in ('returned','error'):
             result[key] = value
     return result
 
@@ -240,7 +318,16 @@ def event(name, *, component='agent', error=None, **fields):
         configure_logging()
         if error is not None:
             fields = {**exception_metadata(error), **fields}
-        logging.getLogger(component).log(logging.ERROR if error is not None or name.endswith('.failed') else logging.INFO,
+        logging.getLogger(component).log(logging.ERROR if error is not None or name.endswith('.failed') or fields.get('tool_outcome') == 'error' else logging.INFO,
             name, extra={'k90_fields':safe_fields(fields)})
     except Exception:
         _alarm()
+
+
+def _uncaught(exc_type, exc, traceback):
+    # Python's default hook prints arbitrary exception text and source lines.
+    event('runtime.unhandled', component='runtime', error=exc)
+
+
+def _thread_uncaught(args):
+    _uncaught(args.exc_type, args.exc_value, args.exc_traceback)

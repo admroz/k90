@@ -86,8 +86,8 @@ def test_actual_dispatcher_result_marks_tool_span_only(temp_db, monkeypatch, cap
     with caplog.at_level(logging.INFO):
         assert agent.run_agent('Synthetic input', 'synthetic-owner') == ('Synthetic answer', False)
     assert executions == [True] and len(calls) == 2
-    assert len(agent.load_history('synthetic-owner')) == 2
     rows = events(caplog)
+    assert len(agent.load_history('synthetic-owner')) == 2
     if setting == 'true':
         assert any(r['stage'] == 'tool' and r['event'] == ('error' if tool_error else 'finish') for r in rows)
         assert rows[-1]['stage_errors'] == int(tool_error)

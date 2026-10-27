@@ -7,6 +7,11 @@ Synchronizuje dane glukozy bezpośrednio do SQLite.
 
 from __future__ import annotations
 
+import logging
+from logging_setup import configure_logging
+configure_logging()
+log = logging.getLogger(__name__)
+
 import os
 import sqlite3
 import sys
@@ -205,9 +210,8 @@ def sync_libre_to_db(client: LibreLinkUpClient | None = None) -> dict:
     ensure_agent_tables(conn)
     conn.commit()
 
-    print("\n" + "=" * 55)
-    print("  LibreLinkUp sync → SQLite")
-    print("=" * 55 + "\n")
+    log.info('libre.sync.progress')
+    log.info('libre.sync.progress')
 
     own_client = client is None
     if own_client:
@@ -231,16 +235,12 @@ def sync_libre_to_db(client: LibreLinkUpClient | None = None) -> dict:
 def main() -> None:
     result = sync_libre_to_db()
     if "error" in result:
-        sys.exit(result["error"])
+        log.error('libre.fetch_failed')
+        raise SystemExit(1)
 
-    print("\n" + "=" * 55)
-    print("  Gotowe!")
+    log.info('libre.sync.progress')
     for name, stats in result.get("datasets", {}).items():
-        print(
-            f"  {name}: pobrane {stats['fetched']}, nowe {stats['inserted']}, "
-            f"zaktualizowane {stats['updated']}, bez zmian {stats['unchanged']}"
-        )
-    print("=" * 55 + "\n")
+        log.info('libre.sync.progress')
 
 
 if __name__ == "__main__":

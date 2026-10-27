@@ -196,3 +196,47 @@ Schemat obsługuje kolumny identyfikacji historii oraz tabele kolejki, timeline 
 Przed aktualizacją starszej instalacji zachowaj backup bazy i dokumentów.
 `python server.py` pozostaje alternatywnym, starszym trybem Telegram-only;
 nie uruchamiaj go równolegle z nowym adapterem dla tego samego bota.
+
+### Trwałe logi operacyjne
+
+Backend, adapter Telegrama i CLI zapisują JSON do `DATA_DIR/logs` (w kontenerze
+`/data/logs`, na istniejącym trwałym wolumenie). `app.log` zawiera przebieg,
+ostrzeżenia i błędy; `errors.log` dostaje dodatkową kopię ERROR/CRITICAL.
+`profiling.jsonl` powstaje wyłącznie po włączeniu profilowania i nie trafia do
+konsoli ani pozostałych plików. Pliki powstają przy pierwszym zapisie.
+
+Limity bieżącego pliku: app 10 MiB, errors 5 MiB, profiling 10 MiB; każdy ma trzy
+rotacje `.1`–`.3` (łącznie najwyżej 100 MiB oraz puste pliki blokad). Katalog ma
+tryb 0700, pliki 0600. Linux `flock` obejmuje otwarcie, rotację i zapis; oba procesy
+otwierają plik ponownie pod blokadą. Nie uruchamiaj zewnętrznego rotatora tych
+samych plików. Awaria zapisu nie zmienia wyniku zadania; proces emituje najwyżej
+jeden stały alarm o niedostępnym sinku na stderr. Nie ma gwarancji fsync dla każdego
+rekordu ani kompletnego ostatniego wiersza po nagłym przerwaniu procesu.
+
+Rekordy mają `component` i czas ISO8601 UTC. Losowy `request_id` łączy etapy zadania
+również przy wyłączonym profilowaniu. `scope_id` rozróżnia kolejne wykonania
+processing/submission/delivery; `clock_id` identyfikuje zegar profilowania procesu.
+Numery rundy i narzędzia oraz diagnostyczny `operation_id` nie są mechanizmem
+deduplikacji. Wynik narzędzia ma osobne `tool_outcome`; `mutation_outcome=unknown`
+nie pozwala uznać `ok` za dowód commit. `response_outcome` i `delivery_outcome` są
+odrębne. Zakończona dostawa Telegrama oznacza przyjęcie fragmentów przez API i
+lokalne potwierdzenie, a pomiar WWW jedynie przygotowanie projekcji odpowiedzi.
+Nie mierzymy przeczytania odpowiedzi przez użytkownika.
+
+Granica logowania odrzuca argumenty dawnych komunikatów, surowe komunikaty bibliotek,
+nieznane nazwy wyjątków, tracebacki i dodatkowe pola spoza listy. Pozostają stałe
+zdarzenia, kategorie i kody, poprawny liczbowy status HTTP oraz ograniczony request ID
+z udokumentowanego pola SDK lub nagłówka `x-request-id` protokołu subskrypcji.
+Nie eksportuje body, URL, pozostałych nagłówków, rozmów, pomiarów ani obrazów.
+Nieobsłużone wyjątki procesu/wątku również korzystają z tej bezpiecznej granicy.
+Lokalne dane i audyt SQLite pozostają oddzielne. Sam ten format nie rozstrzyga
+przyczyny awarii dostawcy.
+
+Przed wdrożeniem właściciel sprawdza dokładny obraz po niezależnym review i CI,
+bind `/data`, UID/prawa zapisu, wolne miejsce oraz retencję kopii logów. Backup przez
+API SQLite z dokumentami, zdjęciami i lokalnym kluczem pamięci nadal jest wymagany;
+logi nie zastępują backupu bazy. Politykę kopiowania i retencji `/data/logs` ustala
+osobno. Na syntetykach sprawdzić restart/recreate i rotację obu procesów. Rollback
+polega na powrocie do poprzedniego zaakceptowanego obrazu po zachowaniu bieżącego
+stanu; nie nadpisuje bazy i nie usuwa audytu ani nowych logów. Publikacja obrazu,
+wdrożenie i rzeczywiste testy OAuth/Telegrama pozostają osobnymi krokami właściciela.
