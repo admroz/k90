@@ -5,6 +5,7 @@ Logging failures are deliberately isolated from application results.
 """
 import fcntl
 import logging
+import math
 import re
 from datetime import datetime, timezone
 import json
@@ -229,30 +230,53 @@ def _context():
     return module.CURRENT.get() if module else None
 
 
-def _factory(*args, **kwargs):
-    record = logging.LogRecord(*args, **kwargs)
-    component = record.name if record.name in COMPONENTS else 'library'
-    event = (record.msg if record.msg in EVENTS else TEMPLATES.get(record.msg, 'runtime.notice')) if type(record.msg) is str else 'runtime.notice'
+def _fields(value):
+    # Foreign factories/extra fields are untrusted even when keys look internal.
+    return safe_fields({key:item for key,item in value.items() if type(key) is str}) if type(value) is dict else {}
+
+
+def _normalize(record):
+    """Copy only validated fields AFTER Logger.makeRecord has merged extra."""
+    data = vars(record)
+    name, message = data.get('name'), data.get('msg')
+    component = name if type(name) is str and name in COMPONENTS else 'library'
+    allowed = EVENTS | frozenset(TEMPLATES.values())
+    event_name = (message if message in allowed else TEMPLATES.get(message, 'runtime.notice')) if type(message) is str else 'runtime.notice'
+    level = data.get('levelno')
+    level = level if type(level) is int and level in (10,20,30,40,50) else 40
+    safe = logging.LogRecord(component, level, '', 0, event_name, (), None)
+    created = data.get('created')
+    if type(created) in (int, float) and math.isfinite(created) and 0 <= created <= 32503680000:
+        safe.created = created
+    safe.threadName, safe.processName = 'worker', 'process'
     state = _context() or {}
-    record.name = record.module = component
-    record.levelname = {10:'DEBUG', 20:'INFO', 30:'WARNING', 40:'ERROR', 50:'CRITICAL'}.get(record.levelno, 'INFO')
-    record.threadName, record.processName = 'worker', 'process'
-    record.msg, record.args = event, ()
-    record.k90_meta = exception_metadata(record.exc_info[1]) if record.exc_info and record.exc_info[1] else {}
-    record.exc_info = record.exc_text = record.stack_info = None
-    record.pathname = record.filename = record.funcName = ''
-    record.lineno = 0
-    record.k90_context = {key:state.get(key) for key in ('request_id','scope_id','job_id','channel','scope')}
-    record.k90_context.update(safe_fields({key:state.get(key) for key in ('round_index','tool_index','operation_id')}))
-    return record
+    context = {}
+    for key in ('request_id', 'scope_id'):
+        value = state.get(key)
+        context[key] = value if type(value) is str and re.fullmatch(r'[0-9a-f]{32}', value) else None
+    job = state.get('job_id')
+    context['job_id'] = job if type(job) is int and job > 0 else None
+    context['channel'] = state.get('channel') if state.get('channel') in ('web','telegram','cli','background') else None
+    context['scope'] = state.get('scope') if state.get('scope') in ('processing','submission','delivery','background') else None
+    context.update(_fields({key:state.get(key) for key in ('round_index','tool_index','operation_id')}))
+    safe.k90_context = context
+    exc_info = data.get('exc_info')
+    if type(exc_info) is tuple and len(exc_info) == 3 and isinstance(exc_info[1], BaseException):
+        safe.k90_meta = exception_metadata(exc_info[1])
+    else:
+        safe.k90_meta = _fields(data.get('k90_meta'))
+    safe.k90_fields = _fields(data.get('k90_fields'))
+    return safe
 
 
 def _operational_record(record):
-    result = dict(utc=datetime.fromtimestamp(record.created, timezone.utc).isoformat(),
-                  level=record.levelname if record.levelno in (10,20,30,40,50) else 'INFO',
-                  component=record.name, event=record.msg, **record.k90_context, **record.k90_meta)
-    result.update(safe_fields(getattr(record, 'k90_fields', {})))
-    return result
+    safe = _normalize(record)
+    value = dict(utc=datetime.fromtimestamp(safe.created, timezone.utc).isoformat(),
+                 level=safe.levelname, component=safe.name, event=safe.msg)
+    value.update(safe.k90_meta)
+    value.update(safe.k90_fields)
+    value.update(safe.k90_context)
+    return value
 
 
 class SafeHandler(logging.Handler):
@@ -275,31 +299,44 @@ class SafeConsole(logging.StreamHandler):
             _alarm()
 
 
+def _dispatch(logger, record):
+    """Own standard logging emission, including late non-propagating loggers.
+
+    Arbitrary library handlers/formatters are not output sinks. This boundary is
+    after extra and logger filters, and is independent of the record factory.
+    """
+    try:
+        safe = _normalize(record)
+        _DURABLE.handle(safe)
+        _CONSOLE.handle(safe)
+        # Preserve pytest's in-memory observers with the sanitized copy only.
+        # Production output is exclusively the two controlled handlers above.
+        for handler in tuple(logging.getLogger().handlers):
+            if handler.__class__.__module__.startswith('_pytest.') and safe.levelno >= handler.level:
+                try:
+                    handler.handle(safe)
+                except Exception:
+                    _alarm()
+    except Exception:
+        _alarm()
+
+
+_DURABLE = SafeHandler()
+_CONSOLE = SafeConsole()
+
+
 def configure_logging():
-    """Install the boundary once; diagnostics must never prevent workload entry."""
+    """Establish safe output first, with no dependency on factory installation."""
     global _CONFIGURED
+    # One class-level dispatch boundary covers existing and future standard
+    # loggers without scanning the registry or calling arbitrary handlers.
+    logging.Logger.callHandlers = _dispatch
     try:
         with _CONFIG_LOCK:
-            # Keep the factory safe even if a later SDK changes its configuration.
-            logging.setLogRecordFactory(_factory)
             sys.excepthook = _uncaught
             threading.excepthook = _thread_uncaught
-            root = logging.getLogger()
-            if _CONFIGURED and any(isinstance(h, SafeHandler) for h in root.handlers):
-                return
-            with logging._lock:
-                # getLogger uses the same registry lock; never iterate a live dict.
-                loggers = tuple(logging.root.manager.loggerDict.values())
-                for handler in list(root.handlers):
-                    if not handler.__class__.__module__.startswith('_pytest.'):
-                        root.removeHandler(handler)
-                root.addHandler(SafeHandler())
-                root.addHandler(SafeConsole())
-                root.setLevel(logging.INFO)
-                for logger in loggers:
-                    if isinstance(logger, logging.Logger):
-                        logger.handlers.clear()
-                        logger.propagate = True
+            if not _CONFIGURED:
+                logging.getLogger().setLevel(logging.INFO)
                 _CONFIGURED = True
     except Exception:
         _alarm()
