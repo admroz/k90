@@ -338,4 +338,6 @@ def execute_tool(name: str, args: dict):
         result = fn(**args)
         return result
     except Exception as e:
+        from logging_setup import event
+        event('tool.failed', component='tools', error=e, mutation_outcome='unknown', tool_outcome='error')
         return {"error": str(e)}

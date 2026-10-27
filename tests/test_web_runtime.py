@@ -56,9 +56,12 @@ def test_timeline_stable_states_pagination_and_ownership(runtime, monkeypatch):
         enqueue('web:first', 'identical')
 
 
-def test_failed_job_after_partial_persistence_still_projects_safe_error(runtime):
+def test_failed_job_after_partial_persistence_still_projects_safe_error(runtime, monkeypatch):
     from agent import save_history
     from web_runtime import timeline
+    import web_runtime
+    events = []
+    monkeypatch.setattr(web_runtime, 'event', lambda name, **fields: events.append((name, fields)))
     enqueue('web:partial', 'hello')
     def processor(content):
         save_history('owner', content, 'partial saved answer')
@@ -67,6 +70,12 @@ def test_failed_job_after_partial_persistence_still_projects_safe_error(runtime)
     rows = timeline('owner')
     assert len(rows) == 2 and rows[-1]['state'] == 'failed'
     assert '0 zatwierdzonych' in rows[-1]['content']
+    assert [name for name, _ in events] == ['conversation.claim', 'conversation.failed', 'job.failed']
+    assert events[1][1]['component'] == 'web_runtime'
+    assert events[1][1]['level'] == web_runtime.logging.ERROR
+    assert events[2][1]['delivery_outcome'] == 'pending'
+    assert 'private provider diagnostic' not in str(events)
+    assert MESSAGE_CONTEXT.get() == {}
 
 
 def test_legacy_job_migration_uses_exact_persisted_owner(runtime, monkeypatch):
@@ -256,11 +265,15 @@ def test_unexpected_sync_exception_still_allows_answer(runtime, monkeypatch):
     assert saved == job["response"]
 
 
-def test_claim_log_contains_only_sequence_and_channel(runtime, caplog):
-    import logging
+def test_claim_log_contains_only_sequence_and_channel(runtime):
+    import json
+    import os
+    from pathlib import Path
     enqueue("web:synthetic-log", "synthetic-private-message")
-    with caplog.at_level(logging.INFO):
-        assert ConversationWorker(lambda _: "ok").run_once()
-    claims = [r.getMessage() for r in caplog.records if r.getMessage().startswith("conversation.claim")]
-    assert claims == ["conversation.claim seq=1 channel=web"]
-    assert "synthetic-private-message" not in caplog.text
+    assert ConversationWorker(lambda _: "ok").run_once()
+    content = (Path(os.environ['DATA_DIR'])/'logs/app.log').read_text()
+    rows = [json.loads(line) for line in content.splitlines()]
+    claims = [r for r in rows if r['event'] == 'conversation.claim']
+    assert len(claims) == 1
+    assert claims[0]['job_id'] == 1 and claims[0]['channel'] == 'web'
+    assert 'synthetic-private-message' not in content

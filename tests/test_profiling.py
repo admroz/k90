@@ -4,9 +4,16 @@ import logging
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def isolated_logs(tmp_path, monkeypatch):
+    monkeypatch.setenv('DATA_DIR', str(tmp_path))
+
+
 def events(caplog):
-    return [json.loads(r.getMessage().split(' profile=', 1)[1])
-            for r in caplog.records if ' profile=' in r.getMessage()]
+    import os
+    from pathlib import Path
+    path = Path(os.environ['DATA_DIR']) / 'logs' / 'profiling.jsonl'
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
 
 @pytest.mark.parametrize('transport', ['chat', 'responses'])
@@ -79,8 +86,8 @@ def test_actual_dispatcher_result_marks_tool_span_only(temp_db, monkeypatch, cap
     with caplog.at_level(logging.INFO):
         assert agent.run_agent('Synthetic input', 'synthetic-owner') == ('Synthetic answer', False)
     assert executions == [True] and len(calls) == 2
-    assert len(agent.load_history('synthetic-owner')) == 2
     rows = events(caplog)
+    assert len(agent.load_history('synthetic-owner')) == 2
     if setting == 'true':
         assert any(r['stage'] == 'tool' and r['event'] == ('error' if tool_error else 'finish') for r in rows)
         assert rows[-1]['stage_errors'] == int(tool_error)
@@ -124,17 +131,17 @@ def test_queue_processing_and_persistence_share_generated_identity(temp_db, monk
 
 
 @pytest.mark.parametrize('setting', [None, 'false', 'invalid', '1', 'TRUE'])
-def test_disabled_profiling_has_no_clock_uuid_or_log_cost(monkeypatch, caplog, setting):
+def test_disabled_profiling_has_correlation_without_clock_or_profile_sink(monkeypatch, caplog, setting):
     import profiling
     monkeypatch.delenv('K90_PROFILING_ENABLED', raising=False)
     if setting is not None:
         monkeypatch.setenv('K90_PROFILING_ENABLED', setting)
     def forbidden():
-        pytest.fail('disabled profiling allocated an ID or read the clock')
+        pytest.fail('disabled profiling read the clock')
     monkeypatch.setattr(profiling, 'perf_counter', forbidden)
-    monkeypatch.setattr(profiling, 'uuid4', forbidden)
     def exercise():
         with profiling.request_scope('web'):
+            assert len(profiling.CURRENT.get()['request_id']) == 32
             with profiling.span('tool'):
                 pass
     if setting not in (None, 'false'):

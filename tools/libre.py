@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from logging_setup import event
 from profiling import profiled
 
+import sys
 import logging
 import os
 
@@ -11,7 +13,6 @@ from fetch_libre import sync_libre_to_db
 from .db import get_conn
 from .time_utils import now_local, today_local
 
-log = logging.getLogger(__name__)
 SYNC_SOURCE = "libre"
 
 
@@ -101,22 +102,22 @@ def sync_libre_data(trigger: str = "manual") -> dict:
     if os.getenv("K90_SYNC_ENABLED", "true").lower() == "false":
         return {"error": "Synchronizacja jest wyłączona w lokalnej kopii danych."}
     if not is_enabled():
-        log.info("libre.sync skipped trigger=%s reason=disabled", trigger)
+        event('libre.sync', component='tools.libre')
         return {"ok": True, "disabled": True, "message": "Synchronizacja Libre jest wyłączona.", "datasets": {}}
 
     started_at = now_local().isoformat()
     _set_sync_status(last_started_at=started_at, last_status=f"running:{trigger}", last_error=None)
-    log.info("libre.sync start trigger=%s", trigger)
+    event('libre.sync', component='tools.libre')
     try:
         result = sync_libre_to_db()
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
         _set_sync_status(last_status=f"error:{trigger}", last_error=error)
-        log.exception("libre.sync trigger=%s error=%s", trigger, error)
+        event('libre.sync', component='tools.libre', level=logging.ERROR, error=sys.exception())
         return {"error": error}
     if "error" in result:
         _set_sync_status(last_status=f"error:{trigger}", last_error=result["error"])
-        log.error("libre.sync trigger=%s error=%s", trigger, result["error"])
+        event('libre.sync', component='tools.libre', level=logging.ERROR)
         return result
 
     totals = _aggregate_stats(result)
@@ -134,22 +135,6 @@ def sync_libre_data(trigger: str = "manual") -> dict:
     )
 
     for name, stats in result.get("datasets", {}).items():
-        log.info(
-            "libre.sync trigger=%s dataset=%s fetched=%d inserted=%d updated=%d unchanged=%d",
-            trigger,
-            name,
-            stats["fetched"],
-            stats["inserted"],
-            stats["updated"],
-            stats["unchanged"],
-        )
-    log.info(
-        "libre.sync finish trigger=%s fetched=%d inserted=%d updated=%d unchanged=%d changed=%s",
-        trigger,
-        totals["fetched"],
-        totals["inserted"],
-        totals["updated"],
-        totals["unchanged"],
-        result["changed"],
-    )
+        event('libre.sync', component='tools.libre', fetched=stats["fetched"], inserted=stats["inserted"], updated=stats["updated"], unchanged=stats["unchanged"])
+    event('libre.sync', component='tools.libre', fetched=totals["fetched"], inserted=totals["inserted"], updated=totals["updated"], unchanged=totals["unchanged"])
     return result

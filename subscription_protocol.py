@@ -145,6 +145,7 @@ def request_json(url, data=None, token=None, form=False, stream=False):
         body = (urlencode(data) if form else json.dumps(data)).encode()
         headers['Content-Type'] = 'application/x-www-form-urlencoded' if form else 'application/json'
     connection = http.client.HTTPSConnection(parsed.hostname, timeout=180 if stream else 30)
+    response = None
     try:
         connection.request('POST' if body is not None else 'GET', parsed.path, body=body, headers=headers)
         response = connection.getresponse()
@@ -157,6 +158,17 @@ def request_json(url, data=None, token=None, form=False, stream=False):
         if len(raw) > 2_000_000:
             raise ProbeError('response_too_large')
         return json.loads(raw) if raw else {}
+    except ProbeError as exc:
+        # Only the documented request ID header, never the body or header map.
+        try:
+            from logging_setup import safe_fields
+            fields = safe_fields({'http_status':response.status,
+                'provider_request_id':response.getheader('x-request-id')})
+            for key, value in fields.items():
+                setattr(exc, key, value)
+        except Exception:
+            pass  # Diagnostic extraction cannot change the protocol outcome.
+        raise
     finally:
         connection.close()
 

@@ -6,6 +6,7 @@ automatically replayed: a tool may already have performed its side effect.
 
 from __future__ import annotations
 
+import sys
 import json
 import logging
 import os
@@ -14,14 +15,15 @@ import time
 from uuid import uuid4
 from contextlib import closing
 import profiling
+from logging_setup import configure_logging, event
 
 from tools.db import MESSAGE_CONTEXT, get_conn, init_db
 
-log = logging.getLogger(__name__)
 INTERRUPTED = "Przetwarzanie przerwano podczas restartu. Sprawdź historię i dane przed ponowieniem wiadomości."
 
 
 def init_runtime():
+    configure_logging()
     profiling.enabled()  # Reject invalid configuration before starting the worker.
     init_db()
     with closing(get_conn()) as conn, conn:
@@ -261,20 +263,20 @@ def process_message(content):
                         elif name == "Garmin" and sync_has_changes(result):
                             garmin_changed = True
                     except Exception:
-                        log.exception("conversation.sync_failed source=%s", name)
+                        event('conversation.sync_failed', component='web_runtime', level=logging.ERROR, error=sys.exception())
                         warnings.append(name)
             if garmin_changed:
                 try:
                     refresh_patient_summary(trigger="auto_sync")
                     mark_summary_refreshed()
                 except Exception:
-                    log.exception("summary.auto_sync_refresh_failed")
+                    event('summary.auto_sync_refresh_failed', component='web_runtime', level=logging.ERROR, error=sys.exception())
             answer, refresh = run_agent(content, user_id=user_id)
             if refresh:
                 try:
                     refresh_patient_summary(trigger="conversation")
                 except Exception:
-                    log.exception("summary.refresh_failed")
+                    event('summary.refresh_failed', component='web_runtime', level=logging.ERROR, error=sys.exception())
             if warnings:
                 # Store the notice in the same answer seen by both channels.
                 answer = (
@@ -320,7 +322,7 @@ class ConversationWorker:
             return self._run_claimed(job)
 
     def _run_claimed(self, job):
-        log.info("conversation.claim seq=%d channel=%s", job["seq"], job["channel"])
+        event('conversation.claim', component='web_runtime')
         token = MESSAGE_CONTEXT.set(
             {"channel": job["channel"], "request_id": job["request_id"], 'user_id': job['user_id']}
         )
@@ -339,7 +341,7 @@ class ConversationWorker:
             state = "done"
         except Exception as exc:
             profiling.failure(exc)
-            log.error("conversation.failed job_id=%d", job["seq"])
+            event('conversation.failed', component='web_runtime', level=logging.ERROR)
             from tools.diet import failure_outcome
             response = failure_outcome(job['user_id'], job['request_id'])
             if job["kind"] == "garmin_sync":
@@ -352,6 +354,9 @@ class ConversationWorker:
                 "UPDATE chat_jobs SET state = ?, response = ?, finished_at = CURRENT_TIMESTAMP WHERE seq = ?",
                 (state, response, job["seq"]),
             )
+        event('job.completed' if state == 'done' else 'job.failed', component='web_runtime',
+              response_outcome='completed' if state == 'done' else 'failed',
+              delivery_outcome='pending', mutation_outcome='unknown')
         return True
 
     def run(self):
@@ -361,11 +366,11 @@ class ConversationWorker:
 
                 maybe_refresh_summary()
             except Exception:
-                log.exception("summary.startup_refresh_failed")
+                event('summary.startup_refresh_failed', component='web_runtime', level=logging.ERROR, error=sys.exception())
         while not self.stop.is_set():
             try:
                 if not self.run_once():
                     self.stop.wait(0.25)
             except Exception:
-                log.exception("conversation.worker_error")
+                event('conversation.worker_error', component='web_runtime', level=logging.ERROR, error=sys.exception())
                 self.stop.wait(2)

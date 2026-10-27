@@ -99,58 +99,51 @@ def check_photo_history_in_runtime():
 check_photo_history_in_runtime()
 
 def check_observability_in_runtime():
-    import io, json, logging, os, tempfile
+    import json, os, tempfile
     from unittest.mock import patch
     from k90_memory import PrivacyError, PrivacyPolicy
     from outbound_policy import sanitize_payload
     from web_runtime import init_runtime, enqueue, ConversationWorker, timeline
     from agent import save_history
-    capture = io.StringIO()
-    logger = logging.getLogger('agent')
-    handler = logging.StreamHandler(capture)
-    previous = logger.level
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-    try:
-        with tempfile.TemporaryDirectory() as scratch, patch.dict(os.environ, {
-                'DB_PATH': scratch + '/synthetic.db', 'DATA_DIR': scratch,
-                'CONVERSATION_USER_ID': 'synthetic-smoke',
-                'K90_TEXT_FILTER_ENABLED': 'false', 'K90_PROFILING_ENABLED': 'true',
-                'K90_MEMORY_BACKEND': 'disabled'}):
-            assert sanitize_payload('synthetic@example.invalid') == 'synthetic@example.invalid'
-            try:
-                PrivacyPolicy().sanitize_text('Bearer synthetic-secret')
-            except PrivacyError:
-                pass
-            else:
-                raise AssertionError('HS baseline was disabled')
-            init_runtime()
-            first = enqueue('web:synthetic-failed', 'synthetic first')
-            def fail(_):
-                raise RuntimeError('private diagnostic must not escape')
-            assert ConversationWorker(fail).run_once()
-            second = enqueue('telegram:synthetic-later', 'synthetic later', 'telegram', 123)
-            def succeed(content):
-                save_history('synthetic-smoke', content, 'synthetic answer')
-                return 'synthetic answer'
-            assert ConversationWorker(succeed).run_once()
-            rows = timeline('synthetic-smoke')
-            assert len(rows) == 4 and rows[1]['state'] == 'failed' and rows[-1]['state'] == 'done'
-            assert rows[-1]['content'] == 'synthetic answer'
-            assert timeline('synthetic-other') == []
-            assert timeline('synthetic-smoke', rows[2]['id']) == rows[:2]
-            assert timeline('synthetic-smoke') == rows
-            events = [json.loads(line.split(' profile=', 1)[1])
-                      for line in capture.getvalue().splitlines() if ' profile=' in line]
-            ids = {first['profile_id'], second['profile_id']}
-            correlated = [r for r in events if r['request_id'] in ids]
-            assert {r['request_id'] for r in correlated} == ids
-            assert {'queue_wait', 'processing', 'persistence'} <= {r['stage'] for r in correlated}
-            assert 'private diagnostic' not in capture.getvalue()
-            assert 'synthetic@example.invalid' not in capture.getvalue()
-    finally:
-        logger.removeHandler(handler)
-        logger.setLevel(previous)
+    with tempfile.TemporaryDirectory() as scratch, patch.dict(os.environ, {
+            'DB_PATH': scratch + '/synthetic.db', 'DATA_DIR': scratch,
+            'CONVERSATION_USER_ID': 'synthetic-smoke',
+            'K90_TEXT_FILTER_ENABLED': 'false', 'K90_PROFILING_ENABLED': 'true',
+            'K90_MEMORY_BACKEND': 'disabled'}):
+        assert sanitize_payload('synthetic@example.invalid') == 'synthetic@example.invalid'
+        try:
+            PrivacyPolicy().sanitize_text('Bearer synthetic-secret')
+        except PrivacyError:
+            pass
+        else:
+            raise AssertionError('HS baseline was disabled')
+        init_runtime()
+        first = enqueue('web:synthetic-failed', 'synthetic first')
+        def fail(_):
+            raise RuntimeError('private diagnostic must not escape')
+        assert ConversationWorker(fail).run_once()
+        second = enqueue('telegram:synthetic-later', 'synthetic later', 'telegram', 123)
+        def succeed(content):
+            save_history('synthetic-smoke', content, 'synthetic answer')
+            return 'synthetic answer'
+        assert ConversationWorker(succeed).run_once()
+        rows = timeline('synthetic-smoke')
+        assert len(rows) == 4 and rows[1]['state'] == 'failed' and rows[-1]['state'] == 'done'
+        assert rows[-1]['content'] == 'synthetic answer'
+        assert timeline('synthetic-other') == []
+        assert timeline('synthetic-smoke', rows[2]['id']) == rows[:2]
+        assert timeline('synthetic-smoke') == rows
+        from pathlib import Path
+        events = [json.loads(line) for line in (Path(scratch)/'logs'/'profiling.jsonl').read_text().splitlines()]
+        operational = (Path(scratch)/'logs/app.log').read_text()
+        assert '"component":"profiling"' not in operational
+        assert 'logging_setup.py' in __import__('sys').modules['logging_setup'].__file__
+        ids = {first['profile_id'], second['profile_id']}
+        correlated = [r for r in events if r['request_id'] in ids]
+        assert {r['request_id'] for r in correlated} == ids
+        assert {'queue_wait', 'processing', 'persistence'} <= {r['stage'] for r in correlated}
+        assert 'private diagnostic' not in operational + (Path(scratch)/'logs/errors.log').read_text()
+        assert 'synthetic@example.invalid' not in operational + (Path(scratch)/'logs/errors.log').read_text()
     print('Timeline, model filter switch, HS baseline and profiling runtime passed (synthetic offline).')
 
 check_observability_in_runtime()
@@ -237,56 +230,83 @@ print('HTTP, static assets and chat work while Telegram has no network.')
 """
 
 
+
+LOG_WRITER = r"""
+import os, sys
+os.environ['DATA_DIR'] = os.getenv('K90_LOG_SMOKE_DIR', '/data/log-smoke')
+os.environ['K90_PROFILING_ENABLED'] = 'true'
+import logging_setup as logs, profiling
+logs.LIMITS.update({name:4096 for name in logs.LIMITS})
+with profiling.request_scope('cli', sys.argv[1]*32):
+    for index in range(1,9):
+        profiling.indices(index,1)
+        with profiling.span('tool'):
+            logs.event('tool.failed', error=TimeoutError('CANARY_LOG_SECRET'), mutation_outcome='unknown')
+"""
+
+
+def check_log_storage(directory, *, record=False, verify=False):
+    """Same acceptance runs on host fixtures and inside the network-none image."""
+    import hashlib
+    import json
+    from pathlib import Path
+    directory = Path(directory)
+    logs = directory/'logs'
+    assert logs.stat().st_mode & 0o777 == 0o700
+    snapshot, records = {}, {}
+    for name in ('app.log', 'errors.log', 'profiling.jsonl'):
+        files = [path for path in logs.glob(name+'*') if not path.name.endswith('.lock')]
+        assert 1 < len(files) <= 4, (name, len(files))
+        records[name] = []
+        for path in files:
+            assert path.stat().st_mode & 0o777 == 0o600
+            raw = path.read_bytes()
+            assert len(raw) <= 4096 and b'CANARY' not in raw
+            snapshot[path.name] = hashlib.sha256(raw).hexdigest()
+            records[name].extend(json.loads(line) for line in raw.splitlines())
+    app, errors, profile = (records[name] for name in ('app.log', 'errors.log', 'profiling.jsonl'))
+    assert len(app) == len(errors) == 16
+    assert {row['request_id'] for row in app} == {'1'*32, '2'*32}
+    assert {json.dumps(row, sort_keys=True) for row in app} == {json.dumps(row, sort_keys=True) for row in errors}
+    assert all(row['component'] != 'profiling' and 'stage' not in row for row in app+errors)
+    assert profile and all(row['component'] == 'profiling' for row in profile)
+    marker = directory/'log-snapshot.json'
+    if record:
+        marker.write_text(json.dumps(snapshot, sort_keys=True))
+        marker.chmod(0o600)
+    if verify:
+        assert json.loads(marker.read_text()) == snapshot, 'logs changed across container lifecycle'
+
+
 def main():
     image = sys.argv[1] if len(sys.argv) > 1 else "k90:test"
     name = "k90-smoke-" + uuid.uuid4().hex[:10]
-    # No volume is mounted, and --network none prevents real Telegram/LLM/source access.
-    subprocess.run(
-        [
-            "docker",
-            "run",
-            "-d",
-            "--name",
-            name,
-            "--network",
-            "none",
-            "-e",
-            "WEB_PASSWORD=smoke-test-password",
-            "-e",
-            "WEB_COOKIE_SECURE=false",
-            "-e",
-            "TELEGRAM_BOT_TOKEN=123:offline-test",
-            "-e",
-            "TELEGRAM_ALLOWED_USER_ID=123",
-            "-e",
-            "K90_PREVIEW=true",
-            "-e",
-            "K90_SYNC_ENABLED=false",
-            image,
-        ],
-        check=True,
-    )
-    try:
-        ready = False
+    volume = name + '-data'
+    subprocess.run(['docker', 'volume', 'create', volume], check=True)
+    command = ['docker', 'run', '-d', '--name', name, '--network', 'none',
+               '--mount', 'type=volume,source='+volume+',target=/data',
+               '-e', 'WEB_PASSWORD=smoke-test-password', '-e', 'WEB_COOKIE_SECURE=false',
+               '-e', 'TELEGRAM_BOT_TOKEN=123:offline-test', '-e', 'TELEGRAM_ALLOWED_USER_ID=123',
+               '-e', 'K90_PREVIEW=true', '-e', 'K90_SYNC_ENABLED=false', image]
+
+    def wait_ready():
         for _ in range(40):
-            result = subprocess.run(
-                [
-                    "docker",
-                    "exec",
-                    name,
-                    "python",
-                    "-c",
-                    "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)",
-                ],
-                capture_output=True,
-                check=False,
-            )
+            result = subprocess.run(['docker', 'exec', name, 'python', '-c',
+                "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"],
+                capture_output=True, check=False)
             if result.returncode == 0:
-                ready = True
-                break
-            time.sleep(0.5)
-        if not ready:
-            raise RuntimeError("Backend did not start")
+                return
+            time.sleep(.5)
+        raise RuntimeError('Backend did not start')
+
+    def storage_check(*, record=False, verify=False):
+        import inspect
+        code = inspect.getsource(check_log_storage) + "\ncheck_log_storage('/data/log-smoke', record="+repr(record)+", verify="+repr(verify)+")"
+        subprocess.run(['docker','exec',name,'python','-c',code],check=True)
+
+    try:
+        subprocess.run(command, check=True)
+        wait_ready()
         subprocess.run(["docker", "exec", name, "python", "-c", CHECK], check=True)
 
         def pid(program):
@@ -329,11 +349,28 @@ def main():
             raise AssertionError("Telegram adapter did not restart")
         assert pid("backend") == backend_pid, "Telegram crash restarted the backend"
         subprocess.run(["docker", "exec", name, "python", "-c", CHECK], check=True)
-        print("Container smoke test passed, including isolated Telegram restart.")
+        # Two real processes in the image share flock/open/rotate/write sinks.
+        children = [subprocess.Popen(['docker','exec',name,'python','-c',LOG_WRITER,str(index)],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE) for index in (1,2)]
+        for child in children:
+            stdout, stderr = child.communicate(timeout=30)
+            assert child.returncode == 0
+            assert b'CANARY' not in stdout+stderr
+            assert b'"component":"profiling"' not in stdout+stderr
+        storage_check(record=True)
+        subprocess.run(['docker','restart',name],check=True)
+        wait_ready()
+        storage_check(verify=True)
+        subprocess.run(['docker','rm','-f',name],check=True)
+        subprocess.run(command,check=True)  # Same disposable /data volume, new container.
+        wait_ready()
+        storage_check(verify=True)
+        print('Container smoke passed: isolated Telegram restart, split logs and persistent /data recreate.')
     finally:
         subprocess.run(["docker", "logs", "--tail", "50", name], check=False)
-        # This removes only the unique disposable container created above, with no user volumes.
+        # Remove only this run's unique disposable container and synthetic volume.
         subprocess.run(["docker", "rm", "-f", name], check=False)
+        subprocess.run(["docker", "volume", "rm", volume], check=False)
 
 
 if __name__ == "__main__":
