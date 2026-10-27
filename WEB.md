@@ -240,3 +240,21 @@ osobno. Na syntetykach sprawdzić restart/recreate i rotację obu procesów. Rol
 polega na powrocie do poprzedniego zaakceptowanego obrazu po zachowaniu bieżącego
 stanu; nie nadpisuje bazy i nie usuwa audytu ani nowych logów. Publikacja obrazu,
 wdrożenie i rzeczywiste testy OAuth/Telegrama pozostają osobnymi krokami właściciela.
+
+Adapter Telegrama tworzy osobny losowy kontekst ingress przed pobraniem obrazu,
+walidacją i wysłaniem do backendu. `telegram.submitted` łączy ten kontekst z
+`backend_request_id` i `backend_job_id` zwróconymi po enqueue; są to wygenerowany
+identyfikator diagnostyczny i numer lokalnego zadania. Ponowiona wiadomość nadal
+korzysta z dotychczasowego mechanizmu deduplikacji. Błędy ingress są rejestrowane
+przed wyjściem z kontekstu. Transport zachowuje wyłącznie zwalidowaną kategorię,
+kod i status HTTP; opis odpowiedzi Telegrama i dane żądania nie są przenoszone do
+wyjątku diagnostycznego. Komponenty wykonywane jako skrypty mają stałe nazwy.
+
+Bootstrap pobiera spójny snapshot rejestru loggerów pod blokadą biblioteki logging.
+Kolejne wejścia zachowują bezpieczną fabrykę rekordów bez ponownego skanowania
+całego rejestru; błąd konfiguracji logowania nie blokuje wykonania zadania.
+Rozszerzony smoke CI uruchamia dwa procesy zapisujące logi i sprawdza ich limity,
+prawa, kopię błędów i izolację profilowania. Następnie porównuje snapshot logów po
+restart i recreate z tym samym, unikalnym wolumenem syntetycznym `/data`, który
+usuwa przy sprzątaniu. Uruchomienie helpera na hoście nie potwierdza wyniku tego
+smoke na rzeczywistym obrazie.

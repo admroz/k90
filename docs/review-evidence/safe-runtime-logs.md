@@ -41,3 +41,26 @@ The provider failure cause remains undetermined.
 Runtime format, limits, backup/retention and owner deployment/rollback checks:
 [WEB.md](../../WEB.md#trwałe-logi-operacyjne). No PR, image publication or deployment
 is claimed by this author checkpoint.
+
+## Follow-up author verification
+
+Follow-up implementation tested at `67b121bf22a8054a64d3a3e896605303106e94ca`.
+Logger bootstrap now uses the registry lock and a stable snapshot, and contains
+setup failures at request entry. Executable components keep their fixed logger
+names. Telegram ingress has generated correlation before image/backend work and
+links it to backend enqueue identity without changing duplicate suppression.
+Transport wrappers preserve validated category/status through fixed diagnostics.
+
+Synthetic author results: **684 Python passed, 1 skipped** (228.06 seconds),
+JavaScript syntax exit0 and **25 Node passed**. Fourteen unchanged selected
+external probes replayed successfully, including actual CLI transport separation,
+concurrent logger registration, Telegram HTTP status and ingress correlation.
+Replay by the implementer is not fresh independent approval.
+
+The extended image smoke now executes two log writers, validates app/error copy,
+profiling isolation, bounded rotation and permissions, then compares log snapshots
+after restart and recreate on the same disposable synthetic volume. The writer
+and snapshot helper ran successfully on the host as part of the Python suite.
+Actual image build/lifecycle execution remains a coordinator CI gate. Subsequent
+changes to this tested source are documentation only; production/live checks and
+the undetermined provider failure cause remain unchanged.

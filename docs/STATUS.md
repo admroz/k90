@@ -2,14 +2,15 @@
 
 ## Safe runtime logs — 2026-10-27
 
-Author implementation checkpoint on feat/safe-runtime-logs-20261027; tested source
-`77f7fbc06f7486d79ad5a21a86f8bc7f889f113b`. Offline synthetic regression:
-680 Python passed / 1 existing skip; Node25 passed and JS syntax exit0.
-Separate bounded app/error/profiling files, safe exception boundary and generated
-correlation even with profiling disabled. Mutation outcome remains unknown without
-transaction evidence; tool success is not proof of commit. Fresh independent
-verification, exact-image CI/smoke and owner deployment/live checks remain pending.
-No PR, publication or deployment. Evidence: [safe-runtime-logs.md](review-evidence/safe-runtime-logs.md).
+Follow-up author checkpoint on feat/safe-runtime-logs-20261027; tested source
+`67b121bf22a8054a64d3a3e896605303106e94ca`. Offline synthetic regression:
+684 Python passed / 1 skip; Node25 passed and JS syntax exit0. Fourteen selected
+unchanged external probes replayed successfully by the implementer. Bootstrap
+registry synchronization/noninterference, executable component identity and
+Telegram ingress/transport attribution corrected. Image smoke now includes split
+log concurrency/rotation/permissions and persistent synthetic /data lifecycle.
+Actual image execution and fresh independent review remain pending. No PR,
+publication or deployment. Evidence: [safe-runtime-logs.md](review-evidence/safe-runtime-logs.md).
 
 ## Feature base integration — 2026-10-26
 
