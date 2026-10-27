@@ -22,7 +22,8 @@ from tools.libre import should_auto_sync as should_auto_sync_libre, sync_libre_d
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+from logging_setup import configure_logging
+configure_logging()
 log = logging.getLogger(__name__)
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")

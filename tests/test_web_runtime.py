@@ -262,5 +262,7 @@ def test_claim_log_contains_only_sequence_and_channel(runtime, caplog):
     with caplog.at_level(logging.INFO):
         assert ConversationWorker(lambda _: "ok").run_once()
     claims = [r.getMessage() for r in caplog.records if r.getMessage().startswith("conversation.claim")]
-    assert claims == ["conversation.claim seq=1 channel=web"]
+    assert claims == ["conversation.claim"]
+    claim = next(r for r in caplog.records if r.getMessage() == "conversation.claim")
+    assert claim.k90_context["job_id"] == 1 and claim.k90_context["channel"] == "web"
     assert "synthetic-private-message" not in caplog.text

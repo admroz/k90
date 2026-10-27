@@ -14,6 +14,7 @@ import time
 from uuid import uuid4
 from contextlib import closing
 import profiling
+from logging_setup import configure_logging, event
 
 from tools.db import MESSAGE_CONTEXT, get_conn, init_db
 
@@ -22,6 +23,7 @@ INTERRUPTED = "Przetwarzanie przerwano podczas restartu. Sprawdź historię i da
 
 
 def init_runtime():
+    configure_logging()
     profiling.enabled()  # Reject invalid configuration before starting the worker.
     init_db()
     with closing(get_conn()) as conn, conn:
@@ -350,6 +352,9 @@ class ConversationWorker:
                 "UPDATE chat_jobs SET state = ?, response = ?, finished_at = CURRENT_TIMESTAMP WHERE seq = ?",
                 (state, response, job["seq"]),
             )
+        event('job.completed' if state == 'done' else 'job.failed', component='web_runtime',
+              response_outcome='completed' if state == 'done' else 'failed',
+              delivery_outcome='pending', mutation_outcome='unknown')
         return True
 
     def run(self):

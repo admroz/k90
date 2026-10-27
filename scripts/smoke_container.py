@@ -140,8 +140,10 @@ def check_observability_in_runtime():
             assert timeline('synthetic-other') == []
             assert timeline('synthetic-smoke', rows[2]['id']) == rows[:2]
             assert timeline('synthetic-smoke') == rows
-            events = [json.loads(line.split(' profile=', 1)[1])
-                      for line in capture.getvalue().splitlines() if ' profile=' in line]
+            from pathlib import Path
+            events = [json.loads(line) for line in (Path(scratch)/'logs'/'profiling.jsonl').read_text().splitlines()]
+            assert 'agent.phase' not in capture.getvalue()
+            assert 'logging_setup.py' in __import__('sys').modules['logging_setup'].__file__
             ids = {first['profile_id'], second['profile_id']}
             correlated = [r for r in events if r['request_id'] in ids]
             assert {r['request_id'] for r in correlated} == ids

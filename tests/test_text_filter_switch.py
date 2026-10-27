@@ -67,8 +67,9 @@ def test_agent_context_history_tool_and_current_text_follow_switch(temp_db, monk
     monkeypatch.setattr(subscription_api, 'request_json', request)
     with caplog.at_level('INFO'):
         assert agent.run_agent('current ' + EMAIL, 'test') == ('done', False)
-    profiles = [json.loads(r.getMessage().split(' profile=', 1)[1])
-                for r in caplog.records if ' profile=' in r.getMessage()]
+    from pathlib import Path
+    import os
+    profiles = [json.loads(line) for line in (Path(os.environ['DATA_DIR'])/'logs'/'profiling.jsonl').read_text().splitlines()]
     assert {'history', 'context', 'recall', 'provider', 'tool', 'persistence', 'filtering', 'provider_request'} <= {r['stage'] for r in profiles}
     assert len({r['request_id'] for r in profiles}) == 1
     assert EMAIL not in json.dumps(profiles) and 'test' not in json.dumps(profiles)

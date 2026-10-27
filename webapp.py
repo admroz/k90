@@ -137,6 +137,8 @@ class Offset(BaseModel):
 
 
 def create_app(*, start_worker=True, processor=None):
+    from logging_setup import configure_logging
+    configure_logging()
     sessions = {}
     login_attempts = deque()
 

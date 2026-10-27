@@ -16,6 +16,9 @@ import logging
 import os
 from contextlib import closing
 from profiling import span as _phase, profiled, profiled_request
+from logging_setup import configure_logging, event
+import profiling
+configure_logging()
 import litellm
 from dotenv import load_dotenv
 
@@ -35,8 +38,6 @@ from tools.time_utils import now_local
 
 load_dotenv()
 
-if not logging.getLogger().handlers:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
 MODEL = os.getenv("AGENT_MODEL", "gpt-5.4")
@@ -148,8 +149,11 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
             save_history(user_id, user_message, approval)
             return approval, False
         memory_runtime.start_worker()
-        return _run_agent(user_message, user_id)
+        result = _run_agent(user_message, user_id)
+        event('response.completed', response_outcome='completed', delivery_outcome='pending', mutation_outcome='unknown')
+        return result
     except BaseException as exc:
+        event('response.failed', error=exc, response_outcome='failed', delivery_outcome='pending', mutation_outcome='unknown')
         try:
             memory_runtime.record_failure(type(exc).__name__)
         except Exception:
@@ -211,6 +215,7 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
         )
 
     for round_index in range(1, MAX_TOOL_ROUNDS + 1):
+        profiling.indices(round_index)
         with _phase("provider"):
             if responses is not None:
                 turn = responses.complete()
@@ -262,7 +267,8 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
         tool_names = [tool_call.name for tool_call in calls]
         log.info("agent.tools user=%s round=%d tool_calls=%s", log_user, round_index, ",".join(tool_names))
 
-        for tool_call in calls:
+        for tool_index, tool_call in enumerate(calls, 1):
+            profiling.indices(round_index, tool_index)
             if tool_call.name in SUMMARY_REFRESH_TRIGGERS:
                 should_refresh = True
             args = strict_json_loads(tool_call.arguments or "{}")
@@ -270,6 +276,8 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
                 result = execute_tool(tool_call.name, args)
                 if failed is not None and isinstance(result, dict) and 'error' in result:
                     failed[0] = True
+            event('tool.completed', mutation_outcome='unknown',
+                  tool_outcome='error' if 'error' in result else 'returned')
             memory_runtime.record_tool(tool_call.name, args, result)
             log.info(
                 "agent.tool_result user=%s tool=%s ok=%s",

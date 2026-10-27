@@ -7,6 +7,7 @@ import logging
 import os
 import time
 from profiling import request_scope, span
+from logging_setup import configure_logging, event
 
 import requests
 
@@ -74,18 +75,25 @@ def accept_update(api, backend, update):
 def deliver_pending(api, backend):
     for item in backend.call("GET", "/internal/deliveries"):
         with request_scope('telegram', item.get('profile_id'), item.get('job_id'), scope='delivery'):
-            with span('transport_delivery'):
-                chunks = split_message(item["response"])
-                for index in range(item["delivery_index"], len(chunks)):
-                    api.send_text(item["chat_id"], chunks[index])
-                    backend.call(
-                        "POST",
-                        f"/internal/deliveries/{item['request_id']}",
-                        json={"index": index + 1, "done": index + 1 == len(chunks)},
-                    )
+            try:
+                with span('transport_delivery'):
+                    chunks = split_message(item["response"])
+                    for index in range(item["delivery_index"], len(chunks)):
+                        api.send_text(item["chat_id"], chunks[index])
+                        backend.call(
+                            "POST",
+                            f"/internal/deliveries/{item['request_id']}",
+                            json={"index": index + 1, "done": index + 1 == len(chunks)},
+                        )
+            except Exception as exc:
+                event('delivery.failed', component='telegram_adapter', error=exc, delivery_outcome='failed')
+                raise
+            else:
+                event('delivery.completed', component='telegram_adapter', delivery_outcome='completed')
 
 
 def main():
+    configure_logging()
     if os.getenv("TELEGRAM_ENABLED", "true") == "false":
         return
     if not os.getenv("TELEGRAM_BOT_TOKEN") or not os.getenv("TELEGRAM_ALLOWED_USER_ID"):
