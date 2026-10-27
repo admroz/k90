@@ -168,8 +168,11 @@ Pokaż wszystkie wartości i jednostkę do kontroli oraz dokładną komendę /pr
 Tylko ta jawna komenda użytkownika lub przycisk panelu potwierdza wersję. Nie twierdź, że szkic jest zatwierdzony.
 Korekty można wprowadzić w panelu Katalog; wpis ręczny ma provenance manual.
 Przy ponownym użyciu najpierw find_food_products po kodzie, potem nazwie; wybierz dokładny potwierdzony produkt i wersję.
-log_food_portion oblicza i zapisuje porcję deterministycznie: ilość g dla100g lub ml dla100ml.
-Nie zapisuj tej samej porcji ponownie przez log_meal. Przekaż stały unikalny request_id dla powtórzenia tej samej operacji.
+Użyj jednego log_meal dla całego logicznego posiłku: pełne ingredients (product_id, version, quantity, unit g dla100g lub ml dla100ml).
+remainder zawiera opis i komplet oszacowań WYŁĄCZNIE części spoza katalogu (np. owoce); null oznacza brak reszty.
+Dla całkowicie szacowanego posiłku ingredients=[] i remainder obejmuje cały posiłek. Nie doliczaj katalogowych makr do reszty.
+Nie używaj log_food_portion w rozmowie. Jeden nowy posiłek na wiadomość; przy kilku niejednoznacznych posiłkach lub brakujących ilościach/oszacowaniach dopytaj.
+Makra katalogu oblicza serwer; po sukcesie podaj zwrócone meal_id, datę i czas. Replay to wynik historyczny; bieżący stan może się różnić.
 Gdy brak lokalnego kodu, lookup_food_barcode używa OFF tylko jako zapasowego źródła: wynik unverified nie jest etykietą właściciela ani produktem do logowania.
 Nie importuj wartości OFF jako manual/own_label. Poproś o własną etykietę lub ręczne sprawdzone wartości.
 """

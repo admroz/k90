@@ -22,23 +22,17 @@ nadpisuje własnych produktów.
    zatwierdza produktu. Zmiana szkicu unieważnia wcześniejszy numer wersji.
    Korekty zapisują nowy szkic; wymagają ponownego sprawdzenia.
 5. **Zapisz porcję** przy potwierdzonym produkcie wymaga dodatniej ilości g albo ml
-   zgodnej z podstawą. Agent ma też narzędzia wyszukiwania i zapisu porcji.
+   zgodnej z podstawą. Agent wyszukuje produkty i zapisuje cały logiczny posiłek przez `log_meal`.
    Przeliczanie wykonuje kod: 64 kcal/B12/W4,1/T0 na100g → dla150g
    96 kcal/B18/W6,15/T0. Nie ma domyślnej gęstości ani zamiany g↔ml.
 
-Porcja trafia atomowo do istniejących posiłków i zachowuje pełny snapshot
+Panelowa porcja trafia atomowo do istniejących posiłków i zachowuje pełny snapshot
 produktu, wersji, wartości na100 oraz ilości i wyniku. Późniejsze zmiany katalogu
-nie przeliczają dawnych posiłków. Idempotency key chroni ponowienie tej samej
-operacji; nowy klucz oznacza nowy posiłek. Agent nie powinien dodatkowo używać
-`log_meal` dla tej samej porcji. Dotychczasowe swobodne logowanie posiłków działa
-nadal; nie da się rozpoznać dwóch niezależnych opisów jako tego samego spożycia.
-
-W narzędziu agenta klucz porcji pochodzi z zaufanej wiadomości i wybranego
-produktu/wersji/ilości/jednostki; zmiana klucza przez model nie dodaje duplikatu.
-Mieszanie `log_meal` i porcji katalogu w jednej wiadomości jest blokowane;
-odrębny swobodny posiłek należy zgłosić w osobnej wiadomości.
-Porcje są zapisywane z bieżącą datą/czasem aplikacji. Usunięcie/edycja posiłku
-pozostaje dotychczasową operacją, bez zmiany historycznego snapshotu porcji.
+nie przeliczają dawnych posiłków. Klucz formularza chroni ponowienie tej samej
+operacji; nowy klucz oznacza nowy posiłek. Porcje panelowe są zapisywane z bieżącą
+datą/czasem aplikacji. Chat używa kompletnego `log_meal` opisanego poniżej;
+nie zapisuje już osobnych porcji każdego składnika. Nowe wiadomości nie są
+porównywane po podobieństwie jako duplikaty spożycia.
 
 Kody są tekstem GTIN8/12/13/14 z kontrolą cyfry kontrolnej. Zera początkowe są
 istotne; spacje, URL i niepoprawne kody są odrzucane, a nie naprawiane po cichu.
@@ -150,3 +144,43 @@ rekordy oznaczone rynkiem polskim:5900531004544 Skyr Naturalny,
 Wszystkie pozostały `unverified`,100g; to nie jest gwarancja poprawności etykiet
 ani reprezentatywnego pokrycia rynku. Publiczny endpoint wyszukiwania zwrócił503;
 sprawdzono pojedyncze produkty GET, bez zmiany adaptera i bez danych właściciela.
+
+## Jeden logiczny posiłek w rozmowie
+
+Chat zapisuje śniadanie jednym `log_meal`: `description`, pełna lista `ingredients`
+(`product_id`, aktualna potwierdzona `version`, dodatnia `quantity`, `unit` g/ml),
+i `remainder`. Reszta to albo `null` (brak składników spoza katalogu), albo opis
+WYŁĄCZNIE części spoza katalogu z kompletem `calories`, `protein_g`, `carbs_g`,
+`fat_g`. Dla posiłku całkowicie szacowanego lista jest pusta. Brak oszacowania
+wymaga doprecyzowania. Makra katalogu wylicza serwer; nie doliczać ich do reszty.
+Jawnie powtórzony składnik listy liczy się dwukrotnie. Limit: 100 pozycji;
+ilość i każde oszacowanie 0–10000 (ilość >0), opis do 2000 znaków.
+
+Jedna transakcja SQLite waliduje wszystkie pozycje, zapisuje jeden `posilki`,
+niezmienny lokalny snapshot `meal_ingredients` i wynik w `meal_operations`.
+`log_food_portion` usunięto ze schematu modelu; stara nazwa dispatchera odmawia
+bez zapisu. Panelowy zapis pojedynczej porcji nadal działa dotychczasową ścieżką.
+Nie dodano edytora składników, szablonów ani automatycznej naprawy historii.
+
+Backend wiąże operację z właścicielem i tożsamością żądania z istniejącego turna
+oraz slotem: jeden nowy posiłek na żądanie; update/delete osobno dla każdego ID.
+Model nie wybiera klucza idempotencji. Dokładny replay zwraca historyczny wynik,
+inna treść zajętego slotu daje konflikt. Nowa wiadomość stanowi nowe spożycie,
+nawet gdy tekst jest podobny. Przy kilku niejednoznacznych posiłkach model ma
+dopytać. Nie ma transakcji obejmującej inference lub całą rozmowę.
+
+Update/delete i ledger commitują razem; brak ID jest błędem. Replay po późniejszej
+korekcie/usunięciu nie zmienia danych i jest oznaczony jako historyczny. Korekta
+zwiększa `posilki.revision`; oryginalny snapshot pozostaje niezmieniony. Kolejka
+po awarii odpowiedzi lub restarcie odczytuje znane zatwierdzone operacje z ledgeru
+(ID/liczba, bez opisów posiłków). Ponowienie dostawy nie uruchamia writera.
+Inne rodzaje narzędzi nie są objęte tym rejestrem. Przed commit błąd wycofuje całą
+operację; po commit błąd eventu, odpowiedzi lub dostawy nie wycofuje danych.
+
+Migracja jest addytywna i idempotentna. Przed wdrożeniem właściciel wykonuje
+spójny backup przez API SQLite wraz z dokumentami/zdjęciami i konfiguracją osobno,
+a następnie próbę restore na kopii. Rollback: zatrzymać mutacje, zachować bieżący
+backup, wrócić do poprzedniego obrazu bez DROP nowych tabel. Starszy writer traci
+gwarancję grupowania/dedup; nie uruchamiać dwóch wersji writerów. Rzeczywisty obraz,
+wdrożenie i live provider/OAuth pozostają osobnymi bramkami. Syntetyczne testy
+trzech adapterów nie ustalają przyczyny dawnego błędu produkcyjnego: UNKNOWN.

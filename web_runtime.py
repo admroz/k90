@@ -192,6 +192,7 @@ def enqueue(request_id, content, channel="web", chat_id=None, *, kind="message")
 
 
 def recover_interrupted():
+    from tools.diet import failure_outcome
     with closing(get_conn()) as conn, conn:
         for row in conn.execute(
             "SELECT request_id, user_id FROM chat_jobs WHERE state = 'running'"
@@ -204,7 +205,7 @@ def recover_interrupted():
                 "UPDATE chat_jobs SET state = ?, response = ?, finished_at = CURRENT_TIMESTAMP WHERE request_id = ?",
                 (
                     "done" if saved else "interrupted",
-                    saved[0] if saved else INTERRUPTED,
+                    saved[0] if saved else failure_outcome(row[1], row[0], conn=conn),
                     row[0],
                 ),
             )
@@ -339,7 +340,8 @@ class ConversationWorker:
         except Exception as exc:
             profiling.failure(exc)
             log.error("conversation.failed job_id=%d", job["seq"])
-            response = "Nie udało się zakończyć odpowiedzi. Sprawdź dane przed ponowieniem — część operacji mogła zostać wykonana."
+            from tools.diet import failure_outcome
+            response = failure_outcome(job['user_id'], job['request_id'])
             if job["kind"] == "garmin_sync":
                 response = "Nie udało się pobrać danych Garmin. Sprawdź połączenie i konfigurację w logach kontenera."
             state = "failed"

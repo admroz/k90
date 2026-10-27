@@ -10,7 +10,7 @@ from .diet import log_meal, update_meal, get_recent_meals, delete_meal
 from .garmin import sync_garmin_data
 from .libre import sync_libre_data
 from .patient import read_patient_file, update_patient_file
-from .food_catalog import propose_from_chat, search as find_food_products, log_portion_from_chat
+from .food_catalog import propose_from_chat, search as find_food_products
 from .food_off import lookup as lookup_food_barcode
 
 
@@ -25,7 +25,6 @@ _REGISTRY = {
     "lookup_food_barcode": lookup_food_barcode,
     "propose_food_product": propose_from_chat,
     "find_food_products": find_food_products,
-    "log_food_portion": log_portion_from_chat,
     "get_blood_pressure": get_blood_pressure,
     "get_weight_trend": get_weight_trend,
     "get_sleep_stats": get_sleep_stats,
@@ -171,20 +170,26 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "log_meal",
-            "description": "Zapisuje informację o spożytym posiłku do bazy danych. Po udanym zapisie w odpowiedzi dla użytkownika podaj dokładnie id, datę i godzinę zwrócone przez narzędzie.",
+            "description": ('Zapisz JEDEN kompletny logiczny posiłek. Pełna lista składników katalogowych '
+                'i jawne oszacowanie WYŁĄCZNIE reszty spoza katalogu (null jeśli brak). Nie dodawaj katalogowych makr do reszty. '
+                'Brak ilości/estymacji lub kilka niejednoznacznych posiłków: dopytaj. Jeden nowy posiłek na wiadomość; '
+                'identyczne pozycje listy liczą się dwukrotnie. Podaj użytkownikowi zwrócone ID/datę/czas.'),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "description": {"type": "string", "description": "Opis posiłku (np. owsianka z jagodami i orzechami)"},
-                    "calories": {"type": "number", "description": "Szacowana liczba kalorii; wymagane"},
-                    "protein_g": {"type": "number", "description": "Białko w gramach; wymagane"},
-                    "carbs_g": {"type": "number", "description": "Węglowodany w gramach; wymagane"},
-                    "fat_g": {"type": "number", "description": "Tłuszcze w gramach; wymagane"},
+                    'ingredients': {'type':'array','maxItems':100,'items':{'type':'object','additionalProperties':False,
+                        'properties':{'product_id':{'type':'integer'},'version':{'type':'integer'},
+                                      'quantity':{'type':'number'},'unit':{'type':'string','enum':['g','ml']}},
+                        'required':['product_id','version','quantity','unit']}},
+                    'remainder': {'anyOf':[{'type':'null'}, {'type':'object','additionalProperties':False,
+                        'properties':{'description':{'type':'string'}, **{k:{'type':'number'} for k in ('calories','protein_g','carbs_g','fat_g')}},
+                        'required':['description','calories','protein_g','carbs_g','fat_g']} ]},
                     "notes": {"type": "string", "description": "Dodatkowe uwagi"},
                     "date": {"type": "string", "description": "Data posiłku w formacie YYYY-MM-DD (domyślnie dzisiaj)"},
                     "time": {"type": "string", "description": "Godzina posiłku w formacie HH:MM (domyślnie teraz)"},
                 },
-                "required": ["description", "calories", "protein_g", "carbs_g", "fat_g"],
+                "required": ["description", "ingredients", "remainder"],
             },
         },
     },
@@ -314,29 +319,23 @@ for _name, _description, _properties, _required in [
          'required':['name','basis','provenance','kcal','protein','carbs','fat']}}, ['product']),
     ('find_food_products', 'Lokalny katalog; najpierw dokładny kod, potem ograniczone wyszukiwanie nazwy.',
      {'query':{'type':'string'}, 'barcode':{'type':'string'}}, []),
-    ('log_food_portion', 'Zapisz jedną porcję potwierdzonego produktu; nie powtarzaj log_meal.',
-     {'product_id':{'type':'integer'}, 'version':{'type':'integer'}, 'quantity':{'type':'number'},
-      'unit':{'type':'string','enum':['g','ml']}, 'request_id':{'type':'string'}},
-     ['product_id','version','quantity','unit','request_id']),
 ]:
     TOOLS.append({'type':'function','function':{'name':_name,'description':_description,
                  'parameters':{'type':'object','properties':_properties,'required':_required}}})
 
 
+
+
 def execute_tool(name: str, args: dict):
     """Wykonuje narzędzie o podanej nazwie z podanymi argumentami."""
+    if name == 'log_food_portion':
+        return {'success': False, 'operation_id': None, 'meal_id': None,
+                'error': 'Use log_meal once with complete ingredients and separately estimated noncatalog remainder; no portion was written.'}
     fn = _REGISTRY.get(name)
     if fn is None:
         return {"error": f"Nieznane narzędzie: {name}"}
     try:
-        from memory_runtime import TURN_CONTEXT
-        turn = TURN_CONTEXT.get()
-        is_meal = name in ('log_meal', 'log_food_portion')
-        if turn and is_meal and turn.get('meal_log_kind') not in (None, name):
-            return {'error':'Nie łącz log_meal i log_food_portion w jednej wiadomości. Porcja mogła już zostać zapisana; osobny posiłek zgłoś w nowej wiadomości.'}
         result = fn(**args)
-        if turn and is_meal and isinstance(result, dict) and 'error' not in result:
-            turn['meal_log_kind'] = name
         return result
     except Exception as e:
         return {"error": str(e)}

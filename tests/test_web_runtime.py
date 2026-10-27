@@ -66,7 +66,7 @@ def test_failed_job_after_partial_persistence_still_projects_safe_error(runtime)
     ConversationWorker(processor).run_once()
     rows = timeline('owner')
     assert len(rows) == 2 and rows[-1]['state'] == 'failed'
-    assert 'Sprawdź dane' in rows[-1]['content']
+    assert '0 zatwierdzonych' in rows[-1]['content']
 
 
 def test_legacy_job_migration_uses_exact_persisted_owner(runtime, monkeypatch):

@@ -48,7 +48,8 @@ def test_update_meal_updates_existing_entry(temp_db):
         time="13:15",
     )
 
-    assert result == {"id": meal_id, "status": "zaktualizowano", "data": today, "czas": "13:15"}
+    assert result["success"] and result["id"] == meal_id
+    assert (result["data"], result["czas"]) == (today, "13:15")
 
     meals = get_recent_meals(days=7)
     assert meals[0]["opis"] == "Nowy obiad"
@@ -68,9 +69,9 @@ def test_update_meal_returns_not_found_for_missing_id(temp_db):
         fat_g=20,
     )
 
-    assert result == {"status": "nie znaleziono", "id": 999}
+    assert result["success"] is False and result["error"]
+    assert result["meal_id"] == 999
 
 
-def test_log_meal_requires_all_macros():
-    with pytest.raises(TypeError):
-        log_meal(description="Niepelny wpis", calories=500, protein_g=30, carbs_g=40)
+def test_log_meal_requires_all_macros(temp_db):
+    assert log_meal(description="Niepelny wpis", calories=500, protein_g=30, carbs_g=40)["error"]

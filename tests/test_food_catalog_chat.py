@@ -62,7 +62,7 @@ def test_synthetic_provider_http_photo_review_and_later_reuse(temp_db, monkeypat
     calls = iter([
         ('propose_food_product', {'product':label_data}), None,
         ('find_food_products', {'barcode':'5900531004544'}),
-        ('log_food_portion', {'product_id':1,'version':2,'quantity':150,'unit':'g','request_id':'synthetic-provider-portion'}), None])
+        ('log_meal', {'description':'Synthetic skyr', 'ingredients':[{'product_id':1,'version':2,'quantity':150,'unit':'g'}], 'remainder':None}), None])
     sent = []
     def provider(**payload):
         sent.append(payload)
@@ -98,7 +98,7 @@ def test_synthetic_provider_http_photo_review_and_later_reuse(temp_db, monkeypat
             assert conn.execute('SELECT count(*) FROM posilki').fetchone()[0] == 1
 
 
-def test_model_cannot_duplicate_portion_with_new_key_or_mix_freeform(temp_db):
+def test_retired_portion_writer_and_incomplete_meal_contract_cannot_write(temp_db):
     from tools.food_catalog import propose, confirm
     p = confirm(propose(label())['id'], 1)
     turn = memory_runtime.begin_turn('owner', 'Synthetic portion')
@@ -107,12 +107,12 @@ def test_model_cannot_duplicate_portion_with_new_key_or_mix_freeform(temp_db):
         args = dict(product_id=p['id'],version=2,quantity=150,unit='g',request_id='model-key1')
         first = execute_tool('log_food_portion', args)
         second = execute_tool('log_food_portion', dict(args,request_id='model-key2'))
-        assert second == first
+        assert second == first and 'error' in first
         assert 'error' in execute_tool('log_meal', dict(description='Synthetic duplicate',calories=96,protein_g=18,carbs_g=6.15,fat_g=0))
     finally:
         memory_runtime.TURN_CONTEXT.reset(token)
     with get_conn() as conn:
-        assert conn.execute('SELECT count(*) FROM posilki').fetchone()[0] == 1
+        assert conn.execute('SELECT count(*) FROM posilki').fetchone()[0] == 0
 
 
 def test_text_event_cannot_become_label_provenance(temp_db):
@@ -144,17 +144,17 @@ def test_real_dispatch_approval_does_not_sync_or_call_models(temp_db, monkeypatc
     assert calls == []
 
 
-def test_portion_tool_rejects_non_integer_identity_before_dedup(temp_db):
+def test_retired_portion_writer_never_writes_for_any_identity(temp_db):
     from tools.food_catalog import propose, confirm
     p = confirm(propose(label())['id'], 1)
     turn = memory_runtime.begin_turn('owner', 'Synthetic identity')
     token = memory_runtime.TURN_CONTEXT.set(turn)
     try:
         args = dict(product_id=p['id'],version=2,quantity=150,unit='g',request_id='fixture')
-        assert 'meal_id' in execute_tool('log_food_portion', args)
+        assert 'error' in execute_tool('log_food_portion', args)
         for bad in ['1', 1.0, True, -1, 2**64]:
             assert 'error' in execute_tool('log_food_portion', dict(args, product_id=bad))
     finally:
         memory_runtime.TURN_CONTEXT.reset(token)
     with get_conn() as conn:
-        assert conn.execute('SELECT count(*) FROM posilki').fetchone()[0] == 1
+        assert conn.execute('SELECT count(*) FROM posilki').fetchone()[0] == 0
