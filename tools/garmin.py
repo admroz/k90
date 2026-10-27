@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from logging_setup import event
 from profiling import profiled
 
+import sys
 import logging
 import os
 
@@ -11,7 +13,6 @@ from fetch_garmin import sync_garmin_to_db
 from .db import get_conn
 from .time_utils import now_local, today_local
 
-log = logging.getLogger(__name__)
 SYNC_SOURCE = "garmin"
 
 
@@ -96,17 +97,17 @@ def sync_garmin_data(trigger: str = "manual") -> dict:
         return {"error": "Synchronizacja jest wyłączona w lokalnej kopii danych."}
     started_at = now_local().isoformat()
     _set_sync_status(last_started_at=started_at, last_status=f"running:{trigger}", last_error=None)
-    log.info("garmin.sync start trigger=%s", trigger)
+    event('garmin.sync', component='tools.garmin')
     try:
         result = sync_garmin_to_db()
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
         _set_sync_status(last_status=f"error:{trigger}", last_error=error)
-        log.exception("garmin.sync trigger=%s error=%s", trigger, error)
+        event('garmin.sync', component='tools.garmin', level=logging.ERROR, error=sys.exception())
         return {"error": error}
     if "error" in result:
         _set_sync_status(last_status=f"error:{trigger}", last_error=result["error"])
-        log.error("garmin.sync trigger=%s error=%s", trigger, result["error"])
+        event('garmin.sync', component='tools.garmin', level=logging.ERROR)
         return result
 
     totals = _aggregate_stats(result)
@@ -124,22 +125,6 @@ def sync_garmin_data(trigger: str = "manual") -> dict:
     )
 
     for name, stats in result.get("datasets", {}).items():
-        log.info(
-            "garmin.sync trigger=%s dataset=%s fetched=%d inserted=%d updated=%d unchanged=%d",
-            trigger,
-            name,
-            stats["fetched"],
-            stats["inserted"],
-            stats["updated"],
-            stats["unchanged"],
-        )
-    log.info(
-        "garmin.sync finish trigger=%s fetched=%d inserted=%d updated=%d unchanged=%d changed=%s",
-        trigger,
-        totals["fetched"],
-        totals["inserted"],
-        totals["updated"],
-        totals["unchanged"],
-        result["changed"],
-    )
+        event('garmin.sync', component='tools.garmin', fetched=stats["fetched"], inserted=stats["inserted"], updated=stats["updated"], unchanged=stats["unchanged"])
+    event('garmin.sync', component='tools.garmin', fetched=totals["fetched"], inserted=totals["inserted"], updated=totals["updated"], unchanged=totals["unchanged"])
     return result

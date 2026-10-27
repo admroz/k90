@@ -7,13 +7,13 @@ import logging
 import os
 import time
 from profiling import request_scope, span
+from logging_setup import configure_logging, event
 
 import requests
 
 from server import TelegramAPI, _image_from_message, split_message
 from tools.images import MAX_IMAGE_BYTES, image_mime_type
 
-log = logging.getLogger(__name__)
 
 
 class BackendClient:
@@ -33,6 +33,15 @@ class BackendClient:
 
 
 def accept_update(api, backend, update):
+    with request_scope('telegram', scope='submission'):
+        try:
+            return _accept_update(api, backend, update)
+        except Exception as exc:
+            event('telegram.ingress_failed', component='telegram_adapter', error=exc)
+            raise
+
+
+def _accept_update(api, backend, update):
     message = update.get("message") or {}
     chat = message.get("chat") or {}
     sender = message.get("from") or {}
@@ -55,11 +64,7 @@ def accept_update(api, backend, update):
         # Detect the same signatures checked by the backend before enqueueing.
         mime = image_mime_type(raw)
         if mime is None or len(raw) > MAX_IMAGE_BYTES:
-            log.warning(
-                "telegram.image_rejected reason=%s bytes=%d",
-                "too_large" if len(raw) > MAX_IMAGE_BYTES else "unsupported_format",
-                len(raw),
-            )
+            event('telegram.image_rejected', component='telegram_adapter', level=logging.WARNING, bytes=len(raw))
             # Acknowledge unsupported input without getting stuck on the same update forever.
             body["text"] = (
                 "Użytkownik przesłał obraz w nieobsługiwanym formacie lub większy niż 5 MB. Poproś o JPG, PNG lub WebP do 5 MB. "
@@ -67,29 +72,39 @@ def accept_update(api, backend, update):
             )
         else:
             body["image"] = f"data:{mime};base64," + base64.b64encode(raw).decode()
-            log.info("telegram.image mime=%s bytes=%d", mime, len(raw))
-    backend.call("POST", "/internal/messages", json=body)
+            event('telegram.image', component='telegram_adapter', bytes=len(raw))
+    accepted = backend.call("POST", "/internal/messages", json=body)
+    if type(accepted) is dict:
+        event('telegram.submitted', component='telegram_adapter',
+              backend_request_id=accepted.get('profile_id'), backend_job_id=accepted.get('job_id'))
 
 
 def deliver_pending(api, backend):
     for item in backend.call("GET", "/internal/deliveries"):
         with request_scope('telegram', item.get('profile_id'), item.get('job_id'), scope='delivery'):
-            with span('transport_delivery'):
-                chunks = split_message(item["response"])
-                for index in range(item["delivery_index"], len(chunks)):
-                    api.send_text(item["chat_id"], chunks[index])
-                    backend.call(
-                        "POST",
-                        f"/internal/deliveries/{item['request_id']}",
-                        json={"index": index + 1, "done": index + 1 == len(chunks)},
-                    )
+            try:
+                with span('transport_delivery'):
+                    chunks = split_message(item["response"])
+                    for index in range(item["delivery_index"], len(chunks)):
+                        api.send_text(item["chat_id"], chunks[index])
+                        backend.call(
+                            "POST",
+                            f"/internal/deliveries/{item['request_id']}",
+                            json={"index": index + 1, "done": index + 1 == len(chunks)},
+                        )
+            except Exception as exc:
+                event('delivery.failed', component='telegram_adapter', error=exc, delivery_outcome='failed')
+                raise
+            else:
+                event('delivery.completed', component='telegram_adapter', delivery_outcome='completed')
 
 
 def main():
+    configure_logging()
     if os.getenv("TELEGRAM_ENABLED", "true") == "false":
         return
     if not os.getenv("TELEGRAM_BOT_TOKEN") or not os.getenv("TELEGRAM_ALLOWED_USER_ID"):
-        log.error("telegram.disabled reason=missing_configuration")
+        event('telegram.disabled', component='telegram_adapter', level=logging.ERROR)
         return
     backend = BackendClient()
     api = TelegramAPI(os.environ["TELEGRAM_BOT_TOKEN"])
@@ -111,9 +126,8 @@ def main():
             retry = 1
         except Exception as exc:
             # Do not log request URLs, tokens or private message bodies.
-            log.warning(
-                "telegram.unavailable error_type=%s retry=%s", type(exc).__name__, retry
-            )
+            with request_scope('telegram', background=True, scope='background'):
+                event('telegram.unavailable', component='telegram_adapter', error=exc)
             try:
                 backend.call(
                     "POST", "/internal/status", json={"status": "ponawianie połączenia"}

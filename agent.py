@@ -16,7 +16,14 @@ import logging
 import os
 from contextlib import closing
 from profiling import span as _phase, profiled, profiled_request
+from logging_setup import configure_logging, event
+import profiling
+configure_logging()
 import litellm
+from logging_setup import silence_libraries
+litellm.set_verbose = False
+litellm.suppress_debug_info = True
+silence_libraries()
 from dotenv import load_dotenv
 
 from responses_api import FunctionCall, ResponsesConversation, uses_responses
@@ -35,9 +42,6 @@ from tools.time_utils import now_local
 
 load_dotenv()
 
-if not logging.getLogger().handlers:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-log = logging.getLogger(__name__)
 
 MODEL = os.getenv("AGENT_MODEL", "gpt-5.4")
 HISTORY_MESSAGES = int(os.getenv("HISTORY_MESSAGES", "10"))
@@ -148,12 +152,15 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
             save_history(user_id, user_message, approval)
             return approval, False
         memory_runtime.start_worker()
-        return _run_agent(user_message, user_id)
+        result = _run_agent(user_message, user_id)
+        event('response.completed', response_outcome='completed', delivery_outcome='pending', mutation_outcome='unknown')
+        return result
     except BaseException as exc:
+        event('response.failed', error=exc, response_outcome='failed', delivery_outcome='pending', mutation_outcome='unknown')
         try:
             memory_runtime.record_failure(type(exc).__name__)
         except Exception:
-            log.warning("agent.failure_record.unavailable")
+            event('agent.failure_record.unavailable', component='agent', level=logging.WARNING)
         raise
     finally:
         memory_runtime.TURN_CONTEXT.reset(token)
@@ -172,24 +179,12 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
     context_stats.update(memory_stats)
     if recalled:
         system += "\n\n" + recalled
-    log_user = "event:" + str(turn.get('user_event_id', 'unknown'))
 
     messages = [{"role": "system", "content": system}] + history
     messages.append({"role": "user", "content": user_message})
 
     completion_options = _completion_options(MODEL)
-    log.info(
-        "agent.start user=%s model=%s reasoning_effort=%s input=%s history_records=%d context_sections=%d context_chars=%d summary_chars=%d",
-        log_user,
-        MODEL,
-        (os.getenv("AGENT_REASONING_EFFORT", "low") if uses_responses(MODEL)
-         else completion_options.get("reasoning_effort", "default")),
-        _message_kind(user_message),
-        len(history),
-        context_stats.get("sections", 0),
-        context_stats.get("chars", 0),
-        context_stats.get("summary_chars", 0),
-    )
+    event('agent.start', component='agent', history_records=len(history), context_sections=context_stats.get("sections", 0), context_chars=context_stats.get("chars", 0), summary_chars=context_stats.get("summary_chars", 0))
 
     should_refresh = False
     responses = None
@@ -211,6 +206,7 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
         )
 
     for round_index in range(1, MAX_TOOL_ROUNDS + 1):
+        profiling.indices(round_index)
         with _phase("provider"):
             if responses is not None:
                 turn = responses.complete()
@@ -238,31 +234,19 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
                 completion_tokens = usage.completion_tokens if usage else 0
         if prompt_tokens or completion_tokens:
             _save_usage(MODEL, prompt_tokens, completion_tokens)
-            log.info(
-                "agent.usage user=%s round=%d prompt_tokens=%s completion_tokens=%s",
-                log_user,
-                round_index,
-                prompt_tokens,
-                completion_tokens,
-            )
+            event('agent.usage', component='agent', prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
 
         if not calls:
             if responses is not None and not answer.strip():
                 raise RuntimeError("Model nie zwrócił tekstu odpowiedzi.")
             save_history(user_id, user_message, answer)
-            log.info(
-                "agent.finish user=%s round=%d response_chars=%d refresh=%s",
-                log_user,
-                round_index,
-                len(answer),
-                should_refresh,
-            )
+            event('agent.finish', component='agent', response_chars=len(answer))
             return answer, should_refresh
 
-        tool_names = [tool_call.name for tool_call in calls]
-        log.info("agent.tools user=%s round=%d tool_calls=%s", log_user, round_index, ",".join(tool_names))
+        event('agent.tools', component='agent')
 
-        for tool_call in calls:
+        for tool_index, tool_call in enumerate(calls, 1):
+            profiling.indices(round_index, tool_index)
             if tool_call.name in SUMMARY_REFRESH_TRIGGERS:
                 should_refresh = True
             args = strict_json_loads(tool_call.arguments or "{}")
@@ -270,13 +254,9 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
                 result = execute_tool(tool_call.name, args)
                 if failed is not None and isinstance(result, dict) and 'error' in result:
                     failed[0] = True
+            event('tool.completed', mutation_outcome='unknown',
+                  tool_outcome='error' if 'error' in result else 'returned')
             memory_runtime.record_tool(tool_call.name, args, result)
-            log.info(
-                "agent.tool_result user=%s tool=%s ok=%s",
-                log_user,
-                tool_call.name,
-                "error" not in result,
-            )
             if responses is not None:
                 responses.add_tool_result(tool_call.call_id, result)
             else:
@@ -288,7 +268,7 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
 
     answer = "Przepraszam, nie mogłem przetworzyć Twojego zapytania."
     save_history(user_id, user_message, answer)
-    log.warning("agent.max_rounds user=%s rounds=%d", log_user, MAX_TOOL_ROUNDS)
+    event('agent.max_rounds', component='agent', level=logging.WARNING)
     return answer, should_refresh
 
 
@@ -311,56 +291,58 @@ def cli() -> None:
             print("Do widzenia.")
             break
 
-        command_response = handle_command(user_input)
-        if command_response is not None:
-            print(f"\nAgent: {command_response}\n")
-            continue
+        with profiling.request_scope('cli'):
+            command_response = handle_command(user_input)
+            if command_response is not None:
+                print(f"\nAgent: {command_response}\n")
+                continue
 
-        sync_prefix = ""
-        garmin_due = should_auto_sync_today()
-        libre_due = should_auto_sync_libre()
-        if garmin_due or libre_due:
-            print("\nAgent: Aktualizuję dane zdrowotne, odpowiem za chwilę.\n")
+            sync_prefix = ""
+            garmin_due = should_auto_sync_today()
+            libre_due = should_auto_sync_libre()
+            if garmin_due or libre_due:
+                print("\nAgent: Aktualizuję dane zdrowotne, odpowiem za chwilę.\n")
 
-            errors = []
-            changed_sources = []
+                errors = []
+                changed_sources = []
 
-            if garmin_due:
-                garmin_result = sync_garmin_data(trigger="auto_daily_cli")
-                if "error" in garmin_result:
-                    errors.append("Garmin")
-                elif sync_has_changes(garmin_result):
-                    changed_sources.append("Garmin")
-                    mark_summary_refreshed()
+                if garmin_due:
+                    garmin_result = sync_garmin_data(trigger="auto_daily_cli")
+                    if "error" in garmin_result:
+                        errors.append("Garmin")
+                    elif sync_has_changes(garmin_result):
+                        changed_sources.append("Garmin")
+                        mark_summary_refreshed()
 
-            if libre_due:
-                libre_result = sync_libre_data(trigger="auto_stale_cli")
-                if "error" in libre_result:
-                    errors.append("Libre")
-                elif libre_sync_has_changes(libre_result):
-                    changed_sources.append("Libre")
+                if libre_due:
+                    libre_result = sync_libre_data(trigger="auto_stale_cli")
+                    if "error" in libre_result:
+                        errors.append("Libre")
+                    elif libre_sync_has_changes(libre_result):
+                        changed_sources.append("Libre")
 
-            if changed_sources:
-                if "Garmin" in changed_sources:
+                if changed_sources:
+                    if "Garmin" in changed_sources:
+                        from summary import refresh_patient_summary
+
+                        refresh_patient_summary(trigger="auto_sync_cli")
+                    sync_prefix = f"Mam nowe dane ({', '.join(changed_sources)}) i uwzględniam je w odpowiedzi.\n\n"
+                elif errors:
+                    sync_prefix = f"Uwaga: synchronizacja danych ({', '.join(errors)}) nie powiodła się; odpowiedź może bazować na starszych danych.\n\n"
+
+            try:
+                response, should_refresh = run_agent(user_input, user_id="cli")
+                if sync_prefix:
+                    response = sync_prefix + response
+                print(f"\nAgent: {response}\n")
+                if should_refresh:
+                    print("[Auto-odświeżanie podsumowania pacjenta...]")
                     from summary import refresh_patient_summary
 
-                    refresh_patient_summary(trigger="auto_sync_cli")
-                sync_prefix = f"Mam nowe dane ({', '.join(changed_sources)}) i uwzględniam je w odpowiedzi.\n\n"
-            elif errors:
-                sync_prefix = f"Uwaga: synchronizacja danych ({', '.join(errors)}) nie powiodła się; odpowiedź może bazować na starszych danych.\n\n"
-
-        try:
-            response, should_refresh = run_agent(user_input, user_id="cli")
-            if sync_prefix:
-                response = sync_prefix + response
-            print(f"\nAgent: {response}\n")
-            if should_refresh:
-                print("[Auto-odświeżanie podsumowania pacjenta...]")
-                from summary import refresh_patient_summary
-
-                refresh_patient_summary(trigger="tool_call_cli")
-        except Exception as exc:  # pragma: no cover - CLI path
-            print(f"\n[Błąd]: {exc}\n")
+                    refresh_patient_summary(trigger="tool_call_cli")
+            except Exception as exc:  # pragma: no cover - CLI path
+                event('response.failed', error=exc, response_outcome='failed')
+                print("\n[Błąd]: Nie udało się zakończyć odpowiedzi. Sprawdź bezpieczne logi.\n")
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from logging_setup import event
 import logging
 import os
 import re
@@ -10,6 +11,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import litellm
+from logging_setup import silence_libraries
+litellm.set_verbose = False
+litellm.suppress_debug_info = True
+silence_libraries()
 
 from responses_api import ResponsesConversation, uses_responses
 from outbound_policy import chat_completion, model_policy
@@ -17,7 +22,6 @@ from outbound_policy import chat_completion, model_policy
 from tools.db import get_conn
 from tools.time_utils import APP_TIMEZONE, now_local
 
-log = logging.getLogger(__name__)
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
 SUMMARY_MODEL = os.getenv("SUMMARY_MODEL", "gpt-5.4")
@@ -158,13 +162,7 @@ def _generate_summary(combined: str) -> tuple[str, str | None, int]:
             choice = response.choices[0]
             finish_reason = getattr(choice, "finish_reason", None)
             summary = (choice.message.content or "").strip()
-        log.info(
-            "summary.attempt model=%s attempt=%d finish_reason=%s chars=%d",
-            SUMMARY_MODEL,
-            attempt,
-            finish_reason,
-            len(summary),
-        )
+        event('summary.attempt', component='summary', attempts=attempt, chars=len(summary))
         if _is_summary_complete(summary, finish_reason):
             return summary, finish_reason, attempt
         last_finish_reason = finish_reason
@@ -179,11 +177,11 @@ def refresh_patient_summary(trigger: str = "manual") -> str:
         return "Brak plików pacjenta do podsumowania."
 
     combined = "\n\n".join(parts)
-    log.info("summary.refresh trigger=%s input_chars=%d files=%d", trigger, len(combined), len(parts))
+    event('summary.refresh', component='summary', input_chars=len(combined), files=len(parts))
 
     summary, finish_reason, attempts = _generate_summary(combined)
     if not summary:
-        log.warning("summary.fallback trigger=%s finish_reason=%s", trigger, finish_reason)
+        event('summary.fallback', component='summary', level=logging.WARNING)
         summary = _fallback_summary(contents)
 
     with span('persistence'):
@@ -197,12 +195,7 @@ def refresh_patient_summary(trigger: str = "manual") -> str:
         finally:
             conn.close()
 
-    log.info(
-        "summary.saved trigger=%s chars=%d attempts=%d",
-        trigger,
-        len(summary),
-        attempts,
-    )
+    event('summary.saved', component='summary', chars=len(summary), attempts=attempts)
     return summary
 
 

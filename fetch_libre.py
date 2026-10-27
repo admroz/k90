@@ -7,6 +7,10 @@ Synchronizuje dane glukozy bezpośrednio do SQLite.
 
 from __future__ import annotations
 
+import logging
+from logging_setup import configure_logging, event
+configure_logging()
+
 import os
 import sqlite3
 import sys
@@ -205,9 +209,8 @@ def sync_libre_to_db(client: LibreLinkUpClient | None = None) -> dict:
     ensure_agent_tables(conn)
     conn.commit()
 
-    print("\n" + "=" * 55)
-    print("  LibreLinkUp sync → SQLite")
-    print("=" * 55 + "\n")
+    event('libre.sync.progress', component='fetch_libre')
+    event('libre.sync.progress', component='fetch_libre')
 
     own_client = client is None
     if own_client:
@@ -219,6 +222,7 @@ def sync_libre_to_db(client: LibreLinkUpClient | None = None) -> dict:
         conn.commit()
         return {"ok": True, "datasets": {"glukoza_libre": stats}}
     except Exception as exc:
+        event('libre.fetch_failed', component='fetch_libre', level=logging.ERROR, error=exc)
         return {"error": str(exc)}
     finally:
         try:
@@ -231,16 +235,12 @@ def sync_libre_to_db(client: LibreLinkUpClient | None = None) -> dict:
 def main() -> None:
     result = sync_libre_to_db()
     if "error" in result:
-        sys.exit(result["error"])
+        event('libre.fetch_failed', component='fetch_libre', level=logging.ERROR)
+        raise SystemExit(1)
 
-    print("\n" + "=" * 55)
-    print("  Gotowe!")
+    event('libre.sync.progress', component='fetch_libre')
     for name, stats in result.get("datasets", {}).items():
-        print(
-            f"  {name}: pobrane {stats['fetched']}, nowe {stats['inserted']}, "
-            f"zaktualizowane {stats['updated']}, bez zmian {stats['unchanged']}"
-        )
-    print("=" * 55 + "\n")
+        event('libre.sync.progress', component='fetch_libre')
 
 
 if __name__ == "__main__":

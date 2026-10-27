@@ -208,6 +208,11 @@ def test_preparation_and_provider_phase_logs_are_content_free(temp_db, monkeypat
                         lambda **kw: SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None))
     with caplog.at_level(logging.INFO):
         agent.run_agent('synthetic-private-input', 'synthetic-owner')
+    from pathlib import Path
+    import os
+    rows = [json.loads(line) for line in (Path(os.environ['DATA_DIR'])/'logs'/'profiling.jsonl').read_text().splitlines()]
     for stage in ('begin', 'history', 'context', 'recall', 'provider'):
-        assert any(r.getMessage().startswith('agent.phase stage=' + stage + ' ') for r in caplog.records)
+        assert any(row['stage'] == stage for row in rows)
+    assert 'synthetic-private' not in json.dumps(rows)
+    assert 'agent.phase' not in caplog.text
     assert 'synthetic-private' not in caplog.text

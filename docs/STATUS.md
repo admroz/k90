@@ -1,5 +1,29 @@
 # k90 — bieżący status zadania
 
+## Safe runtime logs — simplification, 2026-10-27
+
+Author implementation replaces the historical global logging interception below:
+standard owned loggers, explicit application events, stdlib rotating handler
+with a shared per-stream flock, finite SDK settings and narrow runtime hooks.
+Historical reports remain evidence for their old source only; their arbitrary
+foreign-handler/factory guarantees are superseded. Current source verification
+and remaining independent review/image gates are recorded in
+[the new evidence entry](review-evidence/safe-runtime-logs-simplified.md).
+No PR, image publication or deployment.
+
+
+## Safe runtime logs — 2026-10-27
+
+Emission-boundary author checkpoint on feat/safe-runtime-logs-20261027; tested
+source `51e9de06fad0f249fa5baab7f19b2705aaa1f2b8`. Offline synthetic regression:
+687 Python passed / 1 skip; Node25 passed and JS syntax exit0. Nineteen selected
+unchanged external probes replayed successfully by the implementer. Standard
+logging emission now normalizes foreign records after extra merge and routes
+only to controlled sinks, independent of factory installation and late library
+handlers. First-setup privacy and workload noninterference are both covered.
+Fresh independent review and actual image execution remain pending. No PR,
+publication or deployment. Evidence: [safe-runtime-logs.md](review-evidence/safe-runtime-logs.md).
+
 ## Feature base integration — 2026-10-26
 
 Feature-only synchronization of approved catalog HEAD `3be6b1395133ed006caece859a5b058ed215b4d7`

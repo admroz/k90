@@ -339,4 +339,6 @@ def execute_tool(name: str, args: dict):
             turn['meal_log_kind'] = name
         return result
     except Exception as e:
+        from logging_setup import event
+        event('tool.failed', component='tools', error=e, mutation_outcome='unknown', tool_outcome='error')
         return {"error": str(e)}

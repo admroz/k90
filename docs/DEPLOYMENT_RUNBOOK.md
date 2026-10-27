@@ -538,10 +538,13 @@ przełącznika modelu; nie oznacza to pełnej anonimizacji.
 
 `K90_PROFILING_ENABLED=false` jest domyślne; wyłącznie dokładne `true`/`false`
 są poprawne. Błędna konfiguracja zatrzymuje inicjalizację workera. Po włączeniu
-dotychczasowy logger `agent.phase` emituje start i finish/error/timeout, UTC,
+`DATA_DIR/logs/profiling.jsonl` zapisuje start i finish/error/timeout, UTC,
 monotoniczne czasy i krótkie summary. `request_id` jest losowym identyfikatorem
 profilowania zapisanym przy zadaniu, `job_id` lokalnym numerem kolejki; nie są
-to identyfikatory użytkownika ani surowe identyfikatory Telegrama.
+to identyfikatory użytkownika ani surowe identyfikatory Telegrama. Korelacja działa
+także przy wyłączonym profilowaniu; `scope_id` odróżnia powtarzane scope,
+a `clock_id` zegary procesów. Profilowanie nie jest emitowane w docker logs.
+Retencja, limity, prawa i kontrole właściciela: [trwałe logi](../WEB.md#trwałe-logi-operacyjne).
 
 `scope=submission`, `processing` i `delivery` rozdzielają przyjęcie, wykonanie
 i dostarczenie. `background=true` oznacza osobny kontekst, np. indeksowanie HS

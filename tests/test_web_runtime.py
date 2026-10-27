@@ -256,11 +256,15 @@ def test_unexpected_sync_exception_still_allows_answer(runtime, monkeypatch):
     assert saved == job["response"]
 
 
-def test_claim_log_contains_only_sequence_and_channel(runtime, caplog):
-    import logging
+def test_claim_log_contains_only_sequence_and_channel(runtime):
+    import json
+    import os
+    from pathlib import Path
     enqueue("web:synthetic-log", "synthetic-private-message")
-    with caplog.at_level(logging.INFO):
-        assert ConversationWorker(lambda _: "ok").run_once()
-    claims = [r.getMessage() for r in caplog.records if r.getMessage().startswith("conversation.claim")]
-    assert claims == ["conversation.claim seq=1 channel=web"]
-    assert "synthetic-private-message" not in caplog.text
+    assert ConversationWorker(lambda _: "ok").run_once()
+    content = (Path(os.environ['DATA_DIR'])/'logs/app.log').read_text()
+    rows = [json.loads(line) for line in content.splitlines()]
+    claims = [r for r in rows if r['event'] == 'conversation.claim']
+    assert len(claims) == 1
+    assert claims[0]['job_id'] == 1 and claims[0]['channel'] == 'web'
+    assert 'synthetic-private-message' not in content

@@ -1,6 +1,7 @@
 """Application-owned source capture and optional memory worker; no production I/O at import."""
 from __future__ import annotations
 
+from logging_setup import event
 from contextlib import closing
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -21,7 +22,6 @@ from outbound_policy import model_policy
 from profiling import profiled, span
 from tools.db import MESSAGE_CONTEXT, get_conn
 
-log=logging.getLogger(__name__)
 TURN_CONTEXT: ContextVar[dict | None]=ContextVar('k90_memory_turn',default=None)
 _stop=threading.Event()
 _thread: threading.Thread | None=None
@@ -275,7 +275,7 @@ def start_worker():
             try:
                 run_pending()
             except Exception:
-                log.warning('memory.worker.unavailable')
+                event('memory.worker.unavailable', component='memory_runtime', level=logging.WARNING)
             _stop.wait(10)
     _thread=threading.Thread(target=loop,name='k90-memory-outbox',daemon=True)
     _thread.start()
