@@ -301,12 +301,12 @@ def cli() -> None:
                 response, _ = run_agent(user_input, user_id='cli')
                 print(f'\nAgent: {response}\n')
                 continue
+            interrupt('cli')
             command_response = handle_command(user_input)
             if command_response is not None:
                 print(f"\nAgent: {command_response}\n")
                 continue
 
-            interrupt('cli')
             sync_prefix = ""
             garmin_due = should_auto_sync_today()
             libre_due = should_auto_sync_libre()

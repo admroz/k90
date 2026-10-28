@@ -63,6 +63,8 @@ def intent(message):
 
 def interrupt(owner_id):
     with get_conn() as conn:
+        if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='food_product_reviews'").fetchone():
+            return
         conn.execute('UPDATE food_product_reviews SET direct=0 WHERE owner=? AND status=\'pending\'', (owner_id,))
 
 

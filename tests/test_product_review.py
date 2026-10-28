@@ -239,3 +239,14 @@ def test_committed_approval_survives_failed_response_and_recovery(temp_db, monke
     try: assert 'zatwierdzony' in agent.run_agent('zatwierdzam','owner')[0]
     finally: MESSAGE_CONTEXT.reset(token)
     assert catalog.get(p['id'])['version'] == 2
+
+
+
+def test_cli_topic_command_invalidates_direct_answer(temp_db, monkeypatch):
+    p = preview(owner='cli')
+    inputs = iter(['/status','tak','exit'])
+    monkeypatch.setattr('builtins.input',lambda prompt='':next(inputs))
+    monkeypatch.setattr(agent,'handle_command',lambda text:'Synthetic status' if text == '/status' else None)
+    monkeypatch.setattr(agent,'_run_agent',lambda *a: (_ for _ in ()).throw(AssertionError('model forbidden')))
+    agent.cli()
+    assert catalog.get(p['id'])['status'] == 'draft'
