@@ -1,5 +1,19 @@
 # k90 — bieżący status zadania
 
+## Logical meal integrity — 2026-10-27
+
+Author verification complete on `22bee1754ef08877a99b6dd3b0f1c2285136fe24`,
+branch `fix/logical-meal-integrity-20261027`, separate from logging PR18.
+One complete chat meal with catalog+estimated remainder, atomic snapshots/ledger,
+durable update/delete replay and safe known-outcome fallback after failure/crash.
+Offline Python698 PASS/1 existing skip, Node25 PASS and JS syntax PASS.
+Legacy migration/SQLite backup+restore and extended image helper on host PASS.
+Production provider error cause UNKNOWN; no provider behavior change or live test.
+Independent verification, actual image/CI and PR creation remain coordinator gates.
+No merge/deploy/publication or production repair. Evidence:
+[logical-meal-integrity.md](review-evidence/logical-meal-integrity.md).
+
+
 ## Safe runtime logs — simplification, 2026-10-27
 
 Author implementation replaces the historical global logging interception below:

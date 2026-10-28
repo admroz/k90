@@ -166,14 +166,39 @@ def check_catalog_in_runtime():
         result = log_portion(product['id'], 2, 150, 'g', 'container-portion')
         assert result['nutrition'] == dict(kcal=96, protein=18, carbs=6.15, fat=0)
         assert log_portion(product['id'], 2, 150, 'g', 'container-portion') == result
+        # Chat writes a complete catalog + estimated remainder as one meal.
+        from tools import execute_tool
+        from memory_runtime import TURN_CONTEXT
+        token = TURN_CONTEXT.set(dict(owner='synthetic-owner', request_id='container-meal'))
+        args = dict(description='Synthetic logical breakfast',
+            ingredients=[dict(product_id=product['id'],version=2,quantity=100,unit='g')],
+            remainder=dict(description='Synthetic fruit only',calories=50,protein_g=0,carbs_g=12,fat_g=0))
+        try:
+            logical = execute_tool('log_meal', args)
+            assert logical['success'] and logical['nutrition']['calories'] == 114
+            assert execute_tool('log_meal', args)['operation_id'] == logical['operation_id']
+            assert execute_tool('log_food_portion', {})['error']
+        finally:
+            TURN_CONTEXT.reset(token)
         edited = dict(product, kcal=80)
         assert revise(product['id'], 2, edited)['status'] == 'draft'
         with get_conn() as conn:
-            assert conn.execute('SELECT count(*) FROM posilki').fetchone()[0] == 1
-            assert conn.execute('SELECT kalorie FROM posilki').fetchone()[0] == 96
+            assert conn.execute('SELECT count(*) FROM posilki').fetchone()[0] == 2
+            assert conn.execute('SELECT kalorie FROM posilki ORDER BY id LIMIT 1').fetchone()[0] == 96
+            assert conn.execute('SELECT count(*) FROM meal_operations').fetchone()[0] == 1
         backup = create_db_backup()
         with sqlite3.connect(backup['path']) as conn:
             assert conn.execute('SELECT count(*) FROM food_product_versions').fetchone()[0] == 3
+            assert conn.execute('SELECT operation_id FROM meal_operations').fetchone()[0] == logical['operation_id']
+            assert conn.execute('SELECT count(*) FROM meal_ingredients').fetchone()[0] == 1
+        # Restore the actual SQLite backup and replay after the catalog revision.
+        with patch.dict(os.environ, {'DB_PATH': backup['path']}):
+            init_db()
+            token = TURN_CONTEXT.set(dict(owner='synthetic-owner', request_id='container-meal'))
+            try:
+                assert execute_tool('log_meal', args)['historical']
+            finally:
+                TURN_CONTEXT.reset(token)
     print('Catalog migration, local lookup, review, portion snapshot/idempotency and backup passed (synthetic offline).')
 
 check_catalog_in_runtime()

@@ -56,9 +56,12 @@ def test_timeline_stable_states_pagination_and_ownership(runtime, monkeypatch):
         enqueue('web:first', 'identical')
 
 
-def test_failed_job_after_partial_persistence_still_projects_safe_error(runtime):
+def test_failed_job_after_partial_persistence_still_projects_safe_error(runtime, monkeypatch):
     from agent import save_history
     from web_runtime import timeline
+    import web_runtime
+    events = []
+    monkeypatch.setattr(web_runtime, 'event', lambda name, **fields: events.append((name, fields)))
     enqueue('web:partial', 'hello')
     def processor(content):
         save_history('owner', content, 'partial saved answer')
@@ -66,7 +69,13 @@ def test_failed_job_after_partial_persistence_still_projects_safe_error(runtime)
     ConversationWorker(processor).run_once()
     rows = timeline('owner')
     assert len(rows) == 2 and rows[-1]['state'] == 'failed'
-    assert 'Sprawdź dane' in rows[-1]['content']
+    assert '0 zatwierdzonych' in rows[-1]['content']
+    assert [name for name, _ in events] == ['conversation.claim', 'conversation.failed', 'job.failed']
+    assert events[1][1]['component'] == 'web_runtime'
+    assert events[1][1]['level'] == web_runtime.logging.ERROR
+    assert events[2][1]['delivery_outcome'] == 'pending'
+    assert 'private provider diagnostic' not in str(events)
+    assert MESSAGE_CONTEXT.get() == {}
 
 
 def test_legacy_job_migration_uses_exact_persisted_owner(runtime, monkeypatch):

@@ -1,98 +1,174 @@
-"""Narzędzia do logowania i pobierania danych o posiłkach."""
+"""Meal mutations: one local transaction per operation, never across inference."""
+import hashlib
+import json
+import sqlite3
+import uuid
+from contextlib import closing
+from datetime import date as Date, time as Time
+from decimal import Decimal
 
-from .db import checkpoint_wal, get_conn, rows_to_list
+from .db import get_conn, rows_to_list
 from .time_utils import date_days_ago, now_local
 
-
-def log_meal(
-    description: str,
-    calories: float,
-    protein_g: float,
-    carbs_g: float,
-    fat_g: float,
-    notes: str = None,
-    date: str = None,
-    time: str = None,
-) -> dict:
-    """Zapisuje informację o spożytym posiłku do bazy danych.
-
-    Args:
-        description: Opis posiłku (np. 'owsianka z jagodami i orzechami').
-        calories: Szacowana liczba kalorii.
-        protein_g: Białko w gramach.
-        carbs_g: Węglowodany w gramach.
-        fat_g: Tłuszcze w gramach.
-        notes: Dodatkowe uwagi (opcjonalne).
-
-    Returns:
-        Słownik z id zapisanego posiłku i potwierdzeniem.
-    """
-    now = now_local()
-    meal_date = date or now.strftime("%Y-%m-%d")
-    meal_time = time or now.strftime("%H:%M")
-    with get_conn() as conn:
-        cur = conn.execute(
-            """INSERT INTO posilki (data, czas, opis, kalorie, bialko_g, weglowodany_g, tluszcze_g, zrodlo)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'manual')""",
-            (meal_date, meal_time, description, calories, protein_g, carbs_g, fat_g)
-        )
-        meal_id = cur.lastrowid
-        conn.commit()
-        checkpoint_wal(conn)
-    return {"id": meal_id, "status": "zapisano", "data": meal_date, "czas": meal_time}
+MACROS = ('calories', 'protein_g', 'carbs_g', 'fat_g')
 
 
-def update_meal(
-    meal_id: int,
-    description: str,
-    calories: float,
-    protein_g: float,
-    carbs_g: float,
-    fat_g: float,
-    notes: str = None,
-    date: str = None,
-    time: str = None,
-) -> dict:
-    """Aktualizuje istniejący wpis posiłku w bazie danych."""
-    with get_conn() as conn:
-        existing = conn.execute(
-            """SELECT id, data, czas
-               FROM posilki
-               WHERE id = ?""",
-            (meal_id,),
-        ).fetchone()
-        if existing is None:
-            return {"status": "nie znaleziono", "id": meal_id}
-
-        meal_date = date or existing["data"]
-        meal_time = time or existing["czas"] or now_local().strftime("%H:%M")
-        conn.execute(
-            """UPDATE posilki
-               SET data = ?, czas = ?, opis = ?, kalorie = ?, bialko_g = ?, weglowodany_g = ?, tluszcze_g = ?
-               WHERE id = ?""",
-            (meal_date, meal_time, description, calories, protein_g, carbs_g, fat_g, meal_id),
-        )
-        conn.commit()
-        checkpoint_wal(conn)
-    return {"id": meal_id, "status": "zaktualizowano", "data": meal_date, "czas": meal_time}
+def initialize(conn):
+    conn.execute("""CREATE TABLE IF NOT EXISTS meal_operations (
+        operation_id TEXT PRIMARY KEY, owner TEXT NOT NULL, request_id TEXT NOT NULL,
+        slot TEXT NOT NULL, fingerprint TEXT NOT NULL, kind TEXT NOT NULL,
+        meal_id INTEGER NOT NULL, result TEXT NOT NULL,
+        committed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(owner, request_id, slot))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS meal_ingredients (
+        meal_id INTEGER PRIMARY KEY, snapshot TEXT NOT NULL)""")
+    if 'revision' not in {r[1] for r in conn.execute('PRAGMA table_info(posilki)')}:
+        conn.execute('ALTER TABLE posilki ADD COLUMN revision INTEGER NOT NULL DEFAULT 1')
 
 
-def delete_meal(meal_id: int) -> dict:
-    """Usuwa posiłek z bazy danych na podstawie jego ID.
+def _text(value, name, limit=2000):
+    if not isinstance(value, str) or not value.strip() or len(value) > limit:
+        raise ValueError('invalid ' + name)
+    return value.strip()
 
-    Args:
-        meal_id: ID posiłku do usunięcia (widoczne w get_recent_meals).
 
-    Returns:
-        Słownik z potwierdzeniem usunięcia lub błędem jeśli nie znaleziono.
-    """
-    with get_conn() as conn:
-        cur = conn.execute("DELETE FROM posilki WHERE id = ?", (meal_id,))
-        conn.commit()
-        checkpoint_wal(conn)
-    if cur.rowcount:
-        return {"status": "usunięto", "id": meal_id}
-    return {"status": "nie znaleziono", "id": meal_id}
+def _macros(values):
+    from .food_catalog import _number
+    return {k: _number(values.get(k)) for k in MACROS}
+
+
+def _ingredients(conn, items, remainder):
+    from .food_catalog import _number, _record, _version
+    if not isinstance(items, list) or len(items) > 100:
+        raise ValueError('complete ingredients list required; use [] for estimated meal')
+    totals = {k: Decimal(0) for k in MACROS}
+    snapshots = []
+    for item in items:
+        if not isinstance(item, dict) or set(item) != {'product_id', 'version', 'quantity', 'unit'}:
+            raise ValueError('invalid ingredient')
+        _version(item['product_id']); _version(item['version'])
+        amount = _number(item['quantity'])
+        if amount <= 0 or item['unit'] not in ('g', 'ml'):
+            raise ValueError('positive quantity and explicit g/ml required')
+        row = conn.execute('SELECT * FROM food_products WHERE id=?', (item['product_id'],)).fetchone()
+        if row is None or row['status'] != 'confirmed' or row['version'] != item['version']:
+            raise ValueError('confirmed current catalog version required')
+        product = _record(row)
+        if product['basis'] != '100' + item['unit']:
+            raise ValueError('unit does not match product basis')
+        nutrition = {k: Decimal(str(product[source])) * Decimal(str(amount)) / 100
+                     for k, source in zip(MACROS, ('kcal', 'protein', 'carbs', 'fat'))}
+        for k in MACROS: totals[k] += nutrition[k]
+        snapshots.append(dict(item, product=product, nutrition={k:float(v) for k,v in nutrition.items()}))
+    rest = None
+    if remainder is not None:
+        if not isinstance(remainder, dict) or set(remainder) != {'description', *MACROS}:
+            raise ValueError('explicit estimates for noncatalog remainder required')
+        rest = dict(description=_text(remainder['description'], 'remainder'), **_macros(remainder))
+        for k in MACROS: totals[k] += Decimal(str(rest[k]))
+    if not items and rest is None:
+        raise ValueError('meal requires ingredients or estimated noncatalog remainder')
+    return {k:float(v) for k,v in totals.items()}, dict(ingredients=snapshots, remainder=rest)
+
+
+def _perform(kind, args, *, owner, request_id, operation_id, chat):
+    meal_id = args.get('meal_id')
+    if kind != 'log_meal' and (type(meal_id) is not int or not 1 <= meal_id < 2**63):
+        raise ValueError('invalid meal id')
+    slot = 'new-meal' if kind == 'log_meal' else f'{kind}:{meal_id}'
+    fingerprint = hashlib.sha256(json.dumps(args, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()).hexdigest()
+    with closing(get_conn()) as conn, conn:
+        conn.execute('BEGIN IMMEDIATE')
+        prior = conn.execute('SELECT * FROM meal_operations WHERE owner=? AND request_id=? AND slot=?',
+                             (owner, request_id, slot)).fetchone()
+        if prior:
+            if prior['fingerprint'] != fingerprint:
+                return dict(success=False, error='operation conflict; ask for clarification in a new message',
+                            operation_id=operation_id, meal_id=prior['meal_id'])
+            return dict(json.loads(prior['result']), replayed=True, historical=True,
+                        notice='Previously committed effect; current meal state may differ.')
+        existing = None
+        if kind != 'log_meal':
+            existing = conn.execute('SELECT * FROM posilki WHERE id=?', (meal_id,)).fetchone()
+            if existing is None:
+                return dict(success=False, error='meal not found', status='nie znaleziono',
+                            id=meal_id, meal_id=meal_id, operation_id=operation_id)
+        snapshot = None
+        if kind != 'delete_meal':
+            description = _text(args['description'], 'description')
+            now = now_local()
+            meal_date = args.get('date') or (existing['data'] if existing else now.strftime('%Y-%m-%d'))
+            meal_time = args.get('time') or (existing['czas'] if existing and existing['czas'] else now.strftime('%H:%M'))
+            if Date.fromisoformat(meal_date).isoformat() != meal_date or Time.fromisoformat(meal_time).strftime('%H:%M') != meal_time:
+                raise ValueError('date/time must be YYYY-MM-DD / HH:MM')
+            if kind == 'log_meal' and (chat or args.get('ingredients') is not None):
+                if args.get('remainder') == '__missing__':
+                    raise ValueError('identify estimated noncatalog remainder explicitly, or null if none')
+                nutrition, snapshot = _ingredients(conn, args.get('ingredients'), args.get('remainder'))
+            else:
+                nutrition = _macros(args)
+            values = (meal_date, meal_time, description, *(nutrition[k] for k in MACROS))
+            if kind == 'log_meal':
+                cur = conn.execute("INSERT INTO posilki(data,czas,opis,kalorie,bialko_g,weglowodany_g,tluszcze_g,zrodlo) VALUES (?,?,?,?,?,?,?,'manual')", values)
+                meal_id = cur.lastrowid
+                if snapshot is not None:
+                    conn.execute('INSERT INTO meal_ingredients VALUES (?,?)', (meal_id, json.dumps(snapshot, ensure_ascii=False)))
+            else:
+                conn.execute('UPDATE posilki SET data=?,czas=?,opis=?,kalorie=?,bialko_g=?,weglowodany_g=?,tluszcze_g=?,revision=revision+1 WHERE id=?', (*values, meal_id))
+        else:
+            conn.execute('DELETE FROM posilki WHERE id=?', (meal_id,))
+        result = dict(success=True, id=meal_id, meal_id=meal_id, operation_id=operation_id,
+                      status={'log_meal':'zapisano','update_meal':'zaktualizowano','delete_meal':'usunięto'}[kind])
+        if kind != 'delete_meal': result.update(data=meal_date, czas=meal_time, nutrition=nutrition)
+        conn.execute('INSERT INTO meal_operations(operation_id,owner,request_id,slot,fingerprint,kind,meal_id,result) VALUES (?,?,?,?,?,?,?,?)',
+                     (operation_id, owner, request_id, slot, fingerprint, kind, meal_id, json.dumps(result)))
+    return result
+
+
+def _mutate(kind, args):
+    from memory_runtime import TURN_CONTEXT
+    turn = TURN_CONTEXT.get() or {}
+    slot = 'new-meal' if kind == 'log_meal' else f"{kind}:{args.get('meal_id')}"
+    owner = turn.get('owner', 'local')
+    request_id = turn.get('request_id') or str(uuid.uuid4())
+    operation_id = hashlib.sha256(json.dumps([owner, request_id, slot]).encode()).hexdigest()[:32]
+    try:
+        return _perform(kind, args, owner=owner, request_id=request_id, operation_id=operation_id, chat=bool(turn))
+    except (ValueError, TypeError, OverflowError):
+        return dict(success=False, error='invalid meal contract, estimates, target or current catalog version',
+                    operation_id=operation_id, meal_id=args.get('meal_id'))
+    except sqlite3.Error:
+        return dict(success=False, error='meal operation failed; check durable operation outcome',
+                    operation_id=operation_id, meal_id=args.get('meal_id'))
+
+
+def log_meal(description, calories=None, protein_g=None, carbs_g=None, fat_g=None,
+             notes=None, date=None, time=None, ingredients=None, remainder='__missing__'):
+    return _mutate('log_meal', locals())
+
+
+def update_meal(meal_id, description, calories, protein_g, carbs_g, fat_g, notes=None, date=None, time=None):
+    return _mutate('update_meal', locals())
+
+
+def delete_meal(meal_id):
+    return _mutate('delete_meal', locals())
+
+
+def committed_operations(owner, request_id, *, conn=None):
+    if conn is None:
+        with closing(get_conn()) as connection:
+            return committed_operations(owner, request_id, conn=connection)
+    return [dict(r) for r in conn.execute('SELECT operation_id,kind,meal_id FROM meal_operations WHERE owner=? AND request_id=? ORDER BY committed_at, rowid', (owner, request_id))]
+
+
+def failure_outcome(owner, request_id, *, conn=None):
+    operations = committed_operations(owner, request_id, conn=conn)
+    prefix = 'Nie udało się zakończyć odpowiedzi.'
+    if not operations:
+        return prefix + ' Rejestr operacji posiłków: 0 zatwierdzonych. Inne operacje mogły zostać wykonane.'
+    ids = '; '.join(f"{o['kind']}: meal_id={o['meal_id']}, operation_id={o['operation_id']}" for o in operations)
+    return prefix + f' Zatwierdzone operacje posiłków ({len(operations)}): ' + ids + '. To wynik historyczny; bieżący stan może się różnić. Inne operacje mogły zostać wykonane.'
 
 
 def get_recent_meals(days: int = 3) -> list[dict]:
