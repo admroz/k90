@@ -44,14 +44,17 @@ def intent(message):
         return ('confirm', text)
     if text in ('anuluj', 'anuluj produkt', 'anuluj tę propozycję'):
         return ('cancel', text)
-    m = re.fullmatch(r'zmień (białko|bialko|węglowodany|weglowodany|tłuszcz|tluszcz|kcal) na (\d+(?:[.,]\d+)?)(?: i zatwierdź)?', text)
+    m = re.fullmatch(r'(?:zmień|popraw) (białko|bialko|węglowodany|weglowodany|tłuszcz|tluszcz|kcal) na (\d+(?:[.,]\d+)?)(?: i zatwierdź)?', text)
     if m:
         return ('correct', m.groups())
+    m = re.fullmatch(r'(?:zmień|popraw) (nazwę|markę|podstawę) na (.+?)(?: i zatwierdź)?[.!]?', message.strip(), re.IGNORECASE)
+    if m:
+        return ('text_correct', (m[1].casefold(), m[2]))
     m = re.fullmatch(r'/produkt(?:y)? (pokaz|pokaż|zatwierdz) ([0-9]+) ([0-9]+)', text)
     if m:
         return ('show' if m[1] in ('pokaz','pokaż') else 'explicit', (int(m[2]),int(m[3])))
     # Unclear review language stays local and never becomes model permission.
-    if re.search(r'zatwier|zapisz ten produkt|anuluj|\btak\b|zmień (?:białko|bialko|kcal|tłuszcz|węglowodany)', text) or text.startswith(('/produkt ', '/produkty ')):
+    if re.search(r'zatwier|zapisz ten produkt|anuluj|\btak\b|(?:zmień|popraw) (?:białko|bialko|kcal|tłuszcz|węglowodany|nazwę|markę|podstawę)', text) or text.startswith(('/produkt ', '/produkty ')):
         return ('unclear', None)
     return None
 
@@ -133,7 +136,7 @@ def resolve(message, turn):
             if kind in ('show', 'explicit'):
                 pid, version = arg
                 row = conn.execute('SELECT * FROM food_products WHERE id=? AND version=? AND status=\'draft\'',(pid,version)).fetchone()
-                if row is None or row['owner'] not in (None,owner_id) or owner_id != owner():
+                if row is None or row['owner'] not in (None,owner_id) or (row['owner'] is None and owner_id != owner()):
                     raise ValueError('owner or version mismatch')
                 if kind == 'show':
                     conn.execute('UPDATE food_products SET owner=? WHERE id=?',(owner_id,pid))
@@ -149,14 +152,12 @@ def resolve(message, turn):
                 raise ValueError('unclear consent')
             else:
                 review, row = _pending(conn,owner_id)
-                if owner_id != owner():
-                    raise ValueError('owner mismatch')
                 if kind == 'cancel':
                     conn.execute("UPDATE food_product_reviews SET status='cancelled',reason='owner_cancel',consent_event_id=? WHERE owner=? AND product_id=? AND status='pending'",(turn['user_event_id'],owner_id,row['id']))
                     answer = 'Anulowano propozycję produktu.'
-                elif kind == 'correct':
+                elif kind in ('correct', 'text_correct'):
                     # Extraction is deliberately small/local; no model can select a target.
-                    fields = {'białko':'protein','bialko':'protein','węglowodany':'carbs','weglowodany':'carbs','tłuszcz':'fat','tluszcz':'fat','kcal':'kcal'}
+                    fields = {'białko':'protein','bialko':'protein','węglowodany':'carbs','weglowodany':'carbs','tłuszcz':'fat','tluszcz':'fat','kcal':'kcal','nazwę':'name','markę':'brand','podstawę':'basis'}
                     data = json.loads(row['payload']); data[fields[arg[0]]] = arg[1]
                     revised = catalog._revise(conn,row,review['version'],data,owner_id)
                     queue_preview(revised)

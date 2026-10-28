@@ -140,3 +140,79 @@ def test_natural_consent_dispatch_red(temp_db, monkeypatch):
     monkeypatch.setattr('tools.libre.should_auto_sync',forbidden)
     monkeypatch.setattr(agent,'_run_agent',forbidden)
     assert 'zatwierdzony' in web_runtime.process_message('zatwierdzam')
+
+
+def test_restart_and_sqlite_backup_restore(temp_db, tmp_path):
+    import json
+    import os
+    import subprocess
+    import sys
+    import sqlite3
+    p = preview()
+    restored = tmp_path/'restored.db'
+    with get_conn() as source, sqlite3.connect(restored) as destination:
+        source.backup(destination)
+    env = dict(os.environ,DB_PATH=str(restored))
+    completed = subprocess.run([sys.executable,'-c',
+        "import json; from agent import run_agent; print(json.dumps(run_agent('tak','owner')[0]))"],
+        env=env, text=True, capture_output=True, timeout=45)
+    assert completed.returncode == 0, completed.stderr
+    assert 'zatwierdzony' in json.loads(completed.stdout.strip().splitlines()[-1])
+    with sqlite3.connect(restored) as c:
+        assert c.execute('SELECT version FROM food_products WHERE id=?',(p['id'],)).fetchone()[0] == 2
+        assert c.execute('SELECT status FROM food_product_reviews').fetchone()[0] == 'consumed'
+    assert catalog.get(p['id'])['status'] == 'draft'
+
+
+def test_additive_legacy_migration_does_not_bind_owner(temp_db):
+    p = catalog.propose(label())
+    with get_conn() as c:
+        c.execute('ALTER TABLE food_products DROP COLUMN owner')
+        for table in ['food_product_reviews','food_review_actions','food_product_approvals']:
+            c.execute('DROP TABLE '+table)
+        catalog.initialize(c)
+        catalog.initialize(c)
+        assert c.execute('SELECT owner FROM food_products').fetchone()[0] is None
+        assert c.execute('SELECT count(*) FROM food_product_reviews').fetchone()[0] == 0
+    assert 'zatwierdzony' not in agent.run_agent('tak','owner')[0]
+    assert catalog.get(p['id'])['version'] == 1
+
+
+def test_confirm_is_one_transaction_and_panel_chat_race(temp_db):
+    import sqlite3
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    p = preview()
+    with get_conn() as c:
+        c.execute("CREATE TRIGGER synthetic_fail BEFORE INSERT ON food_product_versions BEGIN SELECT RAISE(ABORT,'synthetic'); END")
+    with pytest.raises(sqlite3.IntegrityError): agent.run_agent('zatwierdzam','owner')
+    assert catalog.get(p['id'])['status'] == 'draft'
+    with get_conn() as c:
+        assert c.execute('SELECT count(*) FROM food_product_approvals').fetchone()[0] == 0
+        assert c.execute('SELECT status FROM food_product_reviews').fetchone()[0] == 'pending'
+        c.execute('DROP TRIGGER synthetic_fail')
+    barrier = Barrier(2)
+    def confirm_chat():
+        barrier.wait()
+        return agent.run_agent('zatwierdzam','owner')[0]
+    def panel_edit():
+        barrier.wait()
+        data = label(); data['protein'] = 14
+        try: return catalog.revise(p['id'],1,data)
+        except ValueError: return 'conflict'
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        chat = pool.submit(confirm_chat); panel = pool.submit(panel_edit)
+        chat.result(timeout=30); panel.result(timeout=30)
+    assert catalog.get(p['id'])['version'] == 2
+    with get_conn() as c:
+        assert c.execute('SELECT count(*) FROM food_product_versions').fetchone()[0] == 2
+        assert c.execute('SELECT count(*) FROM food_product_approvals').fetchone()[0] <= 1
+
+
+def test_text_correction_needs_new_consent(temp_db):
+    p = preview()
+    answer,_ = agent.run_agent('zmień nazwę na Synthetic Yogurt i zatwierdź','owner')
+    assert 'Czy zatwierdzasz' in answer
+    assert catalog.get(p['id'])['name'] == 'Synthetic Yogurt'
+    assert catalog.get(p['id'])['status'] == 'draft'
+    assert 'zatwierdzony' in agent.run_agent('tak','owner')[0]

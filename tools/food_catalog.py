@@ -154,18 +154,6 @@ def propose_from_chat(product):
     return draft
 
 
-def approval_command(message):
-    if not isinstance(message, str) or not message.startswith('/produkt zatwierdz '):
-        return None
-    parts = message.split()
-    if len(parts) != 4 or not parts[2].isascii() or not parts[2].isdigit() or not parts[3].isascii() or not parts[3].isdigit():
-        return 'Użyj: /produkt zatwierdz ID WERSJA'
-    try:
-        p = confirm(int(parts[2]), int(parts[3]))
-    except ValueError as exc:
-        return 'Nie zatwierdzono: ' + str(exc)
-    return f"Produkt {p['id']} zatwierdzony: {p['name']}, {p['basis']}: {p['kcal']} kcal / B {p['protein']} / W {p['carbs']} / T {p['fat']}."
-
 
 CATALOG_PROMPT = """Katalog produktów: własna etykieta i korekty właściciela są źródłem prawdy.
 Zdjęcie posiłku nadal obsługuj jako posiłek; nie jest etykietą produktu.
