@@ -1,10 +1,14 @@
 # Joint product photo batches — author evidence, 2026-10-28
 
 Dependent feature on accepted point1 source `f33897b74a5ba1bc5c266d452e8906c0f83d7143`.
-Point1 PR21 was still unmerged at last owner-main fetch (`2f0711e`). This branch
-may be pushed as WIP; no duplicated point1+6 PR is authorized. No point4/PR22 code
-is included. Independent verification, exact-SHA fork CI/image and final PR are
-coordinator gates. No author self-approval, production access or live inference.
+At initial author acceptance PR21 was unmerged (`2f0711e`). Owner subsequently
+merged PR21 at `db9c7fcc3c44d1f2fdaace8cff8ae8e915398e74`; feature-only integration
+retains the identical runtime tree, with no conflicts. No point4/PR22 code is
+included. The publication dependency is resolved; no PR is created by this writer.
+Integration replay: six focused coexistence tests PASS (12.31s), including joint
+HTTP draft/consent, single-draft guard, corrections/cancel, owner/stale review,
+model authority rejection and SQLite backup/restore. No full-suite/browser rerun.
+Independent verification, exact-SHA fork CI/image and final PR are coordinator gates. No author self-approval, production access or live inference.
 
 WWW accepts one message with 1–4 photos, each <=5,000,000 decoded bytes and total
 <=10,000,000. Legacy `image` remains; simultaneous `image` and `images` fields
