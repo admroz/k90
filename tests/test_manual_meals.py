@@ -91,3 +91,55 @@ def test_chat_cas_and_backup_legacy(temp_db, tmp_path, monkeypatch):
         assert c.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
         assert c.execute('SELECT revision FROM posilki').fetchone()[0]==2
         assert c.execute('SELECT count(*) FROM meal_changes').fetchone()[0]==1
+
+
+def test_catalog_override_history_and_backup(web_client, tmp_path, monkeypatch):
+    """Real catalog evidence survives WWW override, product revision and restore."""
+    import sqlite3
+    import memory_runtime
+    from test_food_catalog import label
+    from tools import food_catalog as catalog
+    from tools.db import init_db
+    product=catalog.confirm(catalog.propose(label())['id'],1)
+    token=memory_runtime.TURN_CONTEXT.set({'owner':'owner','request_id':'catalog-meal'})
+    try:
+        from tools import execute_tool
+        meal=execute_tool('log_meal',dict(description='Synthetic catalog breakfast',
+            ingredients=[dict(product_id=product['id'],version=2,quantity=150,unit='g')], remainder=None))
+    finally:
+        memory_runtime.TURN_CONTEXT.reset(token)
+    mid=meal['meal_id']
+    with get_conn() as c:
+        snapshot=c.execute('SELECT snapshot FROM meal_ingredients WHERE meal_id=?',(mid,)).fetchone()[0]
+        assert json.loads(snapshot)['ingredients'][0]['nutrition']['calories']==96
+        c.execute("INSERT INTO conversations(user_id,role,content) VALUES ('owner','assistant','Synthetic historical: 96 kcal')")
+        history=[tuple(r) for r in c.execute('SELECT * FROM conversations')]
+    login(web_client)
+    body=payload(); body.update(calories=220,quantity=0,unit='szt',time=None)
+    assert web_client.put(f'/api/meals/{mid}',json=body,headers=HEAD).status_code==200
+    data=label(); data['kcal']='120'
+    revised=catalog.revise(product['id'],2,data)
+    catalog.confirm(product['id'],revised['version'])
+    day=web_client.get('/api/meals?date=2026-01-02').json()
+    assert day['totals']['kalorie']==220
+    assert day['meals'][0]['quantity']==0 and day['meals'][0]['czas'] is None
+    # Chat advances the same revision; a previously opened WWW form conflicts.
+    token=memory_runtime.TURN_CONTEXT.set({'owner':'owner','request_id':'chat-after-web'})
+    try:
+        assert update_meal(mid,'Synthetic chat correction',230,None,10.5,0,expected_revision=2)['revision']==3
+    finally:
+        memory_runtime.TURN_CONTEXT.reset(token)
+    assert web_client.put(f'/api/meals/{mid}',json=dict(body,expected_revision=2,request_id='stale-web'),headers=HEAD).status_code==409
+    backup=tmp_path/'catalog-restored.db'
+    with get_conn() as c, sqlite3.connect(backup) as dest:
+        c.backup(dest)
+    monkeypatch.setenv('DB_PATH',str(backup)); init_db(); init_db()
+    with get_conn() as c:
+        assert c.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
+        assert c.execute('SELECT snapshot FROM meal_ingredients WHERE meal_id=?',(mid,)).fetchone()[0]==snapshot
+        assert [tuple(r) for r in c.execute('SELECT * FROM conversations')]==history
+        assert c.execute('SELECT kalorie,revision FROM posilki WHERE id=?',(mid,)).fetchone()[:]==(230,3)
+        changes=c.execute('SELECT channel,after_json FROM meal_changes ORDER BY rowid').fetchall()
+        assert [r['channel'] for r in changes]==['web','chat']
+        assert json.loads(changes[0]['after_json'])['kalorie']==220
+        assert c.execute('SELECT count(*) FROM meal_operations').fetchone()[0]==3

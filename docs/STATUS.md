@@ -1,13 +1,21 @@
 # k90 — bieżący status zadania
 
-## Manual meal editing — WIP paused, 2026-10-28
+## Manual meal editing — author verification complete, 2026-10-28
 
-Candidate whole-meal WWW edit/delete reuses PR19 ledger with CAS and local audit.
-Focused synthetic Python101 PASS; initial RED13 failures and GREEN13 retained.
-Nested browser server guard returned unknown quota and paused before launch.
-Browser, Node, final regression, independent review and exact-SHA image/CI/PR
-remain pending. This is not ready for acceptance or deployment. Evidence:
+Whole-meal WWW edit/delete reuses PR19 ledger with shared chat/WWW CAS revision,
+nullable quantity/unit and local before/after audit. Original catalog consumption
+snapshot and historical conversation survive overrides and backup/restore.
+Initial RED13 and focused101 retained; final isolated offline Python747 PASS /
+1 existing optional-import skip (316.44s), Node26 PASS, JS syntax exit0.
+Real Chromium PASS: full edit/date move/reload/sums/XSS, real409 preserving typed
+values/focus, no automatic retry, named delete cancel/confirm. Previous unknown
+quota pause was resolved solely by correcting private supervisor environment;
+failed logs preserved. Product source unchanged since WIP dfd2978; continuation
+adds the real catalog/history acceptance test and updates evidence.
+Independent review, exact-SHA image smoke/fork CI and PR remain coordinator gates.
+No production access, publication or deployment. Evidence:
 [manual-meal-editing.md](review-evidence/manual-meal-editing.md).
+
 
 ## Logical meal integrity — 2026-10-27
 

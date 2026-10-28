@@ -268,7 +268,7 @@ usuwa przy sprzątaniu. Uruchomienie helpera na hoście nie potwierdza wyniku te
 smoke na rzeczywistym obrazie.
 
 
-### Ręczna korekta posiłków (kandydat WIP)
+### Ręczna korekta posiłków
 
 W widoku posiłków przyciski Edytuj/Usuń korygują cały wpis bez LLM.
 Ilość i jednostka g/ml/szt są opcjonalne i podawane razem; starsze dane pozostają
@@ -276,7 +276,8 @@ null, bez zgadywania z opisu. Ilość nie przelicza makr. Puste makra oznaczają
 danych, zero pozostaje zerem. Formularz dopuszcza pojedynczy przecinek dziesiętny.
 W razie konfliktu odczytaj aktualny wpis przed kolejną korektą. Historia rozmowy
 i snapshoty katalogowe pozostają oryginalnym dowodem, korekta jest nadpisaniem
-wartości posiłku z lokalnym audytem. Ten kandydat oczekuje testu przeglądarki.
+wartości posiłku z lokalnym audytem. Syntetyczny test Chromium obejmuje edycję,
+reload, konflikt zapisu i potwierdzenie usunięcia.
 
 Kontrakt API: PUT `/api/meals/{id}` wymaga wszystkich pól `description`,
 `quantity`, `unit`, `calories`, `protein_g`, `carbs_g`, `fat_g`, `date`, `time`

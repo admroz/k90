@@ -1,7 +1,7 @@
-# Manual meal editing — WIP checkpoint, 2026-10-28
+# Manual meal editing — author verification, 2026-10-28
 
 Base: `a4160f36524b502abcf003c4ca4ec7cb3b6a5183` (owner-merged PR18/PR19).
-Branch: `feat/manual-meal-editing-20261027`. Author work is paused, not accepted.
+Branch: `feat/manual-meal-editing-20261027`. Author acceptance evidence below; independent review and image/CI are separate gates.
 
 The candidate adds whole-meal editing and confirmed deletion to the meals panel,
 using the existing PR19 transaction and operation ledger. Nullable quantity/unit,
@@ -26,17 +26,33 @@ independent network guard (loopback only), project virtualenv Python:
   NaN/Infinity, and additive migration/SQLite backup restoration. Existing provider
   fixtures were updated to send the newly required chat revision.
 
-Browser acceptance did **not run**: the nested server guard returned unknown quota
-`{}` and paused before launching its server. This triggers the task's fail-closed
-unknown-limit policy. A private browser script exists but has no passing result
-or screenshots. Chromium executable was found; missing Playwright was installed
-only as scratch tooling. Do not infer browser success from tooling installation.
+Continuation after the initial safe pause preserved all original failed logs.
+The coordinator diagnosed a missing `HERMES_HOME` in the private nested supervisor
+environment. Adding it to the supervisor only restored real usage_api admission;
+synthetic application HOME/data/auth and offline protection remained isolated.
+No quota exemption, synthetic quota, watchdog removal or credential change.
 
-Pending: Node syntax/tests, real Chromium full flow and failed-save/cancel/delete,
-final broader Python regression, stronger real catalog/history preservation probe,
-and review of the complete candidate. The current UI implementation has not been
-executed. All remaining tests require renewed trustworthy admission. Independent
-review, exact-SHA image smoke/fork CI and PR creation remain coordinator gates.
+Actual continuation evidence:
+
+- `node --check web/app.js`: exit0.
+- `node --test tests/web_*.test.mjs`: **26 passed**, 0 failed.
+- Real Chromium with authenticated loopback HTTP and synthetic SQLite: **PASS**.
+  Edited description, quantity/unit, all macros, date/time; decimal comma,
+  zero/null, move to previous day, source-day empty and destination-day sum,
+  persistent values after reload. Original and edited XSS payloads rendered as
+  text. A competing real HTTP write caused409; unsaved typed description and
+  focus stayed intact, with one save request and an actionable conflict message.
+  Native delete dialog included name/date: cancel left the row intact; confirm
+  removed it and cleared the day sum. Private failed-save/deleted screenshots
+  and exact browser/server command logs retained by coordinator.
+- `python -m pytest -q`: **747 passed, 1 skipped in 316.44s**. The skip is
+  the existing optional import path.
+  Added real confirmed-catalog consumption -> WWW override -> product revision
+  -> chat correction -> stale WWW rejection -> SQLite backup/restore coverage,
+  asserting original snapshot bytes, conversation rows and audit survive.
+
+Fresh independent review, exact-SHA image smoke/fork CI and PR creation remain
+coordinator gates. Host Python/Node/Chromium is not actual image execution.
 No production access, live model call, image publication, merge or deployment.
 
 Before deployment, take the supported SQLite backup including documents and
