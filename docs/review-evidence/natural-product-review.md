@@ -34,3 +34,15 @@ gates. No author selfapproval, production access, publication or deployment.
 Real label vision, OAuth/provider inference and Telegram transport delivery are
 unperformed owner checks; synthetic providers do not establish their behavior.
 Backup/restore, legacy migration and rollback guidance: [catalog documentation](../PRODUCT_CATALOG.md#migracja-przeglądu-produktu).
+
+## Bounded CI fixture correction — 2026-10-28
+
+Fork CI run40704172109/job122871686520 on `56af79d` failed with
+749 PASS/1 skip/1 failure; image execution was skipped. The CLI slash-command
+test mocked startup initialization without providing its review-state database.
+An absent synthetic database parent reproduced the same SQLite open failure.
+The test now explicitly requests `temp_db`; production topic invalidation and
+all bypass assertions remain unchanged. Focused CLI/product-review replay:
+24 PASS under the same absent-default-path harness. No local full-suite rerun
+or new final CI/image success is claimed; narrow independent review and new
+exact-SHA CI remain coordinator gates.
