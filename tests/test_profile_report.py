@@ -71,6 +71,8 @@ def test_bounded_rotation_privacy_truncation_legacy(tmp_path,monkeypatch):
     monkeypatch.setenv('K90_PROFILE_LEGACY_FILES',str(legacy))
     result=mod.read_report(tmp_path)
     assert result['requests'][0]['ambiguous'] and result['requests'][0]['incomplete']
+    assert result['requests'][0]['model_calls'] is None
+    assert all(s['exclusive_ms'] is None for s in result['requests'][0]['stages'])
 
 def test_fixed_50_and_identity():
     rows=[]
@@ -82,3 +84,15 @@ def test_fixed_50_and_identity():
 
 def test_container_copies_report():
     assert 'COPY profiling.py logging_setup.py profile_report.py ./' in Path('Dockerfile').read_text()
+
+
+def test_only_fixed_rotations_no_symlink_and_record_cap(tmp_path,monkeypatch):
+    import profile_report as mod
+    monkeypatch.setattr(mod,'MAX_RECORDS',3)
+    (tmp_path/'profiling.jsonl.4').write_text(json.dumps(event())+'\n')
+    assert mod.read_report(tmp_path)['requests']==[]
+    (tmp_path/'profiling.jsonl').write_text(''.join(json.dumps(event(span=n,stage='tool'))+'\n' for n in range(1,6)))
+    r=mod.read_report(tmp_path)
+    assert r['bounded'] and len(r['requests'][0]['stages'])==3
+    (tmp_path/'profiling.jsonl.1').symlink_to(tmp_path/'profiling.jsonl')
+    assert mod.read_report(tmp_path)['read_errors']==1

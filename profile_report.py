@@ -118,7 +118,8 @@ def build_report(records):
             # UTC intervals are accepted only when consistent with monotonic duration.
             s['exclusive_ms'] = max(0, s['inclusive_ms']-union*1000) if s['stage'] != 'begin' else None
         stages.sort(key=lambda s: s['utc'] or '')
-        calls = [s for s in stages if s['stage']=='provider_request']
+        ambiguous = any(not r['scope_id'] for r in rows)
+        calls = [s for s in stages if s['stage']=='provider_request' and s['scope_id'] and s['span_id']]
         for n, s in enumerate(calls, 1): s['model_call'] = n
         processing = [s for s in stages if s['scope']=='processing' and s['stage']=='begin']
         queue_stages = [s for s in stages if s['stage']=='queue_wait']
@@ -133,7 +134,7 @@ def build_report(records):
             outcome=p['outcome'] if p else 'incomplete', incomplete=any(s['incomplete'] for s in stages) or not p,
             ambiguous=any(not r['scope_id'] for r in rows), queue_ms=q['inclusive_ms'] if q else None,
             processing_ms=p['inclusive_ms'] if p else None, total_ms=total,
-            model_calls=len(calls), delivery_attempts=len({r['scope_id'] for r in rows if r['scope']=='delivery' and r['scope_id']}),
+            model_calls=None if ambiguous else len(calls), delivery_attempts=len({r['scope_id'] for r in rows if r['scope']=='delivery' and r['scope_id']}),
             failure_stages=list(dict.fromkeys(failures)),
             slowest=[s['stage'] for s in sorted(stages, key=lambda s:s['inclusive_ms'] or -1, reverse=True) if s['stage'] not in ('begin','queue_wait')][:3],
             stages=[{k:v for k,v in s.items() if not k.startswith('_')} for s in stages]))
@@ -182,5 +183,11 @@ def read_report(directory=None):
                     except (ValueError, SyntaxError, TypeError, RecursionError): skipped += 1
         except FileNotFoundError: pass
         except OSError: errors += 1
-    return dict(enabled=os.getenv('K90_PROFILING_ENABLED','false')=='true', requests=build_report(records),
+    requests = build_report(records)
+    if skipped or bounded or errors:
+        for request in requests:
+            request['incomplete'] = True
+            for stage in request['stages']:
+                stage['exclusive_ms'] = None
+    return dict(enabled=os.getenv('K90_PROFILING_ENABLED','false')=='true', requests=requests,
                 skipped=skipped, bounded=bounded, read_errors=errors)
