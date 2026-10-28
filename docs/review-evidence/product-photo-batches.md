@@ -47,8 +47,11 @@ with one test helper typo, corrected. Joint HTTP/SQLite/agent17 PASS; boundary23
 PASS including realistic8MB JSON, exact decoded limits and chunked14MB+1.
 Real Chromium initially found thumbnail removal blocked by old overflow styling;
 after correction PASS: multiselect/remove/error preservation/joint3-image HTTP send.
-Full regression and final SHA results are recorded in the private phase checkpoint;
-only completed runs are claims, interrupted runs are retained as such.
+Final settled source `a03419cd4c0cdc70cb09dcc131933a611828058e`: Python792 PASS /
+1 existing optional-import skip (382.15s), Node26 PASS, JS syntax PASS. The earlier
+full run was interrupted after discovering the separate old Content-Length bound;
+its log remains retained. Final SHA/readback and every command are in the private
+phase checkpoint. Subsequent documentation-only commit does not change tested code.
 
 Migration is additive (`telegram_albums`, `telegram_album_parts`), no existing data
 rewrite and no new root runtime module/Docker COPY requirement. Use supported
