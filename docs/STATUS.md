@@ -1,5 +1,16 @@
 # k90 — bieżący status zadania
 
+## Joint product photos — author WIP, 2026-10-28
+
+Dependent on accepted point1 `f33897b`; PR21 still unmerged at fetched owner-main
+`2f0711e`. WWW batches, durable Telegram album inbox, one draft per batch and all
+catalog evidence implemented. Synthetic HTTP/SQLite/agent and real Chromium
+acceptance passed; final regression results retained in private phase checkpoint.
+Independent verifier, exact-SHA CI/image and final PR remain pending coordinator
+gates. No PR, merge, image publication, deployment or live vision claim.
+[Evidence and limits](review-evidence/product-photo-batches.md).
+
+
 ## Natural product review — 2026-10-28
 
 Author implementation on `feat/natural-product-review-20261027`, based on merged

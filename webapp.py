@@ -216,6 +216,8 @@ def create_app(*, start_worker=True, processor=None):
 
     @app.exception_handler(RequestValidationError)
     async def meal_validation_error(request, exc):
+        if request.url.path in ('/api/messages', '/internal/messages', '/internal/albums/part'):
+            return JSONResponse({'detail':'Sprawdź wiadomość: 1–4 zdjęcia JPG/PNG/WebP, każde do 5 MB i łącznie do 10 MB.'}, status_code=422)
         if request.url.path.startswith('/api/meals/'):
             # Do not echo private fields or non-JSON NaN/Infinity in an error response.
             return JSONResponse({'detail': 'Sprawdź opis, liczby (0–1000000), datę, godzinę i jednostkę.'}, status_code=422)
@@ -225,7 +227,7 @@ def create_app(*, start_worker=True, processor=None):
     async def protect(request: Request, call_next):
         # JSON-only mutating endpoints plus a custom header prevent cross-site form requests.
         length = request.headers.get("content-length", "0")
-        if not length.isdigit() or int(length) > 7_100_000:
+        if not length.isdigit() or int(length) > 14_000_000:
             return JSONResponse({"detail": "Żądanie jest za duże."}, status_code=413)
         if request.method not in (
             "GET",

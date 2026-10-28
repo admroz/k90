@@ -2,6 +2,11 @@ import base64
 import pytest
 from webapp import Message
 
+@pytest.fixture(autouse=True)
+def trusted_owner(monkeypatch):
+    monkeypatch.setenv('TELEGRAM_ALLOWED_USER_ID','123')
+
+
 PNG = 'data:image/png;base64,' + base64.b64encode(b'\x89PNG\r\n\x1a\nsynthetic').decode()
 
 def test_three_photos_one_content():
@@ -169,8 +174,69 @@ def test_batch_filter_and_next_text_turn_omit_all_photos(temp_db,monkeypatch):
     from outbound_policy import model_policy
     monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES','true')
     content=Message(request_id='web:joint',images=[PNG]*3).content()
-    assert model_policy().sanitize_value(content)==content
+    assert model_policy().sanitize(content)==content
     agent.save_history('owner',content,'synthetic answer')
     history=agent.load_history('owner')
     assert 'data:image/' not in json.dumps(history)
     assert sum(p.get('text')=='[Historical image omitted]' for p in history[0]['content'])==3
+
+
+def test_http_three_photos_one_turn_draft_consent_preview(temp_db,monkeypatch):
+    from fastapi.testclient import TestClient
+    from litellm import ModelResponse
+    import agent
+    from webapp import create_app
+    from web_runtime import ConversationWorker
+    from test_food_catalog import label
+    from copy import deepcopy
+    monkeypatch.setenv('WEB_PASSWORD','synthetic-test-password')
+    monkeypatch.setenv('WEB_COOKIE_SECURE','false')
+    monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES','true')
+    monkeypatch.setenv('K90_SYNC_ENABLED','false')
+    monkeypatch.setenv('K90_PREVIEW','false')
+    monkeypatch.setattr(agent,'MODEL','gpt-5.4')
+    monkeypatch.setattr(agent,'_build_system_message',lambda:('synthetic system',{}))
+    product=dict(label(),provenance='own_label')
+    pending=[{'role':'assistant','content':None,'tool_calls':[{'id':'call1','type':'function','function':{'name':'propose_food_product','arguments':json.dumps({'product':product})}}]},
+             {'role':'assistant','content':'Sprawdź wspólną propozycję.'}, {'role':'assistant','content':'Dalszy tekst.'}]
+    sent=[]
+    def completion(**kwargs):
+        sent.append(deepcopy(kwargs['messages']))
+        return ModelResponse(choices=[{'index':0,'message':pending.pop(0),'finish_reason':'stop'}],usage={'prompt_tokens':1,'completion_tokens':1,'total_tokens':2})
+    monkeypatch.setattr(agent.litellm,'completion',completion)
+    with TestClient(create_app(start_worker=False)) as client:
+        client.post('/api/login',json={'password':'synthetic-test-password'},headers={'X-K90-Request':'1'})
+        headers={'X-K90-Request':'1'}
+        body={'request_id':'web:joint','text':'Zachowaj jeden produkt','images':[PNG]*3}
+        assert client.post('/api/messages',json=body,headers=headers).status_code==202
+        assert client.post('/api/messages',json=body,headers=headers).status_code==202
+        assert ConversationWorker().run_once()
+        with get_conn() as conn:
+            draft=conn.execute('SELECT * FROM food_products').fetchone()
+            assert draft and draft['status']=='draft'
+            assert conn.execute('SELECT COUNT(*) FROM agent_events WHERE role="user"').fetchone()[0]==1
+        assert client.get(f"/api/catalog/{draft['id']}/label").json()['images']==[PNG]*3
+        assert len([p for p in sent[0][-1]['content'] if p['type']=='image_url'])==3
+        assert client.post('/api/messages',json={'request_id':'web:consent','text':'zatwierdzam'},headers=headers).status_code==202
+        assert ConversationWorker().run_once()
+        with get_conn() as conn:
+            assert conn.execute('SELECT status FROM food_products').fetchone()[0]=='confirmed'
+            assert conn.execute('SELECT COUNT(*) FROM food_products').fetchone()[0]==1
+        assert len(sent)==2  # Consent is local, no inference.
+        agent.run_agent('Dalszy tekst','owner')
+        assert 'data:image/' not in json.dumps(sent[-1])
+
+
+@pytest.mark.parametrize('ambiguity',['różne produkty i kody','100g czy 100ml','opakowanie czy porcja','nieczytelne makra'])
+def test_synthetic_clarification_has_no_catalog_writes(temp_db,monkeypatch,ambiguity):
+    import agent
+    from litellm import ModelResponse
+    monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES','true')
+    monkeypatch.setattr(agent,'MODEL','gpt-5.4')
+    monkeypatch.setattr(agent,'_build_system_message',lambda:('synthetic system',{}))
+    # This exercises a clarification response, not recognition of these synthetic pixels.
+    monkeypatch.setattr(agent.litellm,'completion',lambda **kw:ModelResponse(choices=[{'index':0,'message':{'role':'assistant','content':'Wyjaśnij: '+ambiguity},'finish_reason':'stop'}],usage={'prompt_tokens':1,'completion_tokens':1,'total_tokens':2}))
+    answer,_=agent.run_agent(Message(request_id='web:conflict',images=[PNG]*3).content(),'owner')
+    assert 'Wyjaśnij' in answer
+    with get_conn() as conn:
+        assert conn.execute('SELECT COUNT(*) FROM food_products').fetchone()[0]==0

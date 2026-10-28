@@ -294,3 +294,22 @@ Migracja przy inicjalizacji dodaje quantity/unit oraz meal_changes; revision
 pochodzi z PR19. Audyt, tombstone i wyniki operacji wymagają zachowania całej bazy
 w backupie. Starszy writer po downgrade nie zapewni CAS/audytu: rollback wymaga
 zatrzymania writerów i zgodnego zestawu kodu/backup, bez ręcznego kasowania audytu.
+
+## Kilka zdjęć w jednej wiadomości
+
+WWW pozwala wybrać1–4 zdjęcia JPG/PNG/WebP, każde do5 MB i razem do10 MB
+(limit żądania14 MB). Podglądy pozwalają usuwać pojedyncze zdjęcia; błąd wysłania
+zachowuje wybór. Zdjęcia trafiają łącznie do jednej tury. Dla etykiety produktu
+powstaje jedna propozycja i jedna zgoda; sprzeczne dane wymagają wyjaśnienia.
+
+Aktualny adapter Telegrama łączy `media_group_id` w trwałym inboxie backendu,
+nie myli `photo[]` (wariantów rozdzielczości) z albumem. Zamyka paczkę po2 s ciszy
+lub10 s zbierania, z flush przy pollingu (timeout3 s; sieć może opóźnić wykonanie).
+Cisza jest heurystyką kompletności. Spóźniony element wywołuje jeden komunikat
+„niekompletny album / wyślij całość ponownie”, bez drugiej analizy. Przekroczenie
+limitu odrzuca cały otwarty album. Offset potwierdza się po trwałym zapisie części.
+Retencja zamkniętych identyfikatorów7 dni, maks.32 otwarte i1000 zachowanych grup;
+pending przeżywa restart, zdjęcia inboxu są usuwane po zamknięciu. Obrazy źródłowe
+pozostają lokalnie w kolejce/zdarzeniach zgodnie z istniejącą polityką prywatności.
+Starszy tryb `server.py` Telegram-only nadal przyjmuje jeden obraz, bez obsługi albumów.
+Dowody i ograniczenia: [product-photo-batches.md](docs/review-evidence/product-photo-batches.md).

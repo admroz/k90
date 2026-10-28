@@ -542,3 +542,11 @@ def test_jobs_contract_keeps_terminal_failures_and_active_work_without_mutation(
         assert [j['request_id'] for j in jobs] == [f'web:contract-{i}' for i in range(4)]
     with closing(get_conn()) as conn:
         assert [r[0] for r in conn.execute('SELECT state FROM chat_jobs ORDER BY seq')] == states
+
+
+def test_joint_photos_body_above_old_single_image_limit(web_client):
+    import base64
+    login(web_client)
+    photo='data:image/png;base64,'+base64.b64encode(b'\x89PNG\r\n\x1a\n'+b'x'*(3_000_000-8)).decode()
+    response=web_client.post('/api/messages',json={'request_id':'web:large-batch','images':[photo,photo]},headers={'X-K90-Request':'1'})
+    assert response.status_code==202

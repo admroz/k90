@@ -471,6 +471,13 @@ def flush_albums(*, now=None):
         _cleanup_albums(conn, now)
         rows = conn.execute("SELECT * FROM telegram_albums WHERE state='pending' AND (last_at<=? OR first_at<=?) ORDER BY first_at", (now-2,now-10)).fetchall()
         for row in rows:
+            allowed = os.getenv('TELEGRAM_ALLOWED_USER_ID')
+            if not allowed:
+                continue
+            if str(row['owner']) != allowed or str(row['chat_id']) != allowed:
+                conn.execute("UPDATE telegram_albums SET state='rejected' WHERE album_key=?", (row['album_key'],))
+                conn.execute("UPDATE telegram_album_parts SET image=NULL,caption='' WHERE album_key=?", (row['album_key'],))
+                continue
             parts = conn.execute('SELECT * FROM telegram_album_parts WHERE album_key=? ORDER BY message_id', (row['album_key'],)).fetchall()
             text = '\n'.join(p['caption'] for p in parts if p['caption']) or 'Przeanalizuj zdjęcia łącznie. Nie zapisuj posiłku bez potwierdzenia, że został zjedzony.'
             content = [{'type':'text','text':text}, *[{'type':'image_url','image_url':{'url':p['image']}} for p in parts]]

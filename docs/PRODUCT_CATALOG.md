@@ -216,3 +216,11 @@ obraz. Nie usuwaj nowych tabel; starszy writer nie zachowuje nowych gwarancji
 właściciela i zgody. Nie uruchamiaj równocześnie starego i nowego writera.
 Testy autora są syntetyczne i offline. Realne vision/OAuth/Telegram, aktualny
 obraz i wdrożenie pozostają oddzielnymi kontrolami właściciela/koordynatora.
+
+Kilka bieżących zdjęć może wspólnie pokazywać nazwę/logo, kod i tabelę wartości.
+Prześlij je razem: jedna paczka daje najwyżej jeden szkic i jedną zgodę z aktualnego
+podglądu. Katalog pokazuje wszystkie zdjęcia dowodowe po uwierzytelnieniu.
+Przy różnych produktach/kodach, nieczytelności lub niejasnej podstawie100g/100ml,
+porcja/opakowanie agent powinien dopytać, bez sumowania makr. Ocena sprzeczności
+zależy od modelu; test syntetyczny nie potwierdza jakości prawdziwego vision.
+[Dowody, limity i rollback](review-evidence/product-photo-batches.md).
