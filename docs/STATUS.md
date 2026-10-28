@@ -1,5 +1,14 @@
 # k90 — bieżący status zadania
 
+## Manual meal editing — WIP paused, 2026-10-28
+
+Candidate whole-meal WWW edit/delete reuses PR19 ledger with CAS and local audit.
+Focused synthetic Python101 PASS; initial RED13 failures and GREEN13 retained.
+Nested browser server guard returned unknown quota and paused before launch.
+Browser, Node, final regression, independent review and exact-SHA image/CI/PR
+remain pending. This is not ready for acceptance or deployment. Evidence:
+[manual-meal-editing.md](review-evidence/manual-meal-editing.md).
+
 ## Logical meal integrity — 2026-10-27
 
 Author verification complete on `22bee1754ef08877a99b6dd3b0f1c2285136fe24`,

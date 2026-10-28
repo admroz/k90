@@ -1326,3 +1326,13 @@ pre#document-raw {
   }
 }
 #catalog-label { max-width: 100%; }
+
+#meal-editor { max-width: 640px; width: calc(100% - 32px); max-height: 90vh; overflow: auto; border: 1px solid var(--line, #777); border-radius: 12px; padding: 24px; background: var(--paper); color: var(--ink); }
+#meal-editor::backdrop { background: #0008; }
+.meal-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.meal-fields label { display: grid; gap: 5px; }
+.meal-fields label:first-child { grid-column: 1 / -1; }
+.meal-fields input, .meal-fields select { width: 100%; min-width: 0; }
+.meal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+#meal-edit-error { color: var(--warning-ink); }
+@media (max-width: 480px) { .meal-fields { grid-template-columns: 1fr; } .meal-row { flex-wrap: wrap; } }

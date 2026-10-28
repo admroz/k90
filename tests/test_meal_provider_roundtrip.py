@@ -33,7 +33,7 @@ def test_real_tool_second_request(temp_db, monkeypatch, adapter, mode, fail_seco
     monkeypatch.setattr(agent,'_build_system_message',lambda: ('Synthetic system', {}))
     monkeypatch.setattr(memory_runtime,'start_worker',lambda: None)
     meal = log_meal('Synthetic original', 50, 0, 12, 0)
-    edit = dict(meal_id=meal['meal_id'],description='Synthetic corrected synthetic@example.invalid',
+    edit = dict(expected_revision=1,meal_id=meal['meal_id'],description='Synthetic corrected synthetic@example.invalid',
                 calories=75,protein_g=1,carbs_g=16,fat_g=1)
     calls = []
     if mode in ('read','multi'): calls.append(call('get_recent_meals', '{}', 'read-id'))

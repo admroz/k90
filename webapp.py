@@ -17,9 +17,13 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, ConfigDict
+from typing import Literal
+from datetime import time as MealTime
 
 import web_data
 from tools.db import get_conn, get_db_path
@@ -111,6 +115,36 @@ class Message(BaseModel):
         ]
 
 
+class MealOperation(BaseModel):
+    model_config = ConfigDict(strict=True, extra='forbid', allow_inf_nan=False)
+    expected_revision: int = Field(ge=1)
+    request_id: str = Field(min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9:_-]+$")
+
+
+class MealEdit(MealOperation):
+    description: str = Field(min_length=1, max_length=2000)
+    calories: float | None = Field(ge=0, le=1000000)
+    protein_g: float | None = Field(ge=0, le=1000000)
+    carbs_g: float | None = Field(ge=0, le=1000000)
+    fat_g: float | None = Field(ge=0, le=1000000)
+    quantity: float | None = Field(ge=0, le=1000000)
+    unit: Literal['g', 'ml', 'szt'] | None
+    date: str
+    time: str | None
+
+    @model_validator(mode='after')
+    def valid_meal(self):
+        if not self.description.strip():
+            raise ValueError('Opis nie może być pusty.')
+        if (self.quantity is None) != (self.unit is None):
+            raise ValueError('Podaj ilość i jednostkę razem albo pozostaw oba puste.')
+        if date.fromisoformat(self.date).isoformat() != self.date:
+            raise ValueError('Data: YYYY-MM-DD.')
+        if self.time is not None and MealTime.fromisoformat(self.time).strftime('%H:%M') != self.time:
+            raise ValueError('Godzina: HH:MM lub null dla nieznanej.')
+        return self
+
+
 class TelegramMessage(Message):
     chat_id: int
 
@@ -172,6 +206,13 @@ def create_app(*, start_worker=True, processor=None):
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(BodyLimitMiddleware)
+
+    @app.exception_handler(RequestValidationError)
+    async def meal_validation_error(request, exc):
+        if request.url.path.startswith('/api/meals/'):
+            # Do not echo private fields or non-JSON NaN/Infinity in an error response.
+            return JSONResponse({'detail': 'Sprawdź opis, liczby (0–1000000), datę, godzinę i jednostkę.'}, status_code=422)
+        return await request_validation_exception_handler(request, exc)
 
     @app.middleware("http")
     async def protect(request: Request, call_next):
@@ -328,6 +369,30 @@ def create_app(*, start_worker=True, processor=None):
     @app.get("/api/dashboard", dependencies=[Depends(authenticated)])
     def dashboard(days: int = Query(30, ge=1, le=366)):
         return web_data.dashboard(days)
+
+    def mutate_meal(meal_id, body, kind):
+        from tools.diet import _perform
+        args = body.model_dump()
+        request_id = 'web-meal:' + args.pop('request_id')
+        args['meal_id'] = meal_id
+        owner = os.getenv('CONVERSATION_USER_ID', 'owner')
+        operation_id = hashlib.sha256(json.dumps([owner, request_id, kind, meal_id]).encode()).hexdigest()[:32]
+        try:
+            result = _perform(kind, args, owner=owner, request_id=request_id,
+                              operation_id=operation_id, chat=False)
+        except (ValueError, TypeError, OverflowError):
+            raise HTTPException(422, 'Sprawdź opis, liczby, datę, godzinę i jednostkę.') from None
+        if not result.get('success'):
+            raise HTTPException(result.get('code', 409), result['error'])
+        return result
+
+    @app.put('/api/meals/{meal_id}', dependencies=[Depends(authenticated)])
+    def edit_meal(meal_id: int, body: MealEdit):
+        return mutate_meal(meal_id, body, 'update_meal')
+
+    @app.delete('/api/meals/{meal_id}', dependencies=[Depends(authenticated)])
+    def remove_meal(meal_id: int, body: MealOperation):
+        return mutate_meal(meal_id, body, 'delete_meal')
 
     @app.get("/api/meals", dependencies=[Depends(authenticated)])
     def meals(day: date | None = Query(None, alias="date")):
