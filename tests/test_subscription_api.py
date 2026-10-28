@@ -74,7 +74,8 @@ def test_subscription_rejects_foreign_namespace_before_tool_execution():
             token_store=Tokens(),policy=Policy(),request=request).complete()
 
 
-def test_subscription_image_parts_and_catalog_allowlist():
+@pytest.mark.parametrize('count',[1,3])
+def test_subscription_image_parts_and_catalog_allowlist(count):
     adapter=importlib.import_module('subscription_api')
     requests=[]
     def request(url,**kwargs):
@@ -84,10 +85,10 @@ def test_subscription_image_parts_and_catalog_allowlist():
         return {'status':'completed','output':[]}
     convo=adapter.SubscriptionConversation('demo-model',[{'role':'user','content':[
         {'type':'text','text':'Synthetic shapes'},
-        {'type':'image_url','image_url':{'url':'data:image/png;base64,iVBORw0KGgpzeW50aGV0aWM='}}]}],
+        *[{'type':'image_url','image_url':{'url':'data:image/png;base64,iVBORw0KGgpzeW50aGV0aWM='}}]*count]}],
         token_store=Tokens(),policy=Policy(),request=request)
     convo.complete()
-    assert requests[0]['input'][0]['content'][1]['type']=='input_image'
+    assert sum(p['type']=='input_image' for p in requests[0]['input'][0]['content'])==count
     with pytest.raises(adapter.SubscriptionError,match='model_not_in_account_catalog'):
         adapter.SubscriptionConversation('unknown',[],token_store=Tokens(),policy=Policy(),request=request).complete()
     assert len(requests)==1

@@ -256,3 +256,15 @@ def test_switching_models_preserves_the_same_conversation(mock_api, agent_contex
 def test_unsupported_reasoning_is_rejected_before_api_call(effort):
     with pytest.raises(ValueError, match="reasoning effort"):
         responses_api.ResponsesConversation("gpt-6.1-sol", [], reasoning_effort=effort)
+
+
+def test_three_images_one_responses_turn(mock_api, agent_context, monkeypatch):
+    monkeypatch.setenv('K90_ALLOW_MODEL_IMAGES','true')
+    from test_photo_batches import PNG
+    from webapp import Message
+    content=Message(request_id='web:three',images=[PNG]*3).content()
+    requests=mock_api([response([message()]),response([message()])])
+    agent.run_agent(content,'owner')
+    agent.run_agent('Dalszy tekst','owner')
+    assert sum(p['type']=='input_image' for p in requests[0]['input'][-1]['content'])==3
+    assert 'data:image/' not in json.dumps(requests[1])

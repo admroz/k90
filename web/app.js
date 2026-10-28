@@ -31,7 +31,8 @@ let currentView = "dashboard",
   tableSort = null,
   tableDescending = true;
 let history = new Map(),
-  imageData = null,
+  imageData = [],
+  attachmentVersion = 0,
   pendingSubmission = null,
   currentDocument = null,
   pollBusy = false,
@@ -503,37 +504,54 @@ async function startGarminSync() {
 $("#sync-data").onclick = startGarminSync;
 $("#sync-garmin").onclick = startGarminSync;
 $("#older-messages").onclick = () => loadChat(Math.min(...history.keys())).catch(e => error(e.message));
+function renderAttachments() {
+  const root = $("#attachment-name");
+  root.replaceChildren();
+  imageData.forEach((photo, index) => {
+    const item = document.createElement("span");
+    const img = document.createElement("img");
+    img.src = photo.url; img.alt = photo.name; img.width = 64; img.height = 64;
+    const remove = document.createElement("button");
+    remove.type = "button"; remove.textContent = `Usuń ${photo.name}`;
+    remove.onclick = () => { imageData.splice(index, 1); pendingSubmission = null; renderAttachments(); };
+    item.append(img, remove); root.append(item);
+  });
+  if (imageData.length) root.append(document.createTextNode(` ${imageData.length}/4 · ${(imageData.reduce((n,p) => n+p.size,0)/1000000).toFixed(2)}/10 MB`));
+  $("#remove-image").hidden = !imageData.length;
+}
 $("#image").onchange = async () => {
-  imageData = null;
-  pendingSubmission = null;
-  $("#attachment-name").textContent = "";
-  $("#remove-image").hidden = true;
-  const file = $("#image").files[0];
-  if (!file) return;
-  if (file.size > 5000000) {
-    $("#chat-error").textContent = "Zdjęcie może mieć maksymalnie 5 MB.";
+  const version = ++attachmentVersion;
+  const files = Array.from($("#image").files);
+  if (!files.length) return;
+  if (files.length > 4 || files.some(f => f.size > 5000000) || files.reduce((n,f) => n+f.size,0) > 10000000) {
+    $("#chat-error").textContent = "Wybierz 1–4 zdjęcia, każde do 5 MB, łącznie do 10 MB.";
     return;
   }
-  try {
-    imageData = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-    $("#attachment-name").textContent = file.name;
-    $("#remove-image").hidden = false;
-    pendingSubmission = null;
-  } catch {
-    $("#chat-error").textContent = "Nie udało się odczytać zdjęcia.";
+  if (files.some(f => !["image/jpeg","image/png","image/webp"].includes(f.type))) {
+    $("#chat-error").textContent = "Obsługujemy JPG, PNG i WebP.";
+    return;
   }
+  $("#send-message").disabled = true;
+  try {
+    const photos = [];
+    for (const file of files) {
+      const url = await new Promise((resolve,reject) => {
+        const reader = new FileReader(); reader.onload = () => resolve(reader.result);
+        reader.onerror = reject; reader.readAsDataURL(file);
+      });
+      photos.push({url, name:file.name, size:file.size});
+    }
+    if (version !== attachmentVersion) return;
+    imageData = photos; pendingSubmission = null;
+    $("#chat-error").textContent = ""; renderAttachments();
+  } catch {
+    $("#chat-error").textContent = "Nie udało się odczytać zdjęć.";
+  } finally { if (version === attachmentVersion) $("#send-message").disabled = false; }
 };
 $("#remove-image").onclick = () => {
-  imageData = null;
-  $("#image").value = "";
-  $("#attachment-name").textContent = "";
-  $("#remove-image").hidden = true;
-  pendingSubmission = null;
+  ++attachmentVersion;
+  imageData = []; $("#image").value = ""; pendingSubmission = null;
+  renderAttachments();
 };
 $("#message").oninput = () => pendingSubmission = null;
 $("#message").onkeydown = event => {
@@ -550,7 +568,7 @@ $("#chat-form").onsubmit = async event => {
     pendingSubmission ||= {
       request_id: createRequestId(),
       text: $("#message").value,
-      image: imageData
+      ...(imageData.length ? {images:imageData.map(p => p.url)} : {})
     };
     await api("/api/messages", {
       method: "POST",

@@ -437,7 +437,7 @@ def test_dashboard_deduplicates_glucose_and_does_not_turn_missing_into_zero(web_
 def test_chunked_body_size_is_enforced(web_client):
     response = web_client.post(
         "/api/login",
-        content=iter([b"x" * 4_000_000, b"x" * 4_000_000]),
+        content=iter([b"x" * 7_000_000, b"x" * 7_000_001]),
         headers={"Content-Type": "application/json", "X-K90-Request": "1"},
     )
     assert response.status_code == 413
