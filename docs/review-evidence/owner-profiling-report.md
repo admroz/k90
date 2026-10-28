@@ -49,7 +49,16 @@ skipped; this is deliberately a bounded subset, not a general log importer.
   one numbered model call, two delivery attempts, UTC/local date, private unknown
   field discarded, explicit no-data and error/recovery states. Screenshots retained
   in the private phase directory. No unchanged-feature browser campaign.
-- Final regression and supplemental checks: results recorded below when complete.
+- Final isolated/offline regression on code `f6742b06ac8d9789548c820b6e4125dea5a4c4ce`:
+  **761 passed / 1 existing optional-import skip**, 315.69 s. Final boundary parser:
+  13 PASS, parser/auth/web 56 PASS. Node broad suite 28 PASS, final renderer 2 PASS,
+  JavaScript syntax exit0 and diff whitespace check exit0.
+- The first broad run retained 756 PASS / 1 skip / 3 performance-test timeouts:
+  copied private nested watchdog polled at30s while these tests allow3/4s. Corrected
+  private template polling (nested .05s, direct1s); test limits and app unchanged.
+  The corrected full regression above includes all three unchanged performance tests.
+- Fresh upstream/main after completion still equals base `2f0711e`; unmerged PR21
+  was not integrated. Final commits after the tested code are evidence/status only.
 
 Initial browser harness attempts failed on missing synthetic DB parent and Chromium
 Unix-socket path length; corrected only the private fixture DB/TMPDIR. Failed logs

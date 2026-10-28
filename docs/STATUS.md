@@ -1,5 +1,22 @@
 # k90 — bieżący status zadania
 
+## Owner profiling report — author verification complete, 2026-10-28
+
+Authenticated Diagnostyka / Czasy: bounded content-free JSONL/rotation reader,
+last50 requests/jobs, inclusive stages, conservative exclusive/total timings,
+numbered model calls and separate repeated delivery. Ambiguous legacy subset and
+incomplete clocks/records remain explicit; no arbitrary HTTP path or private fields.
+Tested code `f6742b06ac8d9789548c820b6e4125dea5a4c4ce`: final isolated offline
+Python761 PASS / 1 existing optional-import skip (315.69s), Node28 PASS + final
+renderer2 PASS, JS syntax PASS, real synthetic HTTP Chromium details/no-data/error
+and private-field/XSS checks PASS. Initial private harness failures are retained
+and explained in [evidence](review-evidence/owner-profiling-report.md).
+Explicit Docker COPY and packaging test; actual image is a later gate.
+Base/fresh upstreammain2f0711e; no unmerged PR21 or point1/6 diffs included.
+Independent immutable-SHA verification, fork CI/image and PR remain coordinator
+gates. No production access, publication, merge or deployment.
+
+
 ## Manual meal editing — author verification complete, 2026-10-28
 
 Whole-meal WWW edit/delete reuses PR19 ledger with shared chat/WWW CAS revision,
