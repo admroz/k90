@@ -143,7 +143,6 @@ def test_natural_consent_dispatch_red(temp_db, monkeypatch):
 
 
 def test_restart_and_sqlite_backup_restore(temp_db, tmp_path):
-    import json
     import os
     import subprocess
     import sys
@@ -154,10 +153,9 @@ def test_restart_and_sqlite_backup_restore(temp_db, tmp_path):
         source.backup(destination)
     env = dict(os.environ,DB_PATH=str(restored))
     completed = subprocess.run([sys.executable,'-c',
-        "import json; from agent import run_agent; print(json.dumps(run_agent('tak','owner')[0]))"],
+        "from agent import run_agent; assert 'zatwierdzony' in run_agent('tak','owner')[0]"],
         env=env, text=True, capture_output=True, timeout=45)
     assert completed.returncode == 0, completed.stderr
-    assert 'zatwierdzony' in json.loads(completed.stdout.strip().splitlines()[-1])
     with sqlite3.connect(restored) as c:
         assert c.execute('SELECT version FROM food_products WHERE id=?',(p['id'],)).fetchone()[0] == 2
         assert c.execute('SELECT status FROM food_product_reviews').fetchone()[0] == 'consumed'
@@ -216,3 +214,28 @@ def test_text_correction_needs_new_consent(temp_db):
     assert catalog.get(p['id'])['name'] == 'Synthetic Yogurt'
     assert catalog.get(p['id'])['status'] == 'draft'
     assert 'zatwierdzony' in agent.run_agent('tak','owner')[0]
+
+
+def test_committed_approval_survives_failed_response_and_recovery(temp_db, monkeypatch):
+    from tools.db import MESSAGE_CONTEXT
+    p = preview()
+    web_runtime.init_runtime()
+    web_runtime.enqueue('synthetic-committed', 'zatwierdzam')
+    original = agent.save_history
+    def fail(*a, **kw): raise RuntimeError('synthetic persistence failure')
+    monkeypatch.setattr(agent,'save_history',fail)
+    worker = web_runtime.ConversationWorker()
+    assert worker.run_once()
+    assert catalog.get(p['id'])['status'] == 'confirmed'
+    with get_conn() as c:
+        row = c.execute('SELECT state,response FROM chat_jobs WHERE request_id=?',('synthetic-committed',)).fetchone()
+        assert row['state'] == 'failed' and 'zatwierdzony' in row['response']
+        c.execute("UPDATE chat_jobs SET state='running',response=NULL WHERE request_id='synthetic-committed'")
+    web_runtime.recover_interrupted()
+    with get_conn() as c:
+        assert 'zatwierdzony' in c.execute("SELECT response FROM chat_jobs WHERE request_id='synthetic-committed'").fetchone()[0]
+    monkeypatch.setattr(agent,'save_history',original)
+    token = MESSAGE_CONTEXT.set({'request_id':'synthetic-committed','user_id':'owner'})
+    try: assert 'zatwierdzony' in agent.run_agent('zatwierdzam','owner')[0]
+    finally: MESSAGE_CONTEXT.reset(token)
+    assert catalog.get(p['id'])['version'] == 2

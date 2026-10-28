@@ -52,6 +52,8 @@ def intent(message):
         return ('text_correct', (m[1].casefold(), m[2]))
     m = re.fullmatch(r'/produkt(?:y)? (pokaz|pokaż|zatwierdz) ([0-9]+) ([0-9]+)', text)
     if m:
+        if len(m[2]) > 18 or len(m[3]) > 18:
+            return ('unclear', None)
         return ('show' if m[1] in ('pokaz','pokaż') else 'explicit', (int(m[2]),int(m[3])))
     # Unclear review language stays local and never becomes model permission.
     if re.search(r'zatwier|zapisz ten produkt|anuluj|\btak\b|(?:zmień|popraw) (?:białko|bialko|kcal|tłuszcz|węglowodany|nazwę|markę|podstawę)', text) or text.startswith(('/produkt ', '/produkty ')):
@@ -132,6 +134,7 @@ def resolve(message, turn):
                 if not conn.execute('SELECT 1 FROM food_product_reviews WHERE owner=? AND product_id=? AND version=? AND review_event_id=?',
                                     (owner_id,int(k),v,turn['user_event_id'])).fetchone()}
             return previous['answer']
+        conn.execute('SAVEPOINT review_action')
         try:
             if kind in ('show', 'explicit'):
                 pid, version = arg
@@ -165,8 +168,11 @@ def resolve(message, turn):
                 else:
                     answer = _confirm(conn,row,review['version'],owner_id,turn['user_event_id'])
         except ValueError:
+            conn.execute('ROLLBACK TO review_action')
+            turn.pop('catalog_previews', None)
             conn.execute("UPDATE food_product_reviews SET direct=0 WHERE owner=? AND status='pending'",(owner_id,))
             answer = CLARIFY
+        conn.execute('RELEASE review_action')
         conn.execute('INSERT INTO food_review_actions VALUES (?,?,?,?,?)',(owner_id,turn['request_id'],message,answer,json.dumps(turn.get('catalog_previews', {}))))
         return answer
 
@@ -182,3 +188,14 @@ def _confirm(conn,row,version,owner_id,event_id):
     conn.execute("UPDATE food_product_reviews SET status='consumed',consent_event_id=?,reason='confirmed' WHERE product_id=? AND owner=? AND status='pending'",(event_id,row['id'],owner_id))
     p = _record(conn.execute('SELECT * FROM food_products WHERE id=?',(row['id'],)).fetchone())
     return f"Produkt {p['id']} zatwierdzony: {p['name']}, {p['basis']}: {p['kcal']} kcal / B {p['protein']} / W {p['carbs']} / T {p['fat']}."
+
+
+def known_outcome(owner_id, request_id, *, conn):
+    """Recover only backend-recorded results, including a commit before response failure."""
+    row = conn.execute('SELECT answer,previews FROM food_review_actions WHERE owner=? AND request_id=?',
+                       (owner_id,request_id)).fetchone()
+    if row is None:
+        return None
+    if json.loads(row['previews']):
+        return 'Szkic nie jest zatwierdzony. ' + CLARIFY
+    return row['answer']
