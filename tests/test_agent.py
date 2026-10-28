@@ -37,7 +37,7 @@ def test_load_history_limits_message_pairs_and_parses_json(monkeypatch, temp_db)
     assert history[-1]["content"][0]["text"] == "hello"
 
 
-def test_cli_slash_command_bypasses_run_agent(monkeypatch, capsys):
+def test_cli_slash_command_bypasses_run_agent(temp_db, monkeypatch, capsys):
     inputs = iter(["/status", "exit"])
     monkeypatch.setattr(agent, "init_db", lambda: None)
     monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))

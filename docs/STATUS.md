@@ -1,5 +1,15 @@
 # k90 — bieżący status zadania
 
+## Natural product review — 2026-10-28
+
+Author implementation on `feat/natural-product-review-20261027`, based on merged
+PR18/19 (`a4160f3`), independent of meal UI PR20. Durable owner/version preview,
+local Polish consent/cancel/correction, atomic consent audit and replay, stale
+panel rejection and legacy explicit preview. Synthetic author evidence and exact
+remaining independent/CI/live gates: [natural-product-review.md](review-evidence/natural-product-review.md).
+No PR creation, image publication or deployment by the implementer.
+
+
 ## Manual meal editing — author verification complete, 2026-10-28
 
 Whole-meal WWW edit/delete reuses PR19 ledger with shared chat/WWW CAS revision,

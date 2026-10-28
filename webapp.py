@@ -342,7 +342,8 @@ def create_app(*, start_worker=True, processor=None):
 
     @app.post('/api/catalog', dependencies=[Depends(authenticated)])
     def catalog_create(body: dict):
-        return catalog_action(food_catalog.propose, body, request_id=body.get('request_id'))
+        return catalog_action(food_catalog.propose, body, request_id=body.get('request_id'),
+                              owner=os.getenv('CONVERSATION_USER_ID', 'owner'))
 
     @app.post('/api/catalog/lookup', dependencies=[Depends(authenticated)])
     def catalog_lookup(body: dict):
@@ -355,11 +356,13 @@ def create_app(*, start_worker=True, processor=None):
 
     @app.put('/api/catalog/{product_id}', dependencies=[Depends(authenticated)])
     def catalog_edit(product_id: int, body: dict):
-        return catalog_action(food_catalog.revise, product_id, body.get('version'), body.get('product', {}))
+        return catalog_action(food_catalog.revise, product_id, body.get('version'), body.get('product', {}),
+                              owner=os.getenv('CONVERSATION_USER_ID', 'owner'))
 
     @app.post('/api/catalog/{product_id}/confirm', dependencies=[Depends(authenticated)])
     def catalog_confirm(product_id: int, body: dict):
-        return catalog_action(food_catalog.confirm, product_id, body.get('version'))
+        return catalog_action(food_catalog.confirm, product_id, body.get('version'),
+                              owner=os.getenv('CONVERSATION_USER_ID', 'owner'))
 
     @app.post('/api/catalog/{product_id}/portion', dependencies=[Depends(authenticated)])
     def catalog_portion(product_id: int, body: dict):

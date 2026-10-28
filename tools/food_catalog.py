@@ -36,6 +36,9 @@ def initialize(conn):
         );
     """)
 
+    from .product_review import initialize as initialize_review
+    initialize_review(conn)
+
 
 def validate_barcode(value):
     if value is None:
@@ -97,7 +100,9 @@ def get(product_id):
         return _record(row)
 
 
-def propose(data, *, source_event_id=None, request_id=None):
+def propose(data, *, source_event_id=None, request_id=None, owner=None):
+    from .product_review import owner as configured_owner
+    owner = configured_owner() if owner is None else owner
     record = _validated(data)
     if record['provenance'] == 'own_label' and source_event_id is None:
         raise ValueError('own_label requires submitted photo; use manual entry otherwise')
@@ -112,11 +117,12 @@ def propose(data, *, source_event_id=None, request_id=None):
             if request_id:
                 previous = conn.execute('SELECT * FROM food_draft_requests WHERE request_id=?', (request_id,)).fetchone()
                 if previous:
-                    if previous['payload'] != payload:
+                    bound = conn.execute('SELECT owner FROM food_products WHERE id=?', (previous['product_id'],)).fetchone()
+                    if previous['payload'] != payload or bound['owner'] != owner:
                         raise ValueError('request id conflict')
                     return _record(conn.execute('SELECT * FROM food_products WHERE id=?', (previous['product_id'],)).fetchone())
-            cur = conn.execute("INSERT INTO food_products(barcode,version,status,payload) VALUES (?,1,'draft',?)",
-                               (record["barcode"], payload))
+            cur = conn.execute("INSERT INTO food_products(barcode,version,status,payload,owner) VALUES (?,1,'draft',?,?)",
+                               (record["barcode"], payload, owner))
             product_id = cur.lastrowid
             conn.execute("INSERT INTO food_product_versions(product_id,version,status,payload) VALUES (?,1,'draft',?)",
                          (product_id, payload))
@@ -141,22 +147,12 @@ def propose_from_chat(product):
             raise ValueError('own_label requires current submitted photo')
     import hashlib
     key = ('event:' + str(event_id) + ':' + hashlib.sha256(json.dumps(_validated(product), sort_keys=True).encode()).hexdigest()[:32]) if event_id else None
-    draft = propose(product, source_event_id=event_id, request_id=key)
-    draft['review_instruction'] = f"Sprawdź nazwę, podstawę i kcal/B/W/T. Zatwierdź dokładnie: /produkt zatwierdz {draft['id']} {draft['version']} albo popraw w panelu Katalog."
+    draft = propose(product, source_event_id=event_id, request_id=key, owner=turn.get('owner'))
+    from .product_review import queue_preview
+    queue_preview(draft)
+    draft['review_instruction'] = 'Backend pokaże pełny podgląd. Wymagana osobna zgoda użytkownika.'
     return draft
 
-
-def approval_command(message):
-    if not isinstance(message, str) or not message.startswith('/produkt zatwierdz '):
-        return None
-    parts = message.split()
-    if len(parts) != 4 or not parts[2].isascii() or not parts[2].isdigit() or not parts[3].isascii() or not parts[3].isdigit():
-        return 'Użyj: /produkt zatwierdz ID WERSJA'
-    try:
-        p = confirm(int(parts[2]), int(parts[3]))
-    except ValueError as exc:
-        return 'Nie zatwierdzono: ' + str(exc)
-    return f"Produkt {p['id']} zatwierdzony: {p['name']}, {p['basis']}: {p['kcal']} kcal / B {p['protein']} / W {p['carbs']} / T {p['fat']}."
 
 
 CATALOG_PROMPT = """Katalog produktów: własna etykieta i korekty właściciela są źródłem prawdy.
@@ -164,8 +160,8 @@ Zdjęcie posiłku nadal obsługuj jako posiłek; nie jest etykietą produktu.
 Gdy użytkownik chce zachować etykietę, odczytaj bieżące zdjęcie i użyj propose_food_product:
 podaj nazwę, markę, opcjonalny kod, podstawę 100g lub 100ml, kcal, protein, carbs, fat oraz provenance own_label.
 Brakujące lub nieczytelne wartości wyjaśnij z użytkownikiem; nigdy nie zgaduj ani nie zastępuj zerem.
-Pokaż wszystkie wartości i jednostkę do kontroli oraz dokładną komendę /produkt zatwierdz ID WERSJA z wyniku narzędzia.
-Tylko ta jawna komenda użytkownika lub przycisk panelu potwierdza wersję. Nie twierdź, że szkic jest zatwierdzony.
+Backend pokazuje pełny podgląd i obsługuje zgodę, korektę oraz anulowanie lokalnie.
+Nie udzielaj zgody w imieniu użytkownika. Nie twierdź, że szkic jest zatwierdzony.
 Korekty można wprowadzić w panelu Katalog; wpis ręczny ma provenance manual.
 Przy ponownym użyciu najpierw find_food_products po kodzie, potem nazwie; wybierz dokładny potwierdzony produkt i wersję.
 Użyj jednego log_meal dla całego logicznego posiłku: pełne ingredients (product_id, version, quantity, unit g dla100g lub ml dla100ml).
@@ -193,18 +189,17 @@ def label_image(product_id):
     raise ValueError('label photo unavailable')
 
 
-def confirm(product_id, version):
-    """Only trusted explicit owner action may call this; never expose as model authority."""
+def confirm(product_id, version, *, owner=None, source_event_id=None):
+    """Trusted panel/command only. Models have no confirmation tool."""
+    from .product_review import owner as configured_owner, _confirm
+    owner = configured_owner() if owner is None else owner
     _version(version)
     with get_conn() as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute("SELECT * FROM food_products WHERE id=?", (product_id,)).fetchone()
-        if row is None or row["version"] != version or row["status"] != "draft":
-            raise ValueError("stale version or non-draft product")
-        conn.execute("UPDATE food_products SET version=version+1,status='confirmed',updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                     (product_id,))
-        conn.execute("INSERT INTO food_product_versions(product_id,version,status,payload) VALUES (?,?,'confirmed',?)",
-                     (product_id, version + 1, row["payload"]))
+        conn.execute('BEGIN IMMEDIATE')
+        row = conn.execute('SELECT * FROM food_products WHERE id=?', (product_id,)).fetchone()
+        if row is None or owner != configured_owner():
+            raise ValueError('owner or version mismatch')
+        _confirm(conn, row, version, owner, source_event_id)
         return _record(conn.execute('SELECT * FROM food_products WHERE id=?', (product_id,)).fetchone())
 
 
@@ -221,36 +216,41 @@ def search(query="", barcode=None):
         return [_record(row) for row in rows]
 
 
-def revise(product_id, version, data):
+def _revise(conn, old, version, data, owner):
     _version(version)
     record = _validated(data)
+    if old is None or old['version'] != version or old['owner'] != owner:
+        raise ValueError('owner or version mismatch; preview required')
+    original = json.loads(old['payload'])
+    if original.get('source_event_id') is not None:
+        record['source_event_id'] = original['source_event_id']
+    if record['provenance'] == 'own_label':
+        evidence = conn.execute("SELECT payload FROM agent_events WHERE id=? AND owner=? AND role='user'", (record.get('source_event_id'),owner)).fetchone()
+        content = json.loads(evidence[0]) if evidence else None
+        if not isinstance(content, list) or not any(isinstance(p, dict) and p.get('type') == 'image_url' for p in content):
+            raise ValueError('own_label requires original photo')
+    payload = json.dumps(record, ensure_ascii=False, allow_nan=False)
+    cur = conn.execute("UPDATE food_products SET version=version+1,status='draft',barcode=?,payload=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND version=? AND owner=?",
+                       (record['barcode'], payload, old['id'], version, owner))
+    if cur.rowcount != 1:
+        raise ValueError('stale version')
+    conn.execute("INSERT INTO food_product_versions(product_id,version,status,payload) VALUES (?,?,'draft',?)",(old['id'],version+1,payload))
+    conn.execute("UPDATE food_product_reviews SET status='cancelled',reason='revised' WHERE product_id=? AND status='pending'",(old['id'],))
+    return _record(conn.execute('SELECT * FROM food_products WHERE id=?',(old['id'],)).fetchone())
+
+
+def revise(product_id, version, data, *, owner=None):
+    from .product_review import owner as configured_owner
+    owner = configured_owner() if owner is None else owner
+    if owner != configured_owner():
+        raise ValueError('owner mismatch')
     try:
         with get_conn() as conn:
-            conn.execute("BEGIN IMMEDIATE")
-            old = conn.execute('SELECT * FROM food_products WHERE id=? AND version=?', (product_id,version)).fetchone()
-            if old is None:
-                raise ValueError('stale version')
-            original = json.loads(old['payload'])
-            if original.get('source_event_id') is not None:
-                record['source_event_id'] = original['source_event_id']
-            if record['provenance'] == 'own_label' and not record.get('source_event_id'):
-                raise ValueError('own_label requires submitted photo')
-            if record['provenance'] == 'own_label':
-                evidence = conn.execute("SELECT payload FROM agent_events WHERE id=? AND role='user'", (record['source_event_id'],)).fetchone()
-                content = json.loads(evidence[0]) if evidence else None
-                if not isinstance(content, list) or not any(isinstance(p, dict) and p.get('type') == 'image_url' for p in content):
-                    raise ValueError('own_label requires original photo')
-            payload = json.dumps(record, ensure_ascii=False, allow_nan=False)
-            cur = conn.execute("UPDATE food_products SET version=version+1,status='draft',barcode=?,payload=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND version=?",
-                               (record['barcode'], payload, product_id, version))
-            if cur.rowcount != 1:
-                raise ValueError("stale version")
-            conn.execute("INSERT INTO food_product_versions(product_id,version,status,payload) VALUES (?,?,'draft',?)",
-                         (product_id, version + 1, payload))
-            result = _record(conn.execute('SELECT * FROM food_products WHERE id=?', (product_id,)).fetchone())
+            conn.execute('BEGIN IMMEDIATE')
+            old = conn.execute('SELECT * FROM food_products WHERE id=?',(product_id,)).fetchone()
+            return _revise(conn,old,version,data,owner)
     except sqlite3.IntegrityError:
-        raise ValueError("barcode already exists") from None
-    return result
+        raise ValueError('barcode already exists') from None
 
 
 def log_portion(product_id, version, quantity, unit, request_id):
