@@ -17,14 +17,32 @@ nadpisuje własnych produktów.
 3. Sprawdź wszystkie wartości i jednostkę w zakładce **Katalog**, obejrzyj
    źródłową etykietę i ewentualnie użyj **Popraw**. Można też dodać produkt
    ręcznie, bez zdjęcia i bez dostępu do sieci. Przecinek dziesiętny jest obsługiwany.
-4. Zatwierdź przyciskiem konkretnej wersji lub dokładną komendą
-   `/produkt zatwierdz ID WERSJA`. Samo „potwierdzono” w odpowiedzi modelu nie
-   zatwierdza produktu. Zmiana szkicu unieważnia wcześniejszy numer wersji.
-   Korekty zapisują nowy szkic; wymagają ponownego sprawdzenia.
+4. Po pełnym podglądzie backendu odpowiedz „zatwierdzam”, „tak, zapisz ten produkt”
+   albo „anuluj”. Samo „tak” działa tylko bezpośrednio po jednoznacznym pytaniu
+   o jedną aktualną propozycję. Nadal działają przycisk konkretnej wersji oraz
+   `/produkt zatwierdz ID WERSJA` (także `/produkty zatwierdz ID WERSJA`).
+   Deklaracja modelu nie zatwierdza produktu. Zmiana szkicu unieważnia podgląd.
+   Korekta, np. „zmień białko na 12 i zatwierdź”, daje nowy podgląd i wymaga
+   kolejnej osobnej zgody. Lokalnie obsługiwane są „zmień”/„popraw” dla białka,
+   węglowodanów, tłuszczu, kcal, nazwy, marki i podstawy (100g/100ml).
+   Bardziej złożone korekty wykonaj w panelu.
 5. **Zapisz porcję** przy potwierdzonym produkcie wymaga dodatniej ilości g albo ml
    zgodnej z podstawą. Agent wyszukuje produkty i zapisuje cały logiczny posiłek przez `log_meal`.
    Przeliczanie wykonuje kod: 64 kcal/B12/W4,1/T0 na100g → dla150g
    96 kcal/B18/W6,15/T0. Nie ma domyślnej gęstości ani zamiany g↔ml.
+
+Podgląd rozmowy jest związany z właścicielem, ID, pokazaną wersją i zdarzeniem.
+Wygasa po 30 minutach; zmiana tematu, niejasna zgoda albo kilka propozycji
+wymagają jawnego wyboru: `/produkt pokaz ID WERSJA`. To polecenie pokazuje
+pełne dane i wybiera jeden szkic. Dawne wpisy bez właściciela wymagają tego
+podglądu przed zgodą; nie są automatycznie przypisywane podczas migracji.
+Anulowanie zachowuje audyt i szkic, ale usuwa oczekującą zgodę. Ponowny podgląd
+może rozpocząć nowy przegląd. Edycja panelowa unieważnia stary podgląd rozmowy.
+Zgoda/anulowanie/prosta korekta działają przed sync i modelem w dispatcherze
+WWW/adaptera Telegram oraz CLI. Nie ma narzędzia modelowego confirm/revise.
+Zatwierdzenie, audyt źródła zgody, zużycie przeglądu i wynik ponowienia żądania
+zapisują się w jednej transakcji SQLite. Ponowienie tego samego żądania zwraca
+historyczny wynik; nowa wiadomość nie jest automatycznie tym samym żądaniem.
 
 Panelowa porcja trafia atomowo do istniejących posiłków i zachowuje pełny snapshot
 produktu, wersji, wartości na100 oraz ilości i wyniku. Późniejsze zmiany katalogu
@@ -184,3 +202,17 @@ backup, wrócić do poprzedniego obrazu bez DROP nowych tabel. Starszy writer tr
 gwarancję grupowania/dedup; nie uruchamiać dwóch wersji writerów. Rzeczywisty obraz,
 wdrożenie i live provider/OAuth pozostają osobnymi bramkami. Syntetyczne testy
 trzech adapterów nie ustalają przyczyny dawnego błędu produkcyjnego: UNKNOWN.
+
+
+## Migracja przeglądu produktu
+
+Nowa nullable kolumna `food_products.owner` i tabele `food_product_reviews`,
+`food_review_actions`, `food_product_approvals` są lokalne i addytywne.
+Nowe szkice panelu są przypisane do istniejącego `CONVERSATION_USER_ID`;
+nie powstaje nowy system kont. Backup przez API SQLite obejmuje stan przeglądu
+oraz audyt; dokumenty i obrazy zachowaj dotychczasową procedurą.
+Przy rollback zatrzymaj writera, zachowaj pełny backup i przywróć wcześniejszy
+obraz. Nie usuwaj nowych tabel; starszy writer nie zachowuje nowych gwarancji
+właściciela i zgody. Nie uruchamiaj równocześnie starego i nowego writera.
+Testy autora są syntetyczne i offline. Realne vision/OAuth/Telegram, aktualny
+obraz i wdrożenie pozostają oddzielnymi kontrolami właściciela/koordynatora.

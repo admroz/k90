@@ -63,3 +63,28 @@ def test_invalid_product_structure_and_cross_owner_label_are_rejected(web_client
     finally:
         memory_runtime.TURN_CONTEXT.reset(token)
     assert web_client.get(f"/api/catalog/{p['id']}/label").status_code == 409
+
+
+def test_panel_owner_is_backend_bound_and_edit_invalidates_chat(web_client):
+    import agent
+    import memory_runtime
+    from tools import food_catalog
+    from tools.db import get_conn
+    login(web_client)
+    data = dict(label(), owner='forged-owner', status='confirmed')
+    created = web_client.post('/api/catalog', json=data, headers=H).json()
+    with get_conn() as c:
+        assert c.execute('SELECT owner FROM food_products').fetchone()[0] == 'owner'
+    turn = memory_runtime.begin_turn('owner','Synthetic preview')
+    token = memory_runtime.TURN_CONTEXT.set(turn)
+    try:
+        answer,_ = agent.run_agent(f"/produkt pokaz {created['id']} 1",'owner')
+        assert 'Czy zatwierdzasz' in answer
+    finally:
+        memory_runtime.TURN_CONTEXT.reset(token)
+    changed = label(); changed['protein'] = 15
+    assert web_client.put(f"/api/catalog/{created['id']}", json={'version':1,'product':changed,'owner':'forged-owner'},headers=H).status_code == 200
+    assert 'zatwierdzony' not in agent.run_agent('tak','owner')[0]
+    assert web_client.post(f"/api/catalog/{created['id']}/confirm",json={'version':1,'owner':'owner'},headers=H).status_code == 409
+    assert web_client.post(f"/api/catalog/{created['id']}/confirm",json={'version':2,'owner':'forged-owner'},headers=H).status_code == 200
+    assert food_catalog.get(created['id'])['version'] == 3
