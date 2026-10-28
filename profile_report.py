@@ -54,6 +54,8 @@ def clean(raw, legacy=False):
     for key in ('span_id', 'parent_span_id', 'job_id'):
         v = raw.get(key)
         result[key] = v if type(v) is int and 0 < v < 2**53 else None
+    count = raw.get('spans')
+    result['spans'] = count if type(count) is int and 0 <= count <= MAX_RECORDS else None
     return result
 
 
@@ -96,7 +98,21 @@ def build_report(records):
                 # Missing scope identity is never merged, including colliding legacy spans.
                 key = (r['scope'], r['scope_id'] or ('ambiguous', i), r['span_id'], r['stage'] if r['span_id'] is None else None)
                 spans[key].append(r)
-        stages = [measurement(v) for v in spans.values() if v[0]['event'] not in ('summary', 'first_event', 'first_text') or any(r['event'] in ('start','finish','error','timeout') for r in v)]
+        # Markers retain a span identity even when both timing boundaries were lost.
+        stages = [measurement(v) for v in spans.values()
+                  if v[0]['stage'] != 'begin' or any(r['event'] != 'summary' for r in v)]
+        incomplete_scopes = {(s['scope'], s['scope_id']) for s in stages if s['incomplete']}
+        for r in rows:
+            if r['stage'] == 'begin' and r['event'] == 'summary' and r['spans'] is not None:
+                observed = {s['span_id'] for s in stages
+                            if (s['scope'], s['scope_id']) == (r['scope'], r['scope_id']) and s['span_id'] is not None}
+                if len(observed) != r['spans']:
+                    incomplete_scopes.add((r['scope'], r['scope_id']))
+        # Marker-only spans may omit parent IDs. The whole scope's child union is
+        # unproven; never attribute their unknown duration to an apparent parent.
+        for s in stages:
+            if (s['scope'], s['scope_id']) in incomplete_scopes:
+                s['incomplete'] = True
         if queue:
             # Queue is the one intentional cross-scope interval: submission -> processing.
             starts = [r for r in queue if r['event']=='start']
@@ -134,7 +150,7 @@ def build_report(records):
             outcome=p['outcome'] if p else 'incomplete', incomplete=any(s['incomplete'] for s in stages) or not p,
             ambiguous=any(not r['scope_id'] for r in rows), queue_ms=q['inclusive_ms'] if q else None,
             processing_ms=p['inclusive_ms'] if p else None, total_ms=total,
-            model_calls=None if ambiguous else len(calls), delivery_attempts=len({r['scope_id'] for r in rows if r['scope']=='delivery' and r['scope_id']}),
+            model_calls=None if ambiguous or incomplete_scopes else len(calls), delivery_attempts=len({r['scope_id'] for r in rows if r['scope']=='delivery' and r['scope_id']}),
             failure_stages=list(dict.fromkeys(failures)),
             slowest=[s['stage'] for s in sorted(stages, key=lambda s:s['inclusive_ms'] or -1, reverse=True) if s['stage'] not in ('begin','queue_wait')][:3],
             stages=[{k:v for k,v in s.items() if not k.startswith('_')} for s in stages]))

@@ -105,3 +105,47 @@ def test_tail_seek_never_parses_suffix_of_long_record(tmp_path,monkeypatch):
     (tmp_path/'profiling.jsonl').write_text('x'*70000+json.dumps(event())+'\n')
     result=mod.read_report(tmp_path)
     assert result['bounded'] and result['requests']==[]
+
+
+@pytest.mark.parametrize('damage', ['provider_bounds', 'provider_start', 'child_start', 'whole_child'])
+def test_actual_emissions_missing_span_evidence(temp_db, tmp_path, monkeypatch, damage):
+    """Real worker emissions: markers survive lost bounds and summary exposes lost spans."""
+    import profiling
+    import web_runtime
+    from profile_report import read_report
+    monkeypatch.setenv('DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('K90_PROFILING_ENABLED', 'true')
+    web_runtime.init_runtime()
+
+    def processor(content):
+        with profiling.span('provider_request'):
+            profiling.first_provider_event()
+            profiling.first_provider_event(text=True)
+        with profiling.span('tool'):
+            pass
+        with profiling.span('provider_request'):
+            pass
+        return 'Synthetic answer'
+
+    job = web_runtime.enqueue('web:missing-span', 'Synthetic input')
+    assert web_runtime.ConversationWorker(processor).run_once()
+    path = tmp_path / 'logs/profiling.jsonl'
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    intact = read_report(tmp_path / 'logs')['requests'][0]
+    assert intact['model_calls'] == 2 and not intact['incomplete']
+    target_stage = 'tool' if damage in ('child_start', 'whole_child') else 'provider_request'
+    target = next(r for r in rows if r['stage'] == target_stage and r['event'] == 'start')
+    removed_events = {'start', 'finish'} if damage == 'provider_bounds' else {'start'}
+    def keep(row):
+        matches = row['scope_id'] == target['scope_id'] and row.get('span_id') == target['span_id']
+        return not (matches and (damage == 'whole_child' or row['event'] in removed_events))
+    path.write_text(''.join(json.dumps(r)+'\n' for r in rows if keep(r)))
+    result = read_report(tmp_path / 'logs')
+    damaged = result['requests'][0]
+    assert result['skipped'] == 0
+    assert damaged['incomplete'] and damaged['model_calls'] is None
+    assert all(s['incomplete'] and s['exclusive_ms'] is None for s in damaged['stages'] if (s['scope'], s['scope_id']) == (target['scope'], target['scope_id']))
+    if damage == 'provider_bounds':
+        known = [s for s in damaged['stages'] if s['scope_id'] == target['scope_id'] and s['span_id'] == target['span_id']]
+        assert len(known) == 1 and known[0]['inclusive_ms'] is None
+    assert job['seq'] == damaged['job_id']
