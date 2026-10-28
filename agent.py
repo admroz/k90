@@ -88,7 +88,7 @@ def load_history(user_id: str) -> list[dict]:
 
 
 @profiled('persistence')
-def save_history(user_id: str, user_content, assistant_content: str) -> None:
+def save_history(user_id: str, user_content, assistant_content: str) -> str:
     """Zapisuje wiadomość użytkownika i odpowiedź asystenta do historii."""
     if isinstance(user_content, list):
         user_text = json.dumps(user_content, ensure_ascii=False)
@@ -106,9 +106,13 @@ def save_history(user_id: str, user_content, assistant_content: str) -> None:
             "INSERT INTO conversations (user_id, role, content, channel, request_id) VALUES (?, 'assistant', ?, ?, ?)",
             (user_id, assistant_content, context.get("channel"), request_id),
         )
+        from tools.product_review import publish
+        assistant_content = publish(conn, turn, assistant_content)
+        conn.execute('UPDATE conversations SET content=? WHERE id=?', (assistant_content, assistant_row.lastrowid))
         memory_runtime.record_pair(conn, user_id, user_content, assistant_content,
                                    user_conversation_id=user_row.lastrowid,
                                    assistant_conversation_id=assistant_row.lastrowid)
+    return assistant_content
 
 
 def _build_system_message() -> tuple[str, dict]:
@@ -146,10 +150,10 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
         turn = memory_runtime.begin_turn(user_id, user_message)
     token = memory_runtime.TURN_CONTEXT.set(turn)
     try:
-        from tools.food_catalog import approval_command
-        approval = approval_command(user_message)
+        from tools.product_review import resolve
+        approval = resolve(user_message, turn)
         if approval is not None:
-            save_history(user_id, user_message, approval)
+            approval = save_history(user_id, user_message, approval)
             return approval, False
         memory_runtime.start_worker()
         result = _run_agent(user_message, user_id)
@@ -239,7 +243,7 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
         if not calls:
             if responses is not None and not answer.strip():
                 raise RuntimeError("Model nie zwrócił tekstu odpowiedzi.")
-            save_history(user_id, user_message, answer)
+            answer = save_history(user_id, user_message, answer)
             event('agent.finish', component='agent', response_chars=len(answer))
             return answer, should_refresh
 
@@ -267,7 +271,7 @@ def _run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, boo
                 })
 
     answer = "Przepraszam, nie mogłem przetworzyć Twojego zapytania."
-    save_history(user_id, user_message, answer)
+    answer = save_history(user_id, user_message, answer)
     event('agent.max_rounds', component='agent', level=logging.WARNING)
     return answer, should_refresh
 
