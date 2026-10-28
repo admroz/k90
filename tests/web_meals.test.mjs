@@ -115,3 +115,12 @@ test("Recovery and activity tabs load their functional charts without changing m
   assert.equal(ui.element("#meal-date").value, "2026-10-22");
   assert.ok(!ui.element("#charts").innerHTML.includes("Długość snu"));
 });
+
+
+test("meal actions render stored text safely and keep zero quantity", () => {
+  const html = render.mealList([{id: 1, opis: '<img src=x onerror=alert(1)>', quantity: 0, unit: 'g', kalorie: 0}]);
+  assert.ok(!html.includes('<img'));
+  assert.match(html, /&lt;img/);
+  assert.match(html, /0 g/);
+  assert.match(html, /data-meal-edit="1"/);
+});

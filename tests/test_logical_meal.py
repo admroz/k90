@@ -89,19 +89,19 @@ import json
 def test_update_delete_replays_never_restore_or_reapply(temp_db):
     with turn():
         meal = execute_tool('log_meal',estimated())
-    args = dict(meal_id=meal['meal_id'],description='Synthetic corrected',calories=100,protein_g=2,carbs_g=20,fat_g=1)
+    args = dict(expected_revision=1,meal_id=meal['meal_id'],description='Synthetic corrected',calories=100,protein_g=2,carbs_g=20,fat_g=1)
     with turn('synthetic:edit'):
         update = execute_tool('update_meal',args)
         assert update['success']
     with turn('synthetic:delete'):
-        deleted = execute_tool('delete_meal',{'meal_id':meal['meal_id']})
+        deleted = execute_tool('delete_meal',{'meal_id':meal['meal_id'],'expected_revision':2})
         assert deleted['success']
     with turn('synthetic:edit'):
         assert execute_tool('update_meal',args)['historical']
     with turn():
         assert execute_tool('log_meal',estimated())['historical']
     with turn('synthetic:delete'):
-        assert execute_tool('delete_meal',{'meal_id':meal['meal_id']})['historical']
+        assert execute_tool('delete_meal',{'meal_id':meal['meal_id'],'expected_revision':2})['historical']
     with turn('synthetic:missing'):
         for name, payload in [('delete_meal',{'meal_id':999}),('update_meal',dict(args,meal_id=999))]:
             result = execute_tool(name,payload)

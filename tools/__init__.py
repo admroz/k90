@@ -201,6 +201,7 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
+                    "expected_revision": {"type": "integer", "description": "Bieżąca revision z get_recent_meals; konflikt wymaga ponownego odczytu"},
                     "meal_id": {"type": "integer", "description": "ID posiłku do aktualizacji (z get_recent_meals)"},
                     "description": {"type": "string", "description": "Poprawiony opis posiłku"},
                     "calories": {"type": "number", "description": "Poprawiona liczba kalorii; wymagane"},
@@ -211,7 +212,7 @@ TOOLS = [
                     "date": {"type": "string", "description": "Data posiłku w formacie YYYY-MM-DD; opcjonalnie"},
                     "time": {"type": "string", "description": "Godzina posiłku w formacie HH:MM; opcjonalnie"},
                 },
-                "required": ["meal_id", "description", "calories", "protein_g", "carbs_g", "fat_g"],
+                "required": ["expected_revision", "meal_id", "description", "calories", "protein_g", "carbs_g", "fat_g"],
             },
         },
     },
@@ -223,9 +224,10 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
+                    "expected_revision": {"type": "integer", "description": "Bieżąca revision z get_recent_meals; konflikt wymaga ponownego odczytu"},
                     "meal_id": {"type": "integer", "description": "ID posiłku do usunięcia (z get_recent_meals)"},
                 },
-                "required": ["meal_id"],
+                "required": ["expected_revision", "meal_id"],
             },
         },
     },

@@ -53,7 +53,7 @@
             </section>
             <div id="meal-summary" class="meal-summary"></div>
             <p id="meal-note" class="subtle" hidden>Brak części wartości odżywczych. Sumy oznaczone * obejmują tylko zapisane wartości.</p>
-            <div id="meals" aria-live="polite"></div>
+            <p id="meal-result" role="status"></p><div id="meals" aria-live="polite"></div>
             <p id="meal-error" role="alert" hidden></p>
           </section>
           <section class="panel"><div class="panel-heading"><h2>Aktualność danych</h2><button id="sync-data" class="text-button">Pobierz Garmin ↻</button></div><div id="sync-status"></div><p class="subtle">Pobranie danych Garmin nie uruchamia agenta ani podsumowania AI. Zegarek musi wcześniej przesłać dane do Garmin Connect.</p></section>
@@ -104,5 +104,14 @@
       <footer>k90 <span>·</span> Więcej kontekstu. Lepsza rozmowa.</footer>
     </main>
   </div>
+<dialog id="meal-editor" aria-labelledby="meal-editor-title">
+    <form id="meal-edit-form">
+      <h2 id="meal-editor-title">Edytuj posiłek</h2>
+      <p>Ilość nie przelicza makr. Zatwierdzasz wartości całego posiłku. Puste pole liczbowe oznacza brak danych.</p>
+      <div id="meal-fields" class="meal-fields"></div>
+      <p id="meal-edit-error" role="alert" hidden></p>
+      <div class="meal-actions"><button type="submit">Zapisz</button><button type="button" id="meal-edit-cancel">Anuluj</button></div>
+    </form>
+  </dialog>
 </body>
 </html>

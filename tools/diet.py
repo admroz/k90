@@ -1,6 +1,7 @@
 """Meal mutations: one local transaction per operation, never across inference."""
 import hashlib
 import json
+import math
 import sqlite3
 import uuid
 from contextlib import closing
@@ -24,6 +25,23 @@ def initialize(conn):
         meal_id INTEGER PRIMARY KEY, snapshot TEXT NOT NULL)""")
     if 'revision' not in {r[1] for r in conn.execute('PRAGMA table_info(posilki)')}:
         conn.execute('ALTER TABLE posilki ADD COLUMN revision INTEGER NOT NULL DEFAULT 1')
+
+    for column, sql_type in [('quantity', 'REAL'), ('unit', 'TEXT')]:
+        if column not in {r[1] for r in conn.execute('PRAGMA table_info(posilki)')}:
+            conn.execute(f'ALTER TABLE posilki ADD COLUMN {column} {sql_type}')
+    conn.execute("""CREATE TABLE IF NOT EXISTS meal_changes (
+        operation_id TEXT PRIMARY KEY, meal_id INTEGER NOT NULL, revision INTEGER NOT NULL,
+        actor TEXT NOT NULL, channel TEXT NOT NULL, kind TEXT NOT NULL,
+        before_json TEXT NOT NULL, after_json TEXT,
+        changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+
+
+def _nullable_number(value):
+    if value is None:
+        return None
+    if type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= 1000000:
+        raise ValueError('number must be null or finite JSON number in 0..1000000')
+    return value
 
 
 def _text(value, name, limit=2000):
@@ -84,7 +102,7 @@ def _perform(kind, args, *, owner, request_id, operation_id, chat):
         if prior:
             if prior['fingerprint'] != fingerprint:
                 return dict(success=False, error='operation conflict; ask for clarification in a new message',
-                            operation_id=operation_id, meal_id=prior['meal_id'])
+                            operation_id=operation_id, meal_id=prior['meal_id'], code=409)
             return dict(json.loads(prior['result']), replayed=True, historical=True,
                         notice='Previously committed effect; current meal state may differ.')
         existing = None
@@ -92,21 +110,31 @@ def _perform(kind, args, *, owner, request_id, operation_id, chat):
             existing = conn.execute('SELECT * FROM posilki WHERE id=?', (meal_id,)).fetchone()
             if existing is None:
                 return dict(success=False, error='meal not found', status='nie znaleziono',
-                            id=meal_id, meal_id=meal_id, operation_id=operation_id)
+                            id=meal_id, meal_id=meal_id, operation_id=operation_id, code=404)
+            expected = args.get('expected_revision')
+            # Legacy direct callers may change only an untouched revision. Chat must
+            # read and supply a revision, preventing old context from overwriting WWW.
+            if expected is None and not chat:
+                expected = 1
+            if type(expected) is not int or expected < 1:
+                raise ValueError('expected_revision required')
+            if expected != existing['revision']:
+                return dict(success=False, error='Posiłek został zmieniony. Odczytaj aktualną wersję przed ponowną korektą.', code=409)
         snapshot = None
         if kind != 'delete_meal':
             description = _text(args['description'], 'description')
             now = now_local()
             meal_date = args.get('date') or (existing['data'] if existing else now.strftime('%Y-%m-%d'))
-            meal_time = args.get('time') or (existing['czas'] if existing and existing['czas'] else now.strftime('%H:%M'))
-            if Date.fromisoformat(meal_date).isoformat() != meal_date or Time.fromisoformat(meal_time).strftime('%H:%M') != meal_time:
+            meal_time = args['time'] if 'time' in args and kind == 'update_meal' and not chat else (args.get('time') or (existing['czas'] if existing and existing['czas'] else now.strftime('%H:%M')))
+            if Date.fromisoformat(meal_date).isoformat() != meal_date or (meal_time is not None and Time.fromisoformat(meal_time).strftime('%H:%M') != meal_time):
                 raise ValueError('date/time must be YYYY-MM-DD / HH:MM')
             if kind == 'log_meal' and (chat or args.get('ingredients') is not None):
                 if args.get('remainder') == '__missing__':
                     raise ValueError('identify estimated noncatalog remainder explicitly, or null if none')
                 nutrition, snapshot = _ingredients(conn, args.get('ingredients'), args.get('remainder'))
             else:
-                nutrition = _macros(args)
+                nutrition = ({k: _nullable_number(args[k]) for k in MACROS}
+                             if kind == 'update_meal' else _macros(args))
             values = (meal_date, meal_time, description, *(nutrition[k] for k in MACROS))
             if kind == 'log_meal':
                 cur = conn.execute("INSERT INTO posilki(data,czas,opis,kalorie,bialko_g,weglowodany_g,tluszcze_g,zrodlo) VALUES (?,?,?,?,?,?,?,'manual')", values)
@@ -114,10 +142,20 @@ def _perform(kind, args, *, owner, request_id, operation_id, chat):
                 if snapshot is not None:
                     conn.execute('INSERT INTO meal_ingredients VALUES (?,?)', (meal_id, json.dumps(snapshot, ensure_ascii=False)))
             else:
-                conn.execute('UPDATE posilki SET data=?,czas=?,opis=?,kalorie=?,bialko_g=?,weglowodany_g=?,tluszcze_g=?,revision=revision+1 WHERE id=?', (*values, meal_id))
+                quantity = _nullable_number(args.get('quantity', existing['quantity']))
+                unit = args.get('unit', existing['unit'])
+                if (quantity is None) != (unit is None) or unit not in (None, 'g', 'ml', 'szt'):
+                    raise ValueError('quantity and g/ml/szt unit must be supplied together')
+                conn.execute('UPDATE posilki SET data=?,czas=?,opis=?,kalorie=?,bialko_g=?,weglowodany_g=?,tluszcze_g=?,revision=revision+1,quantity=?,unit=? WHERE id=? AND revision=?', (*values, quantity, unit, meal_id, expected))
         else:
-            conn.execute('DELETE FROM posilki WHERE id=?', (meal_id,))
-        result = dict(success=True, id=meal_id, meal_id=meal_id, operation_id=operation_id,
+            conn.execute('DELETE FROM posilki WHERE id=? AND revision=?', (meal_id, expected))
+        revision = (existing['revision'] + 1) if existing else 1
+        if existing:
+            after = conn.execute('SELECT * FROM posilki WHERE id=?', (meal_id,)).fetchone()
+            conn.execute('INSERT INTO meal_changes(operation_id,meal_id,revision,actor,channel,kind,before_json,after_json) VALUES (?,?,?,?,?,?,?,?)',
+                         (operation_id,meal_id,revision,owner,'chat' if chat else 'web' if request_id.startswith('web-meal:') else 'local',kind,
+                          json.dumps(dict(existing)), json.dumps(dict(after)) if after else None))
+        result = dict(success=True, revision=revision, id=meal_id, meal_id=meal_id, operation_id=operation_id,
                       status={'log_meal':'zapisano','update_meal':'zaktualizowano','delete_meal':'usunięto'}[kind])
         if kind != 'delete_meal': result.update(data=meal_date, czas=meal_time, nutrition=nutrition)
         conn.execute('INSERT INTO meal_operations(operation_id,owner,request_id,slot,fingerprint,kind,meal_id,result) VALUES (?,?,?,?,?,?,?,?)',
@@ -147,11 +185,14 @@ def log_meal(description, calories=None, protein_g=None, carbs_g=None, fat_g=Non
     return _mutate('log_meal', locals())
 
 
-def update_meal(meal_id, description, calories, protein_g, carbs_g, fat_g, notes=None, date=None, time=None):
-    return _mutate('update_meal', locals())
+def update_meal(meal_id, description, calories, protein_g, carbs_g, fat_g, notes=None, date=None, time=None, expected_revision=None, quantity=None, unit=None):
+    args = locals().copy()
+    if quantity is None and unit is None:
+        args.pop("quantity"); args.pop("unit")
+    return _mutate('update_meal', args)
 
 
-def delete_meal(meal_id):
+def delete_meal(meal_id, expected_revision=None):
     return _mutate('delete_meal', locals())
 
 
@@ -182,7 +223,7 @@ def get_recent_meals(days: int = 3) -> list[dict]:
     """
     with get_conn() as conn:
         rows = conn.execute(
-            """SELECT id, data, czas, opis, kalorie, bialko_g, weglowodany_g, tluszcze_g
+            """SELECT id, data, czas, opis, kalorie, bialko_g, weglowodany_g, tluszcze_g, revision, quantity, unit
                FROM posilki
                WHERE data >= ?
                ORDER BY data DESC, czas DESC""",
