@@ -266,3 +266,31 @@ prawa, kopię błędów i izolację profilowania. Następnie porównuje snapshot
 restart i recreate z tym samym, unikalnym wolumenem syntetycznym `/data`, który
 usuwa przy sprzątaniu. Uruchomienie helpera na hoście nie potwierdza wyniku tego
 smoke na rzeczywistym obrazie.
+
+
+### Ręczna korekta posiłków
+
+W widoku posiłków przyciski Edytuj/Usuń korygują cały wpis bez LLM.
+Ilość i jednostka g/ml/szt są opcjonalne i podawane razem; starsze dane pozostają
+null, bez zgadywania z opisu. Ilość nie przelicza makr. Puste makra oznaczają brak
+danych, zero pozostaje zerem. Formularz dopuszcza pojedynczy przecinek dziesiętny.
+W razie konfliktu odczytaj aktualny wpis przed kolejną korektą. Historia rozmowy
+i snapshoty katalogowe pozostają oryginalnym dowodem, korekta jest nadpisaniem
+wartości posiłku z lokalnym audytem. Syntetyczny test Chromium obejmuje edycję,
+reload, konflikt zapisu i potwierdzenie usunięcia.
+
+Kontrakt API: PUT `/api/meals/{id}` wymaga wszystkich pól `description`,
+`quantity`, `unit`, `calories`, `protein_g`, `carbs_g`, `fat_g`, `date`, `time`
+oraz `expected_revision` (dodatnia liczba całkowita) i `request_id` (1–120 znaków,
+ASCII litery/cyfry/dwukropek/podkreślenie/myślnik). DELETE przyjmuje JSON z tymi
+dwoma ostatnimi polami. Obowiązuje sesja, `X-K90-Request: 1` i dotychczasowa
+kontrola Origin. Liczby to skończone liczby JSON w zakresie 0–1000000 lub null;
+bool i tekst, w tym przecinek w JSON string, są odrzucane. Opis: 1–2000 znaków,
+nie same spacje. Data: rzeczywista YYYY-MM-DD, czas HH:MM lub null dla nieznanego.
+Brak wpisu:404, konflikt rewizji/tokena:409, błędny kontrakt:422. Powtórzenie tej
+samej operacji zwraca historyczny wynik z ledgera, bez ponownego zapisu.
+
+Migracja przy inicjalizacji dodaje quantity/unit oraz meal_changes; revision
+pochodzi z PR19. Audyt, tombstone i wyniki operacji wymagają zachowania całej bazy
+w backupie. Starszy writer po downgrade nie zapewni CAS/audytu: rollback wymaga
+zatrzymania writerów i zgodnego zestawu kodu/backup, bez ręcznego kasowania audytu.

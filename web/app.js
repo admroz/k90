@@ -236,6 +236,109 @@ $("#meal-date").onchange = () => {
   if (input.value && input.checkValidity()) loadMeals(input.value);
   else if (mealView) input.value = mealView.date;
 };
+// The editor owns a snapshot/revision. Loads never replace its typed values.
+const mealEditor = $("#meal-editor"), mealForm = $("#meal-edit-form");
+let editingMeal = null, mealSaveBusy = false, mealLastInput = null;
+const mealFields = [
+  ["description", "Nazwa / opis", "opis", "text"],
+  ["quantity", "Ilość", "quantity", "decimal"],
+  ["unit", "Jednostka", "unit", "unit"],
+  ["calories", "Kalorie (kcal)", "kalorie", "decimal"],
+  ["protein_g", "Białko (g)", "bialko_g", "decimal"],
+  ["carbs_g", "Węglowodany (g)", "weglowodany_g", "decimal"],
+  ["fat_g", "Tłuszcz (g)", "tluszcze_g", "decimal"],
+  ["date", "Data", "data", "date"],
+  ["time", "Godzina", "czas", "time"]
+];
+function buildMealFields() {
+if ($("#meal-fields").childElementCount) return;
+for (const [name, title, , type] of mealFields) {
+  const label = document.createElement("label");
+  label.textContent = title;
+  const input = document.createElement(type === "unit" ? "select" : "input");
+  input.name = name;
+  if (type === "unit") {
+    for (const value of ["", "g", "ml", "szt"]) {
+      const option = document.createElement("option");
+      option.value = value; option.textContent = value || "Niepodana";
+      input.append(option);
+    }
+  } else {
+    input.type = type === "decimal" ? "text" : type;
+    if (type === "decimal") input.inputMode = "decimal";
+    if (name === "description") { input.required = true; input.maxLength = 2000; }
+    if (name === "date") input.required = true;
+  }
+  input.onfocus = () => { mealLastInput = input; };
+  label.append(input); $("#meal-fields").append(label);
+}
+}
+function mealEditError(message) {
+  $("#meal-edit-error").textContent = message;
+  $("#meal-edit-error").hidden = !message;
+}
+$("#meal-edit-cancel").onclick = () => mealEditor.close();
+mealEditor.oncancel = event => { if (mealSaveBusy) event.preventDefault(); };
+$("#meals").onclick = async event => {
+  const button = event.target.closest("[data-meal-edit], [data-meal-delete]");
+  if (!button || mealSaveBusy) return;
+  const id = Number(button.dataset.mealEdit || button.dataset.mealDelete);
+  const meal = mealView?.meals.find(row => row.id === id);
+  if (!meal) return;
+  if (button.dataset.mealEdit) {
+    buildMealFields();
+    editingMeal = {...meal};
+    for (const [name, , source] of mealFields) mealForm.elements[name].value = meal[source] ?? "";
+    mealEditError(""); mealEditor.showModal();
+    mealForm.elements.description.focus();
+    return;
+  }
+  if (!window.confirm(`Usunąć posiłek „${meal.opis}” z ${meal.data} ${meal.czas || ""}?`)) return;
+  mealSaveBusy = true; button.disabled = true;
+  ++mealRequest; ++dashboardRequest;
+  try {
+    await api(`/api/meals/${meal.id}`, {method: "DELETE", body: JSON.stringify({
+      expected_revision: meal.revision, request_id: createRequestId()
+    })});
+    $("#meal-result").textContent = "Posiłek usunięty.";
+    await loadDashboard().catch(e => error(`Usunięto posiłek. Odśwież widok: ${e.message}`));
+  } catch (e) {
+    $("#meal-error").textContent = `${e.message} Odśwież listę przed kolejną próbą usunięcia.`;
+    $("#meal-error").hidden = false;
+  } finally { mealSaveBusy = false; button.disabled = false; }
+};
+mealForm.onsubmit = async event => {
+  event.preventDefault();
+  if (mealSaveBusy) return;
+  const body = {expected_revision: editingMeal.revision, request_id: createRequestId()};
+  try {
+    for (const [name, title, , type] of mealFields) {
+      const value = mealForm.elements[name].value.trim();
+      if (type === "decimal") {
+        // Accept one Polish decimal comma deliberately; no exponent/group separators.
+        if (value && !/^\d+(?:[.,]\d+)?$/.test(value)) throw new Error(`${title}: wpisz nieujemną liczbę, np. 12,5, albo pozostaw puste.`);
+        body[name] = value === "" ? null : Number(value.replace(",", "."));
+        if (body[name] !== null && (!Number.isFinite(body[name]) || body[name] > 1000000)) throw new Error(`${title}: zakres 0–1000000.`);
+      } else body[name] = value || (name === "unit" || name === "time" ? null : "");
+    }
+    if ((body.quantity === null) !== (body.unit === null)) throw new Error("Podaj ilość i jednostkę razem albo pozostaw oba puste.");
+  } catch (e) { mealEditError(e.message); mealLastInput?.focus(); return; }
+  mealSaveBusy = true;
+  const focus = mealLastInput;
+  const buttons = [...mealForm.querySelectorAll("button")];
+  buttons.forEach(button => button.disabled = true);
+  ++mealRequest; ++dashboardRequest;
+  try {
+    await api(`/api/meals/${editingMeal.id}`, {method: "PUT", body: JSON.stringify(body)});
+    mealEditor.close();
+    $("#meal-result").textContent = "Zmiany posiłku zapisane.";
+    // The dashboard range and current day are fetched anew; moved days have no cache.
+    await loadDashboard().catch(e => error(`Zapisano posiłek. Odśwież widok: ${e.message}`));
+  } catch (e) {
+    mealEditError(`${e.message} Wartości zachowano. Przy konflikcie zamknij formularz, odśwież listę i otwórz go ponownie.`);
+    focus?.focus();
+  } finally { mealSaveBusy = false; buttons.forEach(button => button.disabled = false); }
+};
 async function loadChat(before = null) {
   const messages = await api(`/api/messages${before?`?before=${before}`:""}`);
   if (!session) return;

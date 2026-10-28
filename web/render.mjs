@@ -33,7 +33,7 @@ export function activityList(rows) {
 }
 
 export function mealList(meals) {
-  return meals.map(meal => `<div class="meal-row"><div class="meal-description"><strong>${escapeHTML(meal.opis || "Posiłek")}</strong><small>${escapeHTML(meal.czas || "Godzina niepodana")}</small><p class="meal-macros">Białko ${number(meal.bialko_g, 1)} g · Węglowodany ${number(meal.weglowodany_g, 1)} g · Tłuszcz ${number(meal.tluszcze_g, 1)} g</p></div><span>${number(meal.kalorie, 1)} kcal</span></div>`).join("") || '<div class="empty">Brak zapisanych posiłków w tym dniu.</div>';
+  return meals.map(meal => `<div class="meal-row"><div class="meal-description"><strong>${escapeHTML(meal.opis || "Posiłek")}</strong><small>${escapeHTML(meal.czas || "Godzina niepodana")}${meal.quantity == null ? "" : ` · ${number(meal.quantity, 2)} ${escapeHTML(meal.unit)}`}</small><p class="meal-macros">Białko ${number(meal.bialko_g, 1)} g · Węglowodany ${number(meal.weglowodany_g, 1)} g · Tłuszcz ${number(meal.tluszcze_g, 1)} g</p></div><span>${number(meal.kalorie, 1)} kcal</span><div class="meal-actions"><button type="button" data-meal-edit="${Number(meal.id)}">Edytuj</button><button type="button" data-meal-delete="${Number(meal.id)}">Usuń</button></div></div>`).join("") || '<div class="empty">Brak zapisanych posiłków w tym dniu.</div>';
 }
 
 export function mealDayLabel(day, today) {

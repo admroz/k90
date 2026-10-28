@@ -10,6 +10,23 @@ remaining independent/CI/live gates: [natural-product-review.md](review-evidence
 No PR creation, image publication or deployment by the implementer.
 
 
+## Manual meal editing — author verification complete, 2026-10-28
+
+Whole-meal WWW edit/delete reuses PR19 ledger with shared chat/WWW CAS revision,
+nullable quantity/unit and local before/after audit. Original catalog consumption
+snapshot and historical conversation survive overrides and backup/restore.
+Initial RED13 and focused101 retained; final isolated offline Python747 PASS /
+1 existing optional-import skip (316.44s), Node26 PASS, JS syntax exit0.
+Real Chromium PASS: full edit/date move/reload/sums/XSS, real409 preserving typed
+values/focus, no automatic retry, named delete cancel/confirm. Previous unknown
+quota pause was resolved solely by correcting private supervisor environment;
+failed logs preserved. Product source unchanged since WIP dfd2978; continuation
+adds the real catalog/history acceptance test and updates evidence.
+Independent review, exact-SHA image smoke/fork CI and PR remain coordinator gates.
+No production access, publication or deployment. Evidence:
+[manual-meal-editing.md](review-evidence/manual-meal-editing.md).
+
+
 ## Logical meal integrity — 2026-10-27
 
 Author verification complete on `22bee1754ef08877a99b6dd3b0f1c2285136fe24`,
