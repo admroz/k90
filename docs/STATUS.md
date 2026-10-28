@@ -1,5 +1,19 @@
 # k90 — bieżący status zadania
 
+## Owner profiling report — missing-boundary correction, 2026-10-28
+
+Independent medium finding on b729413 reproduced using unchanged review probes:
+marker-only provider spans were dropped, giving a falsely complete call count and
+unproven parent exclusive time. Code23e9fab retains that identity, marks its scope
+incomplete, suppresses scope exclusive and returns null exact model-call count.
+Validated existing summary counts also detect entirely missing spans.
+Author verification:36 focused parser/profiling/auth PASS, original probe and
+original saved-record replay PASS, independent adversarial replay PASS, renderer2
+PASS. Original review artifacts hash-unchanged. No full suite/browser repeated.
+Fresh narrow independent final-SHA review and coordinator CI/image/PR remain gates.
+Details: [evidence](review-evidence/owner-profiling-report.md).
+
+
 ## Owner profiling report — author verification complete, 2026-10-28
 
 Authenticated Diagnostyka / Czasy: bounded content-free JSONL/rotation reader,

@@ -77,3 +77,37 @@ Author tests are synthetic/offline. Independent immutable-SHA review, actual for
 CI/built-image smoke, PR and owner rollout are later coordinator gates. No local
 Docker daemon success, production operation, live provider, merge, image publication
 or deployment is claimed.
+
+## Missing-boundary review correction — 2026-10-28
+
+Independent review of `b729413` found one medium defect: removing a provider span's
+start/finish while retaining its real first-event/text markers discarded that span.
+The report falsely showed a complete request, one call instead of two, and parent
+exclusive time that included the unmeasured child. Original review probes, logs
+and emitted records remain unchanged; their hashes were checked before/after fix.
+
+Code correction `23e9fabaa61230200288beb456e13c032be33f82` retains each known
+marker-only span once as incomplete evidence. Any incomplete span marks its scope
+and request incomplete; exclusive is suppressed throughout that scope because
+markers may omit parent IDs. Exact model-call count becomes null. Valid inclusive
+measurements and known span identities remain visible; markers do not create
+additional calls. The existing summary span count, accepted only as a non-boolean
+integer from0 through the bounded record limit, detects entirely missing spans.
+No emitter, privacy/auth policy, endpoint or renderer change was needed.
+
+Actual SQLite worker regression covers missing provider boundaries with markers,
+one missing provider boundary, one missing child boundary and an entirely missing
+child detected by summary. Relevant parser/profiling/auth:36 PASS (11.52s).
+Unmodified original probe bytes replayed PASS in a separate phase; original saved
+emitted records also replayed PASS (intact2 calls versus incomplete/null count).
+Original independent adversarial probes PASS; renderer2 PASS. An initial test
+assertion used scope_id alone for queue/processing; corrected to the defined
+scope+scope_id identity. Failed attempts are retained in the private result.
+
+No full-suite or browser repeat for this bounded parser correction. Earlier broad
+and Chromium results above apply to their recorded sources, not this new SHA.
+Fresh narrow independent review and exact-SHA CI/image remain coordinator gates.
+If both a span's entire evidence and the scope summary are absent, its existence
+cannot be reconstructed. Legacy inputs without trustworthy summary counts have
+that same limitation. A count mismatch does not identify missing stage names or
+infer durations; the report marks incompleteness and suppresses unknown metrics.
