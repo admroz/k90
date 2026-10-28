@@ -96,3 +96,12 @@ def test_only_fixed_rotations_no_symlink_and_record_cap(tmp_path,monkeypatch):
     assert r['bounded'] and len(r['requests'][0]['stages'])==3
     (tmp_path/'profiling.jsonl.1').symlink_to(tmp_path/'profiling.jsonl')
     assert mod.read_report(tmp_path)['read_errors']==1
+
+
+def test_tail_seek_never_parses_suffix_of_long_record(tmp_path,monkeypatch):
+    import profile_report as mod
+    monkeypatch.setattr(mod,'MAX_BYTES',32768)
+    # A valid-looking JSON suffix remains part of a single oversized record.
+    (tmp_path/'profiling.jsonl').write_text('x'*70000+json.dumps(event())+'\n')
+    result=mod.read_report(tmp_path)
+    assert result['bounded'] and result['requests']==[]

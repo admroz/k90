@@ -155,9 +155,15 @@ def read_report(directory=None):
                 info = os.fstat(stream.fileno())
                 if not stat.S_ISREG(info.st_mode):
                     errors += 1; continue
-                if info.st_size > MAX_BYTES:
-                    stream.seek(info.st_size-MAX_BYTES); stream.readline(MAX_LINE); bounded = True
                 consumed = 0
+                if info.st_size > MAX_BYTES:
+                    stream.seek(info.st_size-MAX_BYTES); bounded = True
+                    # Seek lands inside an unknown record: discard through its newline.
+                    remaining = MAX_BYTES
+                    while remaining > 0:
+                        tail = stream.readline(min(MAX_LINE, remaining)); remaining -= len(tail)
+                        if not tail or tail.endswith(b'\n'): break
+                    consumed = MAX_BYTES - remaining
                 while consumed < MAX_BYTES:
                     line = stream.readline(min(MAX_LINE+1, MAX_BYTES-consumed)); consumed += len(line)
                     if not line: break
