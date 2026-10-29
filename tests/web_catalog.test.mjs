@@ -14,3 +14,12 @@ test('confirmed record offers portion instead of another approval', () => {
   const card = catalogCard({id:2,version:4,status:'confirmed',name:'Synthetic',basis:'100g',fat:0});
   assert.ok(card.includes('data-portion="2"') && !card.includes('data-confirm'));
 });
+
+test('one-piece size uses the existing native basis and stays optional', () => {
+  for (const [basis,unit] of [['100g','g'],['100ml','ml']]) {
+    const p = {id:1,version:2,status:'confirmed',name:'Synthetic',basis,piece_size:90};
+    assert.ok(catalogCard(p).includes(`Jedna sztuka: 90 ${unit}`));
+    assert.ok(catalogCard({...p,piece_size:null}).includes('Rozmiar sztuki: brak'));
+    assert.ok(catalogCard({...p,piece_size:'<script>'}).includes('&lt;script&gt;'));
+  }
+});

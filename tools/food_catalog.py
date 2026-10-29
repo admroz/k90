@@ -64,6 +64,51 @@ def _number(value):
     return float(number)
 
 
+# Physical amounts have their own explicit bound, independent of nutrition limits.
+# At most one million native g/ml per recorded portion or one piece.
+MAX_NATIVE_AMOUNT = Decimal('1000000')
+
+
+def _positive_amount(value):
+    if value is None or isinstance(value, bool):
+        raise ValueError('positive finite amount required')
+    try:
+        amount = Decimal(str(value).replace(',', '.'))
+    except InvalidOperation:
+        raise ValueError('invalid amount') from None
+    if not amount.is_finite() or not 0 < amount <= MAX_NATIVE_AMOUNT or float(amount) == 0:
+        raise ValueError('amount outside positive finite limit')
+    return amount
+
+
+class MissingPieceSize(ValueError):
+    """The caller must ask for the converter or a native quantity."""
+
+
+def convert_portion(product, quantity, unit):
+    """Shared Decimal calculation; preserve submitted units in additive snapshots."""
+    amount = _positive_amount(quantity)
+    native = 'g' if product['basis'] == '100g' else 'ml'
+    size = None
+    if unit == 'szt':
+        if product.get('piece_size') is None:
+            raise MissingPieceSize('Brak rozmiaru jednej sztuki; podaj masę/objętość lub ilość w ' + native)
+        size = _positive_amount(product['piece_size'])
+        normalized = amount * size
+    elif unit == native:
+        normalized = amount
+    else:
+        raise ValueError('unit does not match product basis')
+    if not 0 < normalized <= MAX_NATIVE_AMOUNT or float(normalized) == 0:
+        raise ValueError('normalized amount exceeds limit')
+    nutrition = {k: Decimal(str(product[k])) * normalized / 100
+                 for k in ('kcal', 'protein', 'carbs', 'fat')}
+    snapshot = dict(normalized_quantity=float(normalized), normalized_unit=native,
+                    piece_size=float(size) if size is not None else None,
+                    piece_unit=native if size is not None else None)
+    return nutrition, snapshot
+
+
 def _validated(data):
     if not isinstance(data, dict):
         raise ValueError('product must be an object')
@@ -84,6 +129,9 @@ def _validated(data):
         result[field] = _number(data.get(field))
         if result[field] > (1000 if field == 'kcal' else 100):
             raise ValueError('nutrition exceeds per100 limit')
+    if 'piece_size' in data:
+        result['piece_size'] = (None if data['piece_size'] is None
+                                else float(_positive_amount(data['piece_size'])))
     return result
 
 
@@ -180,7 +228,10 @@ Backend pokazuje pełny podgląd i obsługuje zgodę, korektę oraz anulowanie l
 Nie udzielaj zgody w imieniu użytkownika. Nie twierdź, że szkic jest zatwierdzony.
 Korekty można wprowadzić w panelu Katalog; wpis ręczny ma provenance manual.
 Przy ponownym użyciu najpierw find_food_products po kodzie, potem nazwie; wybierz dokładny potwierdzony produkt i wersję.
-Użyj jednego log_meal dla całego logicznego posiłku: pełne ingredients (product_id, version, quantity, unit g dla100g lub ml dla100ml).
+Użyj jednego log_meal dla całego logicznego posiłku: pełne ingredients (product_id, version, quantity, unit g dla100g lub ml dla100ml albo szt).
+Opcjonalne piece_size to znana masa/objętość JEDNEJ sztuki w g/ml zgodnie z podstawą.
+Nie wyliczaj jej z opakowania, liczby sztuk ani gęstości. Dla szt (także ułamkowych) bez piece_size dopytaj o rozmiar sztuki lub ilość w jednostce natywnej.
+Nie obliczaj makr ani konwersji samodzielnie; robi to serwer.
 remainder zawiera opis i komplet oszacowań WYŁĄCZNIE części spoza katalogu (np. owoce); null oznacza brak reszty.
 Dla całkowicie szacowanego posiłku ingredients=[] i remainder obejmuje cały posiłek. Nie doliczaj katalogowych makr do reszty.
 Nie używaj log_food_portion w rozmowie. Jeden nowy posiłek na wiadomość; przy kilku niejednoznacznych posiłkach lub brakujących ilościach/oszacowaniach dopytaj.
@@ -237,10 +288,15 @@ def search(query="", barcode=None):
 
 def _revise(conn, old, version, data, owner):
     _version(version)
-    record = _validated(data)
     if old is None or old['version'] != version or old['owner'] != owner:
         raise ValueError('owner or version mismatch; preview required')
+    if not isinstance(data, dict):
+        raise ValueError('product must be an object')
     original = json.loads(old['payload'])
+    if (data.get('basis', original['basis']) != original['basis']
+            and original.get('piece_size') is not None and 'piece_size' not in data):
+        raise ValueError('basis change requires explicit new piece_size or null')
+    record = _validated(dict(original, **data))
     if original.get('source_event_id') is not None:
         record['source_event_id'] = original['source_event_id']
     if record['provenance'] == 'own_label':
@@ -275,9 +331,9 @@ def revise(product_id, version, data, *, owner=None):
 def log_portion(product_id, version, quantity, unit, request_id):
     _version(product_id)
     _version(version)
-    amount = _number(quantity)
-    if amount <= 0 or unit not in ('g', 'ml'):
-        raise ValueError("positive quantity and explicit g/ml required")
+    amount = float(_positive_amount(quantity))
+    if unit not in ('g', 'ml', 'szt'):
+        raise ValueError('explicit g/ml/szt required')
     if not isinstance(request_id, str) or not 1 <= len(request_id) <= 100:
         raise ValueError("request id required")
     fingerprint = json.dumps([product_id, version, amount, unit])
@@ -293,15 +349,13 @@ def log_portion(product_id, version, quantity, unit, request_id):
         if row is None or row['status'] != 'confirmed' or row['version'] != version:
             raise ValueError('confirmed current version required')
         product = _record(row)
-        if product['basis'] != '100' + unit:
-            raise ValueError('unit does not match product basis')
-        nutrition = {key: float(Decimal(str(product[key])) * Decimal(str(amount)) / 100)
-                     for key in ('kcal', 'protein', 'carbs', 'fat')}
+        calculated, conversion = convert_portion(product, quantity, unit)
+        nutrition = {k:float(v) for k,v in calculated.items()}
         now = now_local()
         cur = conn.execute("INSERT INTO posilki(data,czas,opis,kalorie,bialko_g,weglowodany_g,tluszcze_g,zrodlo) VALUES (?,?,?,?,?,?,?,'catalog')",
                            (now.strftime('%Y-%m-%d'), now.strftime('%H:%M'),
                             f"{product['name']} — {amount:g} {unit}", nutrition['kcal'], nutrition['protein'], nutrition['carbs'], nutrition['fat']))
-        result = dict(meal_id=cur.lastrowid, product=product, quantity=amount, unit=unit, nutrition=nutrition)
+        result = dict(meal_id=cur.lastrowid, product=product, quantity=amount, unit=unit, nutrition=nutrition, **conversion)
         conn.execute('INSERT INTO food_portions VALUES (?,?,?,?)',
                      (request_id, fingerprint, json.dumps(result, ensure_ascii=False), cur.lastrowid))
         return result

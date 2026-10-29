@@ -5,6 +5,7 @@ export function catalogCard(p) {
   const verified = p.status === 'confirmed';
   return `<article class="panel"><h3>${e(p.name)} · ${e(p.brand || '')}</h3>
     <p>${e(p.basis)}: ${e(p.kcal)} kcal / B ${e(p.protein)} g / W ${e(p.carbs)} g / T ${e(p.fat)} g</p>
+    <p>${p.piece_size != null ? `Jedna sztuka: ${e(p.piece_size)} ${p.basis === '100g' ? 'g' : 'ml'}` : 'Rozmiar sztuki: brak'}</p>
     <p>${e(p.barcode || 'Bez kodu')} · ${e(p.provenance)} · ${verified ? 'Potwierdzony' : 'Szkic do sprawdzenia'} · wersja ${e(p.version)}</p>
     <button class="secondary" data-edit="${p.id}">Popraw</button>
     ${p.source_event_id ? `<button class="secondary" data-label="${p.id}">Pokaż etykietę</button>` : ''}
@@ -12,7 +13,7 @@ export function catalogCard(p) {
 }
 
 export function setupCatalog(api, root, report) {
-  let products = new Map(), selected = null, pending = null, draftRequest = null;
+  let products = new Map(), selected = null, pending = null, draftRequest = null, sizeTouched = false;
   const list = root.querySelector('#catalog-list');
   const editor = root.querySelector('#catalog-editor');
   const portion = root.querySelector('#catalog-portion');
@@ -23,14 +24,20 @@ export function setupCatalog(api, root, report) {
     list.innerHTML = rows.map(catalogCard).join('') || '<p>Brak produktów. Dodaj własną etykietę w rozmowie lub wpisz wartości ręcznie.</p>';
   }
   function edit(p = null) {
-    selected = p;
+    selected = p; sizeTouched = false;
     draftRequest = null;
     editor.reset();
-    for (const key of ['name','brand','barcode','kcal','protein','carbs','fat','basis']) field(key).value = p?.[key] ?? (key === 'basis' ? '100g' : '');
+    for (const key of ['name','brand','barcode','kcal','protein','carbs','fat','basis','piece_size']) field(key).value = p?.[key] ?? (key === 'basis' ? '100g' : '');
     editor.hidden = false;
     portion.hidden = true;
+    updatePieceUnit();
     field('name').focus();
   }
+  function updatePieceUnit() {
+    root.querySelector('#catalog-piece-unit').textContent = field('basis').value === '100g' ? 'g' : 'ml';
+  }
+  field('basis').onchange = updatePieceUnit;
+  field('piece_size').oninput = () => { sizeTouched = true; };
   root.querySelector('#catalog-new').onclick = () => edit();
   root.querySelector('#catalog-search-form').onsubmit = event => { event.preventDefault(); load().catch(report); };
   editor.onsubmit = async event => {
@@ -39,6 +46,10 @@ export function setupCatalog(api, root, report) {
     button.disabled = true;
     try {
       const product = Object.fromEntries(['name','brand','barcode','basis','kcal','protein','carbs','fat'].map(k => [k,field(k).value]));
+      if (selected?.piece_size != null && product.basis !== selected.basis && !sizeTouched) {
+        throw new Error('Zmiana podstawy wymaga podania nowego rozmiaru sztuki albo jawnego wyczyszczenia pola.');
+      }
+      product.piece_size = field('piece_size').value.trim() || null;
       product.barcode ||= null;
       product.provenance = 'manual';
       if (!selected) {
@@ -67,7 +78,9 @@ export function setupCatalog(api, root, report) {
       }
       if (action === 'portion') {
         selected = p; pending = null; editor.hidden = true; portion.hidden = false;
-        root.querySelector('#catalog-portion-name').textContent = `${p.name} · wersja ${p.version} · ilość w ${p.basis === '100g' ? 'g':'ml'}`;
+        root.querySelector('#catalog-portion-name').textContent = `${p.name} · wersja ${p.version}${p.piece_size == null ? ' · Brak rozmiaru sztuki; podaj ilość w ' + (p.basis === '100g' ? 'g' : 'ml') : ''}`;
+        const native = p.basis === '100g' ? 'g' : 'ml';
+        root.querySelector('#catalog-portion-unit').innerHTML = `<option value="${native}">${native}</option>` + (p.piece_size != null ? '<option value="szt">szt</option>' : '');
         root.querySelector('#catalog-quantity').value = '';
       }
       if (action === 'label') {
@@ -88,9 +101,10 @@ export function setupCatalog(api, root, report) {
     const button = root.querySelector('#catalog-log'); button.disabled = true;
     try {
       const quantity = root.querySelector('#catalog-quantity').value;
-      const signature = JSON.stringify([selected.id,selected.version,quantity]);
+      const unit = root.querySelector('#catalog-portion-unit').value;
+      const signature = JSON.stringify([selected.id,selected.version,quantity,unit]);
       if (pending?.signature !== signature) pending = {signature,id:createRequestId()};
-      const result = await api(`/api/catalog/${selected.id}/portion`, {method:'POST',body:JSON.stringify({version:selected.version,quantity,unit:selected.basis==='100g'?'g':'ml',request_id:pending.id})});
+      const result = await api(`/api/catalog/${selected.id}/portion`, {method:'POST',body:JSON.stringify({version:selected.version,quantity,unit,request_id:pending.id})});
       root.querySelector('#catalog-status').textContent = `Zapisano porcję: ${result.nutrition.kcal} kcal`;
       portion.hidden = true;
     } catch (err) { report(err); } finally { button.disabled = false; }
