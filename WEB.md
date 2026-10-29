@@ -268,6 +268,29 @@ usuwa przy sprzątaniu. Uruchomienie helpera na hoście nie potwierdza wyniku te
 smoke na rzeczywistym obrazie.
 
 
+### Rozmiar jednej sztuki w katalogu
+
+Produkt nadal ma makra na 100 g albo 100 ml. Opcjonalny rozmiar jednej sztuki
+jest podawany odpowiednio w g albo ml; puste pole oznacza brak przelicznika.
+Panel pozwala zapisać porcję w jednostce natywnej lub w `szt`, także ułamkowych,
+gdy rozmiar jest znany. Bez przelicznika rozmowa dopytuje o rozmiar lub g/ml;
+nie wyliczamy go z masy opakowania, liczby sztuk ani gęstości.
+
+W aktywnym podglądzie propozycji można napisać „zmień masę sztuki na 90 g”
+(dla płynu „zmień objętość sztuki na 30 ml”) albo „usuń rozmiar sztuki”.
+Korekta wymaga potem osobnego zatwierdzenia. Zmiana makr zachowuje rozmiar,
+a zmiana rozmiaru zachowuje makra. Przy zmianie podstawy trzeba jawnie podać
+nowy rozmiar lub wyczyścić pole. Błąd zapisu zachowuje wpisane wartości.
+
+API produktu przechowuje opcjonalne `piece_size` w istniejącym JSON; przy PUT
+pominięcie pola zachowuje poprzednią wartość, a `null` ją usuwa. Nie ma migracji
+SQL. Serwer liczy obie ścieżki zapisu porcji przez Decimal; rozmiar, ilość i
+znormalizowana porcja muszą być dodatnie, skończone, reprezentowalne jako float
+i nie większe niż 1 000 000 g/ml (dla liczby sztuk również limit 1 000 000).
+Snapshot zachowuje ilość/jednostkę wejściową, użyty przelicznik, ilość/jednostkę
+natywną oraz wersję produktu i makra. Późniejsza korekta produktu nie przelicza
+historii ani starszych snapshotów.
+
 ### Ręczna korekta posiłków
 
 W widoku posiłków przyciski Edytuj/Usuń korygują cały wpis bez LLM.

@@ -56,7 +56,7 @@ def _macros(values):
 
 
 def _ingredients(conn, items, remainder):
-    from .food_catalog import _number, _record, _version
+    from .food_catalog import _record, _version, convert_portion
     if not isinstance(items, list) or len(items) > 100:
         raise ValueError('complete ingredients list required; use [] for estimated meal')
     totals = {k: Decimal(0) for k in MACROS}
@@ -65,19 +65,14 @@ def _ingredients(conn, items, remainder):
         if not isinstance(item, dict) or set(item) != {'product_id', 'version', 'quantity', 'unit'}:
             raise ValueError('invalid ingredient')
         _version(item['product_id']); _version(item['version'])
-        amount = _number(item['quantity'])
-        if amount <= 0 or item['unit'] not in ('g', 'ml'):
-            raise ValueError('positive quantity and explicit g/ml required')
         row = conn.execute('SELECT * FROM food_products WHERE id=?', (item['product_id'],)).fetchone()
         if row is None or row['status'] != 'confirmed' or row['version'] != item['version']:
             raise ValueError('confirmed current catalog version required')
         product = _record(row)
-        if product['basis'] != '100' + item['unit']:
-            raise ValueError('unit does not match product basis')
-        nutrition = {k: Decimal(str(product[source])) * Decimal(str(amount)) / 100
-                     for k, source in zip(MACROS, ('kcal', 'protein', 'carbs', 'fat'))}
+        calculated, conversion = convert_portion(product, item['quantity'], item['unit'])
+        nutrition = {k:calculated[source] for k,source in zip(MACROS, ('kcal','protein','carbs','fat'))}
         for k in MACROS: totals[k] += nutrition[k]
-        snapshots.append(dict(item, product=product, nutrition={k:float(v) for k,v in nutrition.items()}))
+        snapshots.append(dict(item, **conversion, product=product, nutrition={k:float(v) for k,v in nutrition.items()}))
     rest = None
     if remainder is not None:
         if not isinstance(remainder, dict) or set(remainder) != {'description', *MACROS}:
@@ -170,8 +165,11 @@ def _mutate(kind, args):
     owner = turn.get('owner', 'local')
     request_id = turn.get('request_id') or str(uuid.uuid4())
     operation_id = hashlib.sha256(json.dumps([owner, request_id, slot]).encode()).hexdigest()[:32]
+    from .food_catalog import MissingPieceSize
     try:
         return _perform(kind, args, owner=owner, request_id=request_id, operation_id=operation_id, chat=bool(turn))
+    except MissingPieceSize as exc:
+        return dict(success=False, error=str(exc), operation_id=operation_id, meal_id=args.get('meal_id'))
     except (ValueError, TypeError, OverflowError):
         return dict(success=False, error='invalid meal contract, estimates, target or current catalog version',
                     operation_id=operation_id, meal_id=args.get('meal_id'))

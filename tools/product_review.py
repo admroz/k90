@@ -44,6 +44,13 @@ def intent(message):
         return ('confirm', text)
     if text in ('anuluj', 'anuluj produkt', 'anuluj tę propozycję'):
         return ('cancel', text)
+    m = re.fullmatch(r'(?:zmień|popraw) (?:masę|mase|objętość|objetosc|rozmiar) sztuki na\s*(\d+(?:[.,]\d+)?)\s*(g|ml)(?: i zatwierdź)?', text)
+    if m:
+        return ('piece_correct', m.groups())
+    if text in ('usuń rozmiar sztuki', 'usuń masę sztuki', 'usuń objętość sztuki', 'wyczyść rozmiar sztuki'):
+        return ('piece_clear', None)
+    if re.search(r'(?:sztuki|sztukę)', text) and re.search(r'zmień|popraw|usuń|wyczyść', text):
+        return ('unclear', None)
     m = re.fullmatch(r'(?:zmień|popraw) (białko|bialko|węglowodany|weglowodany|tłuszcz|tluszcz|kcal) na (\d+(?:[.,]\d+)?)(?: i zatwierdź)?', text)
     if m:
         return ('correct', m.groups())
@@ -79,6 +86,8 @@ def preview_text(p):
     return (f"Produkt {p['id']}, wersja {p['version']}: {p['name']} · {p['brand']} · "
             f"kod {p.get('barcode') or 'brak'} · {p['basis']}: {p['kcal']} kcal / "
             f"B {p['protein']} / W {p['carbs']} / T {p['fat']}.\n"
+            + (f"Jedna sztuka: {p['piece_size']} {'g' if p['basis'] == '100g' else 'ml'}.\n"
+               if p.get('piece_size') is not None else 'Rozmiar sztuki: brak.\n') +
             'Czy zatwierdzasz zapis tego produktu w tej wersji? Odpowiedz „zatwierdzam” albo „anuluj”.')
 
 
@@ -160,10 +169,21 @@ def resolve(message, turn):
                 if kind == 'cancel':
                     conn.execute("UPDATE food_product_reviews SET status='cancelled',reason='owner_cancel',consent_event_id=? WHERE owner=? AND product_id=? AND status='pending'",(turn['user_event_id'],owner_id,row['id']))
                     answer = 'Anulowano propozycję produktu.'
-                elif kind in ('correct', 'text_correct'):
+                elif kind in ('correct', 'text_correct', 'piece_correct', 'piece_clear'):
                     # Extraction is deliberately small/local; no model can select a target.
                     fields = {'białko':'protein','bialko':'protein','węglowodany':'carbs','weglowodany':'carbs','tłuszcz':'fat','tluszcz':'fat','kcal':'kcal','nazwę':'name','markę':'brand','podstawę':'basis'}
-                    data = json.loads(row['payload']); data[fields[arg[0]]] = arg[1]
+                    data = json.loads(row['payload'])
+                    if kind == 'piece_clear':
+                        data['piece_size'] = None
+                    elif kind == 'piece_correct':
+                        if arg[1] != ('g' if data['basis'] == '100g' else 'ml'):
+                            raise ValueError('piece unit mismatch')
+                        data['piece_size'] = arg[0]
+                    else:
+                        data[fields[arg[0]]] = arg[1]
+                        # Keep omission explicit when changing basis; _revise guards old size.
+                        if fields[arg[0]] == 'basis':
+                            data.pop('piece_size', None)
                     revised = catalog._revise(conn,row,review['version'],data,owner_id)
                     queue_preview(revised)
                     answer = preview_text(revised)

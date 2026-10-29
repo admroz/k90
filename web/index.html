@@ -85,10 +85,11 @@
           <p>Wpisz sprawdzone wartości. Zapis utworzy nową wersję szkicu do zatwierdzenia.</p>
           <label>Nazwa<input name="name" required maxlength="200"></label><label>Marka<input name="brand" maxlength="200"></label><label>Kod (opcjonalny)<input name="barcode" inputmode="numeric" maxlength="14"></label>
           <label>Podstawa<select name="basis"><option value="100g">100 g</option><option value="100ml">100 ml</option></select></label>
+          <label>Rozmiar jednej sztuki (opcjonalny), <span id="catalog-piece-unit">g</span><input name="piece_size" inputmode="decimal"></label>
           <label>kcal<input name="kcal" required inputmode="decimal"></label><label>Białko g<input name="protein" required inputmode="decimal"></label><label>Węglowodany g<input name="carbs" required inputmode="decimal"></label><label>Tłuszcze g<input name="fat" required inputmode="decimal"></label>
           <button type="submit" class="primary">Zapisz szkic</button>
         </form>
-        <form id="catalog-portion" class="panel" hidden><p id="catalog-portion-name"></p><label>Ilość<input id="catalog-quantity" required inputmode="decimal"></label><button id="catalog-log" class="primary">Zapisz porcję jako posiłek</button></form>
+        <form id="catalog-portion" class="panel" hidden><p id="catalog-portion-name"></p><label>Ilość<input id="catalog-quantity" required inputmode="decimal"></label><label>Jednostka<select id="catalog-portion-unit"></select></label><button id="catalog-log" class="primary">Zapisz porcję jako posiłek</button></form>
         <p id="catalog-status" role="status"></p><div id="catalog-label" hidden></div>
         <div id="catalog-list"></div>
         <section class="panel"><h2>Zapasowo: Open Food Facts</h2><p>Najpierw dokładny kod lokalny. Dane zewnętrzne są niepotwierdzone i nie nadpisują własnych produktów.</p><label>Kod kreskowy<input id="catalog-barcode" inputmode="numeric" maxlength="14"></label><button id="catalog-lookup" class="secondary">Sprawdź kod</button><p id="catalog-external"></p></section>

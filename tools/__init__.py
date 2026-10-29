@@ -180,7 +180,7 @@ TOOLS = [
                     "description": {"type": "string", "description": "Opis posiłku (np. owsianka z jagodami i orzechami)"},
                     'ingredients': {'type':'array','maxItems':100,'items':{'type':'object','additionalProperties':False,
                         'properties':{'product_id':{'type':'integer'},'version':{'type':'integer'},
-                                      'quantity':{'type':'number'},'unit':{'type':'string','enum':['g','ml']}},
+                                      'quantity':{'type':'number'},'unit':{'type':'string','enum':['g','ml','szt']}},
                         'required':['product_id','version','quantity','unit']}},
                     'remainder': {'anyOf':[{'type':'null'}, {'type':'object','additionalProperties':False,
                         'properties':{'description':{'type':'string'}, **{k:{'type':'number'} for k in ('calories','protein_g','carbs_g','fat_g')}},
@@ -316,6 +316,7 @@ for _name, _description, _properties, _required in [
      {'product': {'type': 'object', 'properties': {
          **{k: {'type':'string'} for k in ('name','brand','barcode')},
          'basis': {'type':'string','enum':['100g','100ml']},
+         'piece_size': {'type':['number','null'],'description':'Opcjonalna znana masa/objętość jednej sztuki w g dla100g lub ml dla100ml.'},
          'provenance': {'type':'string','enum':['own_label','manual']},
          **{k: {'type':'number'} for k in ('kcal','protein','carbs','fat')}},
          'required':['name','basis','provenance','kcal','protein','carbs','fat']}}, ['product']),
