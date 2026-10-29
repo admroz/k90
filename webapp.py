@@ -44,7 +44,7 @@ STATIC = Path(__file__).parent / "web"
 class BodyLimitMiddleware:
     """Enforce the actual body limit, including requests using chunked encoding."""
 
-    def __init__(self, app, limit=7_100_000):
+    def __init__(self, app, limit=14_000_000):
         self.app, self.limit = app, limit
 
     async def __call__(self, scope, receive, send):
@@ -77,42 +77,28 @@ class BodyLimitMiddleware:
 class Message(BaseModel):
     request_id: str = Field(min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9:_-]+$")
     text: str = Field(default="", max_length=16000)
+    model_config = ConfigDict(extra="forbid", strict=True)
     image: str | None = Field(default=None, max_length=7_000_000)
+    images: list[str] | None = Field(default=None, min_length=1, max_length=4)
 
     @model_validator(mode="after")
     def valid_content(self):
-        if not self.text.strip() and not self.image:
+        from tools.images import validate_batch
+        if 'image' in self.model_fields_set and 'images' in self.model_fields_set:
+            raise ValueError("Użyj image albo images, nie obu pól.")
+        photos = self.images if self.images is not None else ([self.image] if self.image else [])
+        if not self.text.strip() and not photos:
             raise ValueError("Wpisz wiadomość lub dodaj zdjęcie.")
-        if self.image:
-            header, _, encoded = self.image.partition(",")
-            if header not in (
-                "data:image/jpeg;base64",
-                "data:image/png;base64",
-                "data:image/webp;base64",
-            ):
-                raise ValueError("Obsługujemy JPG, PNG i WebP.")
-            try:
-                raw = base64.b64decode(encoded, validate=True)
-            except ValueError:
-                raise ValueError("Nieprawidłowy obraz.") from None
-            if not raw or len(raw) > MAX_IMAGE_BYTES:
-                raise ValueError("Zdjęcie może mieć maksymalnie 5 MB.")
-            declared_mime = header.removeprefix("data:").removesuffix(";base64")
-            if image_mime_type(raw) != declared_mime:
-                raise ValueError("Zawartość pliku nie odpowiada formatowi zdjęcia.")
+        validate_batch(photos)
         return self
 
     def content(self):
-        if not self.image:
+        photos = self.images if self.images is not None else ([self.image] if self.image else [])
+        if not photos:
             return self.text.strip()
-        return [
-            {
-                "type": "text",
-                "text": self.text.strip()
-                or "Przeanalizuj załączone zdjęcie. Nie zapisuj posiłku bez potwierdzenia, że został zjedzony.",
-            },
-            {"type": "image_url", "image_url": {"url": self.image}},
-        ]
+        return [{"type": "text", "text": self.text.strip() or
+                 "Przeanalizuj załączone zdjęcia łącznie. Nie zapisuj posiłku bez potwierdzenia, że został zjedzony."},
+                *[{"type": "image_url", "image_url": {"url": photo}} for photo in photos]]
 
 
 class MealOperation(BaseModel):
@@ -147,6 +133,27 @@ class MealEdit(MealOperation):
 
 class TelegramMessage(Message):
     chat_id: int
+
+
+class AlbumPart(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    owner: int
+    chat_id: int
+    group_id: str = Field(min_length=1, max_length=128)
+    update_id: int = Field(ge=0)
+    message_id: int = Field(ge=1)
+    text: str = Field(default='', max_length=1024)
+    image: str | None = Field(default=None, max_length=7_000_000)
+    rejected: bool = False
+
+    @model_validator(mode='after')
+    def validate_photo(self):
+        from tools.images import validate_batch
+        if self.image is not None:
+            validate_batch([self.image])
+        if self.image is None and not self.rejected:
+            raise ValueError('Brak zdjęcia albumu.')
+        return self
 
 
 class Login(BaseModel):
@@ -209,6 +216,8 @@ def create_app(*, start_worker=True, processor=None):
 
     @app.exception_handler(RequestValidationError)
     async def meal_validation_error(request, exc):
+        if request.url.path in ('/api/messages', '/internal/messages', '/internal/albums/part'):
+            return JSONResponse({'detail':'Sprawdź wiadomość: 1–4 zdjęcia JPG/PNG/WebP, każde do 5 MB i łącznie do 10 MB.'}, status_code=422)
         if request.url.path.startswith('/api/meals/'):
             # Do not echo private fields or non-JSON NaN/Infinity in an error response.
             return JSONResponse({'detail': 'Sprawdź opis, liczby (0–1000000), datę, godzinę i jednostkę.'}, status_code=422)
@@ -218,7 +227,7 @@ def create_app(*, start_worker=True, processor=None):
     async def protect(request: Request, call_next):
         # JSON-only mutating endpoints plus a custom header prevent cross-site form requests.
         length = request.headers.get("content-length", "0")
-        if not length.isdigit() or int(length) > 7_100_000:
+        if not length.isdigit() or int(length) > 14_000_000:
             return JSONResponse({"detail": "Żądanie jest za duże."}, status_code=413)
         if request.method not in (
             "GET",
@@ -495,6 +504,21 @@ def create_app(*, start_worker=True, processor=None):
         if not body.request_id.startswith("telegram:"):
             raise HTTPException(400, "Nieprawidłowy identyfikator.")
         return submit(body, "telegram", body.chat_id)
+
+    @app.post("/internal/albums/part", dependencies=[Depends(internal)])
+    def album_part(body: AlbumPart):
+        from web_runtime import accept_album_part
+        if str(body.owner) != os.getenv('TELEGRAM_ALLOWED_USER_ID') or body.chat_id != body.owner:
+            raise HTTPException(403, 'Brak dostępu.')
+        try:
+            return accept_album_part(**body.model_dump())
+        except OverflowError:
+            raise HTTPException(429, 'Inbox albumów jest pełny.') from None
+
+    @app.post("/internal/albums/flush", dependencies=[Depends(internal)])
+    def album_flush():
+        from web_runtime import flush_albums
+        return flush_albums()
 
     @app.get("/internal/offset", dependencies=[Depends(internal)])
     def offset():

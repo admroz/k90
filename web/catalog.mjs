@@ -72,7 +72,13 @@ export function setupCatalog(api, root, report) {
       }
       if (action === 'label') {
         const result = await api(`/api/catalog/${p.id}/label`);
-        root.querySelector('#catalog-label').src = result.image;
+        const evidence = root.querySelector('#catalog-label');
+        evidence.replaceChildren();
+        (result.images || [result.image]).forEach((url, index) => {
+          const photo = document.createElement('img');
+          photo.src = url; photo.alt = `Etykieta produktu — zdjęcie ${index+1}`;
+          photo.style.maxWidth = '100%'; evidence.append(photo);
+        });
         root.querySelector('#catalog-label').hidden = false;
       }
     } catch (err) { report(err); } finally { button.disabled = false; }

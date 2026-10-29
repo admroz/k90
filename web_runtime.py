@@ -73,6 +73,19 @@ def init_runtime():
             UNIQUE(user_id, identity, role)
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS chat_timeline_job ON chat_timeline(job_seq)")
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS telegram_albums (
+                album_key TEXT PRIMARY KEY, owner TEXT NOT NULL, chat_id INTEGER NOT NULL,
+                first_at REAL NOT NULL, last_at REAL NOT NULL,
+                state TEXT NOT NULL DEFAULT 'pending', error INTEGER NOT NULL DEFAULT 0,
+                late_notified INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS telegram_album_parts (
+                album_key TEXT NOT NULL, update_id INTEGER NOT NULL UNIQUE,
+                message_id INTEGER NOT NULL, caption TEXT NOT NULL, image TEXT,
+                PRIMARY KEY(album_key, message_id)
+            );
+        """)
         _index_timeline(conn)
 
 
@@ -145,52 +158,57 @@ def get_transport(name, default=None):
 def enqueue(request_id, content, channel="web", chat_id=None, *, kind="message"):
     if kind not in ("message", "garmin_sync"):
         raise ValueError("Nieznany rodzaj operacji")
-    payload = json.dumps(content, ensure_ascii=False)
     with closing(get_conn()) as conn, conn:
         conn.execute("BEGIN IMMEDIATE")
-        _index_timeline(conn)
-        existing = conn.execute(
+        return _enqueue(conn, request_id, content, channel, chat_id, kind=kind)
+
+
+def _enqueue(conn, request_id, content, channel="web", chat_id=None, *, kind="message"):
+    payload = json.dumps(content, ensure_ascii=False)
+    _index_timeline(conn)
+    existing = conn.execute(
+        "SELECT * FROM chat_jobs WHERE request_id = ?", (request_id,)
+    ).fetchone()
+    if existing:
+        if (existing["payload"], existing["channel"], existing["chat_id"], existing["kind"], existing["user_id"]) != (
+            payload,
+            channel,
+            chat_id,
+            kind,
+            os.getenv("CONVERSATION_USER_ID", "owner"),
+        ):
+            raise ValueError("Ten identyfikator wiadomości ma już inną treść.")
+        return dict(existing)
+    if kind == "garmin_sync":
+        active = conn.execute("SELECT * FROM chat_jobs WHERE kind = 'garmin_sync' AND state IN ('queued', 'running') ORDER BY seq LIMIT 1").fetchone()
+        if active:
+            return dict(active)
+    count = conn.execute(
+        "SELECT COUNT(*) FROM chat_jobs WHERE state IN ('queued', 'running')"
+    ).fetchone()[0]
+    if count >= 100:
+        raise OverflowError(
+            "Kolejka jest pełna. Poczekaj na zakończenie poprzednich wiadomości."
+        )
+    conn.execute(
+        "INSERT INTO chat_jobs (request_id, channel, payload, chat_id, kind, user_id) VALUES (?, ?, ?, ?, ?, ?)",
+        (request_id, channel, payload, chat_id, kind, os.getenv("CONVERSATION_USER_ID", "owner")),
+    )
+    _index_timeline(conn)
+    job = dict(
+        conn.execute(
             "SELECT * FROM chat_jobs WHERE request_id = ?", (request_id,)
         ).fetchone()
-        if existing:
-            if (existing["payload"], existing["channel"], existing["chat_id"], existing["kind"], existing["user_id"]) != (
-                payload,
-                channel,
-                chat_id,
-                kind,
-                os.getenv("CONVERSATION_USER_ID", "owner"),
-            ):
-                raise ValueError("Ten identyfikator wiadomości ma już inną treść.")
-            return dict(existing)
-        if kind == "garmin_sync":
-            active = conn.execute("SELECT * FROM chat_jobs WHERE kind = 'garmin_sync' AND state IN ('queued', 'running') ORDER BY seq LIMIT 1").fetchone()
-            if active:
-                return dict(active)
-        count = conn.execute(
-            "SELECT COUNT(*) FROM chat_jobs WHERE state IN ('queued', 'running')"
-        ).fetchone()[0]
-        if count >= 100:
-            raise OverflowError(
-                "Kolejka jest pełna. Poczekaj na zakończenie poprzednich wiadomości."
-            )
-        conn.execute(
-            "INSERT INTO chat_jobs (request_id, channel, payload, chat_id, kind, user_id) VALUES (?, ?, ?, ?, ?, ?)",
-            (request_id, channel, payload, chat_id, kind, os.getenv("CONVERSATION_USER_ID", "owner")),
-        )
-        _index_timeline(conn)
-        job = dict(
-            conn.execute(
-                "SELECT * FROM chat_jobs WHERE request_id = ?", (request_id,)
-            ).fetchone()
-        )
-        profile_id = uuid4().hex
-        queued = profiling.perf_counter() if profiling.enabled() else None
-        conn.execute("UPDATE chat_jobs SET profile_id=?, queued_monotonic=?, queue_clock_id=? WHERE seq=?",
-                     (profile_id, queued, profiling.CLOCK_ID, job['seq']))
-        job.update(profile_id=profile_id, queued_monotonic=queued, queue_clock_id=profiling.CLOCK_ID)
-        with profiling.request_scope(channel, profile_id, job['seq'], scope='submission'):
-            profiling.queue_event('start', queued, profiling.CLOCK_ID)
-        return job
+    )
+    profile_id = uuid4().hex
+    queued = profiling.perf_counter() if profiling.enabled() else None
+    conn.execute("UPDATE chat_jobs SET profile_id=?, queued_monotonic=?, queue_clock_id=? WHERE seq=?",
+                 (profile_id, queued, profiling.CLOCK_ID, job['seq']))
+    job.update(profile_id=profile_id, queued_monotonic=queued, queue_clock_id=profiling.CLOCK_ID)
+    with profiling.request_scope(channel, profile_id, job['seq'], scope='submission'):
+        profiling.queue_event('start', queued, profiling.CLOCK_ID)
+    return job
+
 
 
 def recover_interrupted():
@@ -380,3 +398,93 @@ class ConversationWorker:
             except Exception:
                 event('conversation.worker_error', component='web_runtime', level=logging.ERROR, error=sys.exception())
                 self.stop.wait(2)
+
+
+ALBUM_REJECTED = 'Album odrzucony: maksymalnie 4 zdjęcia JPG/PNG/WebP, każde do 5 MB i łącznie do 10 MB. Wyślij ponownie całą paczkę.'
+ALBUM_LATE = 'Album mógł być niekompletny: zdjęcie dotarło po zamknięciu paczki. Sprawdź propozycję i wyślij ponownie wszystkie zdjęcia razem.'
+
+
+def _album_notice(conn, key, chat_id, text):
+    # Transport-only response: no model, draft or partial-photo inference.
+    if not conn.execute('SELECT 1 FROM chat_jobs WHERE request_id=?', (key,)).fetchone():
+        conn.execute("""INSERT INTO chat_jobs
+            (request_id,channel,payload,chat_id,state,response,finished_at,kind,user_id,profile_id)
+            VALUES (?,'telegram','""',?,'done',?,CURRENT_TIMESTAMP,'transport_notice',?,?)""",
+            (key, chat_id, text, os.getenv('CONVERSATION_USER_ID', 'owner'), uuid4().hex))
+
+
+def accept_album_part(*, owner, chat_id, group_id, update_id, message_id, text='', image=None, rejected=False, now=None):
+    """Durable acceptance precedes adapter offset ack; identity comes from trusted intake."""
+    import hashlib
+    from tools.images import validate_batch
+    now = time.time() if now is None else now
+    if image is not None:
+        validate_batch([image])
+    flush_albums(now=now)
+    key = 'telegram:album:' + hashlib.sha256(json.dumps([owner, chat_id, group_id]).encode()).hexdigest()
+    with closing(get_conn()) as conn, conn:
+        conn.execute('BEGIN IMMEDIATE')
+        _cleanup_albums(conn, now)
+        row = conn.execute('SELECT * FROM telegram_albums WHERE album_key=?', (key,)).fetchone()
+        duplicate = conn.execute('SELECT 1 FROM telegram_album_parts WHERE update_id=? OR (album_key=? AND message_id=?)',
+                                 (update_id, key, message_id)).fetchone()
+        if duplicate:
+            return {'accepted': True}
+        if row and row['state'] != 'pending':
+            if row['state'] == 'sealed' and not row['late_notified']:
+                _album_notice(conn, key+':late', chat_id, ALBUM_LATE)
+                conn.execute('UPDATE telegram_albums SET late_notified=1 WHERE album_key=?', (key,))
+            return {'accepted': True}
+        if not row:
+            if conn.execute('SELECT COUNT(*) FROM telegram_albums').fetchone()[0] >= 1000 or conn.execute("SELECT COUNT(*) FROM telegram_albums WHERE state='pending'").fetchone()[0] >= 32:
+                raise OverflowError('Inbox albumów jest pełny; ponów później.')
+            conn.execute('INSERT INTO telegram_albums(album_key,owner,chat_id,first_at,last_at) VALUES (?,?,?,?,?)',
+                         (key,owner,chat_id,now,now))
+        photos = [r[0] for r in conn.execute('SELECT image FROM telegram_album_parts WHERE album_key=? AND image IS NOT NULL', (key,))]
+        photos += [image] if image else []
+        invalid = rejected or not image
+        try:
+            validate_batch(photos)
+        except ValueError:
+            invalid = True
+        conn.execute('INSERT INTO telegram_album_parts VALUES (?,?,?,?,?)', (key,update_id,message_id,text,image if not invalid else None))
+        conn.execute('UPDATE telegram_albums SET last_at=?, error=MAX(error,?) WHERE album_key=?', (now,int(invalid),key))
+        if invalid:
+            _album_notice(conn, key+':rejected', chat_id, ALBUM_REJECTED)
+            conn.execute("UPDATE telegram_albums SET state='rejected' WHERE album_key=?", (key,))
+            conn.execute("UPDATE telegram_album_parts SET image=NULL,caption='' WHERE album_key=?", (key,))
+    return {'accepted': True}
+
+
+def _cleanup_albums(conn, now):
+    # Keep dedup/seal tombstones seven days, discard private inbox payload on seal.
+    expired = [r[0] for r in conn.execute("SELECT album_key FROM telegram_albums WHERE state!='pending' AND last_at<?", (now-7*86400,))]
+    for key in expired:
+        conn.execute('DELETE FROM telegram_album_parts WHERE album_key=?', (key,))
+        conn.execute('DELETE FROM telegram_albums WHERE album_key=?', (key,))
+
+
+def flush_albums(*, now=None):
+    now = time.time() if now is None else now
+    with closing(get_conn()) as conn, conn:
+        conn.execute('BEGIN IMMEDIATE')
+        _cleanup_albums(conn, now)
+        rows = conn.execute("SELECT * FROM telegram_albums WHERE state='pending' AND (last_at<=? OR first_at<=?) ORDER BY first_at", (now-2,now-10)).fetchall()
+        for row in rows:
+            allowed = os.getenv('TELEGRAM_ALLOWED_USER_ID')
+            if not allowed:
+                continue
+            if str(row['owner']) != allowed or str(row['chat_id']) != allowed:
+                conn.execute("UPDATE telegram_albums SET state='rejected' WHERE album_key=?", (row['album_key'],))
+                conn.execute("UPDATE telegram_album_parts SET image=NULL,caption='' WHERE album_key=?", (row['album_key'],))
+                continue
+            parts = conn.execute('SELECT * FROM telegram_album_parts WHERE album_key=? ORDER BY message_id', (row['album_key'],)).fetchall()
+            text = '\n'.join(p['caption'] for p in parts if p['caption']) or 'Przeanalizuj zdjęcia łącznie. Nie zapisuj posiłku bez potwierdzenia, że został zjedzony.'
+            content = [{'type':'text','text':text}, *[{'type':'image_url','image_url':{'url':p['image']}} for p in parts]]
+            try:
+                _enqueue(conn, row['album_key'], content, 'telegram', row['chat_id'])
+            except OverflowError:
+                continue  # Keep durable pending data until queue capacity is available.
+            conn.execute("UPDATE telegram_albums SET state='sealed' WHERE album_key=?", (row['album_key'],))
+            conn.execute("UPDATE telegram_album_parts SET image=NULL,caption='' WHERE album_key=?", (row['album_key'],))
+    return {'flushed': len(rows)}

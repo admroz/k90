@@ -1,5 +1,18 @@
 # k90 — bieżący status zadania
 
+## Joint product photos — author verification complete, 2026-10-28
+
+Point1 PR21 owner-merged at `db9c7fc`, now integrated into this feature branch.
+The merge-tree equals the prior feature tree; no runtime changes or conflicts.
+WWW batches, durable Telegram album inbox, one draft per batch and all catalog
+evidence implemented. Synthetic HTTP/SQLite/agent and real Chromium
+acceptance passed. Settled source `a03419c`: Python792 PASS /1 existing skip,
+Node26 PASS and JS syntax PASS; private phase checkpoint retains commands/logs.
+Independent verifier, exact-SHA CI/image and final PR remain pending coordinator
+gates. No PR, merge, image publication, deployment or live vision claim.
+[Evidence and limits](review-evidence/product-photo-batches.md).
+
+
 ## Owner profiling report — missing-boundary correction, 2026-10-28
 
 Independent medium finding on b729413 reproduced using unchanged review probes:

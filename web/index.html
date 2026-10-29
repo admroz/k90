@@ -76,7 +76,7 @@
       </section>
       <section id="chat-view" class="view" hidden>
         <div class="page-heading"><div><span class="eyebrow">WSPÓLNY KONTEKST</span><h1>Porozmawiajmy<span class="accent">.</span></h1><p>Jedna rozmowa — w przeglądarce i na Telegramie.</p></div></div>
-        <div class="chat-shell"><button id="older-messages" class="text-button">Wczytaj wcześniejsze wiadomości ↑</button><div id="messages" class="messages" aria-live="polite"></div><div id="jobs" aria-live="polite"></div><form id="chat-form" class="composer"><label class="sr-only" for="message">Wiadomość do agenta</label><textarea id="message" placeholder="Jak wyglądał mój ostatni tydzień?" rows="2" maxlength="16000"></textarea><div class="composer-actions"><label class="attachment" for="image">＋ Zdjęcie</label><input id="image" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only"><span id="attachment-name"></span><button id="remove-image" type="button" class="text-button" hidden>Usuń</button><button type="submit" class="primary" id="send-message">Wyślij ↗</button></div><p id="chat-error" role="alert"></p></form></div>
+        <div class="chat-shell"><button id="older-messages" class="text-button">Wczytaj wcześniejsze wiadomości ↑</button><div id="messages" class="messages" aria-live="polite"></div><div id="jobs" aria-live="polite"></div><form id="chat-form" class="composer"><label class="sr-only" for="message">Wiadomość do agenta</label><textarea id="message" placeholder="Jak wyglądał mój ostatni tydzień?" rows="2" maxlength="16000"></textarea><div class="composer-actions"><label class="attachment" for="image">＋ Zdjęcie</label><input id="image" type="file" multiple accept="image/jpeg,image/png,image/webp" class="sr-only"><span id="attachment-name"></span><button id="remove-image" type="button" class="text-button" hidden>Usuń</button><button type="submit" class="primary" id="send-message">Wyślij ↗</button></div><p id="chat-error" role="alert"></p></form></div>
       </section>
       <section id="catalog-view" class="view" hidden>
         <div class="page-heading"><div><h1>Własny katalog produktów</h1><p>Wyślij zdjęcie etykiety w Rozmowie i poproś o szkic produktu. Sprawdź wartości tutaj przed zatwierdzeniem.</p></div><button id="catalog-new" class="primary">Dodaj ręcznie</button></div>
@@ -89,7 +89,7 @@
           <button type="submit" class="primary">Zapisz szkic</button>
         </form>
         <form id="catalog-portion" class="panel" hidden><p id="catalog-portion-name"></p><label>Ilość<input id="catalog-quantity" required inputmode="decimal"></label><button id="catalog-log" class="primary">Zapisz porcję jako posiłek</button></form>
-        <p id="catalog-status" role="status"></p><img id="catalog-label" alt="Oryginalna etykieta produktu" hidden>
+        <p id="catalog-status" role="status"></p><div id="catalog-label" hidden></div>
         <div id="catalog-list"></div>
         <section class="panel"><h2>Zapasowo: Open Food Facts</h2><p>Najpierw dokładny kod lokalny. Dane zewnętrzne są niepotwierdzone i nie nadpisują własnych produktów.</p><label>Kod kreskowy<input id="catalog-barcode" inputmode="numeric" maxlength="14"></label><button id="catalog-lookup" class="secondary">Sprawdź kod</button><p id="catalog-external"></p></section>
       </section>

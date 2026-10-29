@@ -1336,3 +1336,20 @@ pre#document-raw {
 .meal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 #meal-edit-error { color: var(--warning-ink); }
 @media (max-width: 480px) { .meal-fields { grid-template-columns: 1fr; } .meal-row { flex-wrap: wrap; } }
+
+/* A batch remains visible and individually removable on narrow screens. */
+.composer-actions { flex-wrap: wrap; }
+#attachment-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  order: 3;
+  flex-basis: 100%;
+  max-width: none;
+  white-space: normal;
+  overflow: visible;
+}
+#attachment-name > span { display: flex; flex-direction: column; max-width: 140px; }
+#attachment-name img { object-fit: contain; }
+#attachment-name button { white-space: normal; overflow-wrap: anywhere; }

@@ -11,8 +11,33 @@ from logging_setup import configure_logging, event
 
 import requests
 
-from server import TelegramAPI, _image_from_message, split_message
+from server import TelegramAPI as LegacyTelegramAPI, _image_from_message, split_message
 from tools.images import MAX_IMAGE_BYTES, image_mime_type
+
+
+class ImageTooLarge(ValueError):
+    pass
+
+
+class TelegramAPI(LegacyTelegramAPI):
+    def download_file(self, file_id):
+        """Bound the actual response stream before accumulating image bytes."""
+        info = self.call('getFile', file_id=file_id)
+        if info.get('file_size', 0) > MAX_IMAGE_BYTES:
+            raise ImageTooLarge()
+        path = info.get('file_path')
+        if not path:
+            raise ValueError('missing_telegram_file')
+        with self._session.get(f'{self._file_url}/{path}', timeout=30, stream=True) as response:
+            response.raise_for_status()
+            if int(response.headers.get('Content-Length', '0')) > MAX_IMAGE_BYTES:
+                raise ImageTooLarge()
+            raw = bytearray()
+            for chunk in response.iter_content(chunk_size=64*1024):
+                if len(raw) + len(chunk) > MAX_IMAGE_BYTES:
+                    raise ImageTooLarge()
+                raw.extend(chunk)
+            return bytes(raw), response.headers.get('Content-Type', '')
 
 
 
@@ -49,6 +74,8 @@ def _accept_update(api, backend, update):
         "TELEGRAM_ALLOWED_USER_ID"
     ):
         return
+    if str(chat.get("id")) != str(sender.get("id")):
+        return
     text = (message.get("text") or message.get("caption") or "").strip()
     image_info = _image_from_message(message)
     if not text and not image_info:
@@ -58,22 +85,26 @@ def _accept_update(api, backend, update):
         "chat_id": chat["id"],
         "text": text,
     }
+    album = message.get('media_group_id')
+    if album:
+        body = {'owner': sender['id'], 'chat_id': chat['id'], 'group_id': str(album),
+                'update_id': update['update_id'], 'message_id': message['message_id'], 'text': text}
     if image_info:
-        raw, _ = api.download_file(image_info[0])
-        # Telegram downloads may be application/octet-stream even for valid photos.
-        # Detect the same signatures checked by the backend before enqueueing.
+        try:
+            raw, _ = api.download_file(image_info[0])
+        except ImageTooLarge:
+            raw = b''
         mime = image_mime_type(raw)
         if mime is None or len(raw) > MAX_IMAGE_BYTES:
-            event('telegram.image_rejected', component='telegram_adapter', level=logging.WARNING, bytes=len(raw))
-            # Acknowledge unsupported input without getting stuck on the same update forever.
-            body["text"] = (
-                "Użytkownik przesłał obraz w nieobsługiwanym formacie lub większy niż 5 MB. Poproś o JPG, PNG lub WebP do 5 MB. "
-                + text
-            )
+            if album:
+                body['rejected'] = True
+            else:
+                body['text'] = 'Użytkownik przesłał obraz w nieobsługiwanym formacie lub większy niż 5 MB. Poproś o JPG, PNG lub WebP do 5 MB. ' + text
         else:
-            body["image"] = f"data:{mime};base64," + base64.b64encode(raw).decode()
-            event('telegram.image', component='telegram_adapter', bytes=len(raw))
-    accepted = backend.call("POST", "/internal/messages", json=body)
+            body['image'] = f'data:{mime};base64,' + base64.b64encode(raw).decode()
+    elif album:
+        body['rejected'] = True
+    accepted = backend.call("POST", "/internal/albums/part" if album else "/internal/messages", json=body)
     if type(accepted) is dict:
         event('telegram.submitted', component='telegram_adapter',
               backend_request_id=accepted.get('profile_id'), backend_job_id=accepted.get('job_id'))
@@ -112,6 +143,7 @@ def main():
     while True:
         try:
             offset = backend.call("GET", "/internal/offset")["offset"]
+            backend.call("POST", "/internal/albums/flush")
             deliver_pending(api, backend)
             params = {"timeout": 3, "allowed_updates": ["message"]}
             if offset is not None:
@@ -122,6 +154,7 @@ def main():
                 backend.call(
                     "POST", "/internal/offset", json={"offset": update["update_id"] + 1}
                 )
+            backend.call("POST", "/internal/albums/flush")
             backend.call("POST", "/internal/status", json={"status": "połączony"})
             retry = 1
         except Exception as exc:

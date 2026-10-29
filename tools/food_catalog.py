@@ -114,6 +114,18 @@ def propose(data, *, source_event_id=None, request_id=None, owner=None):
     try:
         with get_conn() as conn:
             conn.execute('BEGIN IMMEDIATE')
+            if source_event_id is not None:
+                source = conn.execute("SELECT payload FROM agent_events WHERE id=? AND owner=? AND role='user'",
+                                      (source_event_id, owner)).fetchone()
+                content = json.loads(source[0]) if source else []
+                photos = [p for p in content if isinstance(p, dict) and p.get('type') == 'image_url'] if isinstance(content, list) else []
+                if len(photos) > 1:
+                    prior = conn.execute("SELECT * FROM food_products WHERE owner=? AND json_extract(payload,'$.source_event_id')=? ORDER BY id LIMIT 1",
+                                         (owner, source_event_id)).fetchone()
+                    if prior:
+                        if prior['payload'] != payload:
+                            raise ValueError('Jedna paczka zdjęć może mieć tylko jedną propozycję. Sprzeczne produkty lub wartości wymagają wyjaśnienia; nie twórz kolejnego szkicu.')
+                        return _record(prior)
             if request_id:
                 previous = conn.execute('SELECT * FROM food_draft_requests WHERE request_id=?', (request_id,)).fetchone()
                 if previous:
@@ -157,7 +169,11 @@ def propose_from_chat(product):
 
 CATALOG_PROMPT = """Katalog produktów: własna etykieta i korekty właściciela są źródłem prawdy.
 Zdjęcie posiłku nadal obsługuj jako posiłek; nie jest etykietą produktu.
-Gdy użytkownik chce zachować etykietę, odczytaj bieżące zdjęcie i użyj propose_food_product:
+Gdy użytkownik chce zachować etykietę, odczytaj WSZYSTKIE bieżące zdjęcia łącznie jako jeden produkt i użyj propose_food_product najwyżej raz:
+Zdjęcia kodu, nazwy/logo i makr to wspólne dowody, nie osobne produkty.
+Przed szkicem zapytaj o wyjaśnienie, gdy zdjęcia przedstawiają różne produkty, sprzeczne kody/nazwy,
+nieczytelne dane lub niejasną podstawę 100g vs 100ml, porcję vs opakowanie czy rozmiar zbiorczy.
+Nie sumuj makr z etykiet. Masa opakowania nie oznacza ilości spożytej ani podstawy makr.
 podaj nazwę, markę, opcjonalny kod, podstawę 100g lub 100ml, kcal, protein, carbs, fat oraz provenance own_label.
 Brakujące lub nieczytelne wartości wyjaśnij z użytkownikiem; nigdy nie zgaduj ani nie zastępuj zerem.
 Backend pokazuje pełny podgląd i obsługuje zgodę, korektę oraz anulowanie lokalnie.
@@ -181,11 +197,14 @@ def label_image(product_id):
         row = conn.execute("SELECT payload FROM agent_events WHERE id=? AND owner=? AND role='user'",
                            (product.get('source_event_id'), os.getenv('CONVERSATION_USER_ID', 'owner'))).fetchone()
     content = json.loads(row['payload']) if row else []
+    images = []
     for part in content if isinstance(content, list) else []:
         if isinstance(part, dict) and part.get('type') == 'image_url':
             url = part.get('image_url', {}).get('url', '')
             if isinstance(url, str) and url.startswith(('data:image/png;base64,', 'data:image/jpeg;base64,', 'data:image/webp;base64,')):
-                return {'image':url}
+                images.append(url)
+    if images:
+        return {'image':images[0], 'images':images}
     raise ValueError('label photo unavailable')
 
 
