@@ -373,6 +373,11 @@ def create_app(*, start_worker=True, processor=None):
         return catalog_action(food_catalog.revise, product_id, body.get('version'), body.get('product', {}),
                               owner=os.getenv('CONVERSATION_USER_ID', 'owner'))
 
+    @app.post('/api/catalog/{product_id}/preview', dependencies=[Depends(authenticated)])
+    def catalog_preview(product_id: int, body: dict):
+        return catalog_action(food_catalog.panel_preview, product_id, body.get('version'),
+                              owner=os.getenv('CONVERSATION_USER_ID', 'owner'))
+
     @app.post('/api/catalog/{product_id}/confirm', dependencies=[Depends(authenticated)])
     def catalog_confirm(product_id: int, body: dict):
         return catalog_action(food_catalog.confirm, product_id, body.get('version'),

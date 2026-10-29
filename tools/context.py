@@ -46,7 +46,7 @@ def build_operational_context() -> tuple[str, dict]:
             """SELECT data, czas, opis, kalorie, bialko_g, weglowodany_g, tluszcze_g
                FROM posilki
                WHERE data >= ?
-               ORDER BY data DESC, czas DESC
+               ORDER BY data DESC, CASE WHEN czas IS NULL OR czas = '' THEN 1 ELSE 0 END, czas DESC, id DESC
                LIMIT 6""",
             (date_days_ago(MEAL_DAYS),),
         ).fetchall()

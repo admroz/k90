@@ -286,6 +286,27 @@ def search(query="", barcode=None):
         return [_record(row) for row in rows]
 
 
+def panel_preview(product_id, version, *, owner=None):
+    """Explicit current-version preview, including legacy unowned panel products.
+
+    Like /produkt pokaz, only the configured owner may bind an unowned record.
+    Listing/getting, revising and confirming never implicitly claim ownership.
+    """
+    from .product_review import owner as configured_owner
+    owner = configured_owner() if owner is None else owner
+    _version(version)
+    with get_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        row = conn.execute('SELECT * FROM food_products WHERE id=?', (product_id,)).fetchone()
+        if (owner != configured_owner() or row is None or row['version'] != version
+                or row['owner'] not in (None, owner)):
+            raise ValueError('owner or version mismatch; preview required')
+        if row['owner'] is None:
+            conn.execute('UPDATE food_products SET owner=? WHERE id=? AND version=? AND owner IS NULL',
+                         (owner, product_id, version))
+        return _record(row)
+
+
 def _revise(conn, old, version, data, owner):
     _version(version)
     if old is None or old['version'] != version or old['owner'] != owner:

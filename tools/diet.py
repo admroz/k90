@@ -224,7 +224,7 @@ def get_recent_meals(days: int = 3) -> list[dict]:
             """SELECT id, data, czas, opis, kalorie, bialko_g, weglowodany_g, tluszcze_g, revision, quantity, unit
                FROM posilki
                WHERE data >= ?
-               ORDER BY data DESC, czas DESC""",
+               ORDER BY data DESC, CASE WHEN czas IS NULL OR czas = '' THEN 1 ELSE 0 END, czas DESC, id DESC""",
             (date_days_ago(days),)
         ).fetchall()
     return rows_to_list(rows)

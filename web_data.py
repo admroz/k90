@@ -61,8 +61,11 @@ def read_table(table, limit=50, offset=0, sort=None, descending=True, search="")
             f'CASE WHEN typeof("{col}") = \'text\' THEN substr("{col}", 1, 4000) ELSE "{col}" END AS "{col}"'
             for col in columns
         )
+        order = f'"{sort}" {"DESC" if descending else "ASC"}, rowid'
+        if table == 'posilki' and sort == 'data':
+            order = f'data {"DESC" if descending else "ASC"}, CASE WHEN czas IS NULL OR czas = \'\' THEN 1 ELSE 0 END, czas DESC, id DESC'
         rows = conn.execute(
-            f'SELECT {selection} FROM "{table}"{clause} ORDER BY "{sort}" {"DESC" if descending else "ASC"}, rowid LIMIT ? OFFSET ?',
+            f'SELECT {selection} FROM "{table}"{clause} ORDER BY {order} LIMIT ? OFFSET ?',
             [*params, limit, offset],
         ).fetchall()
     return {
@@ -122,7 +125,7 @@ def meals_for_day(day: date | None = None):
         rows = [dict(row) for row in conn.execute(
             """SELECT * FROM posilki WHERE data = ?
                ORDER BY CASE WHEN czas IS NULL OR czas = '' THEN 1 ELSE 0 END,
-                        czas, id""",
+                        czas DESC, id DESC""",
             (day.isoformat(),),
         )]
         energy = conn.execute("SELECT * FROM kalorie_dzienne WHERE data = ?", (day.isoformat(),)).fetchone()
@@ -176,10 +179,11 @@ def dashboard(days):
             "posilki",
             "kalorie_dzienne",
         ):
+            order = "data DESC, CASE WHEN czas IS NULL OR czas = '' THEN 1 ELSE 0 END, czas DESC, id DESC" if table == 'posilki' else 'data, rowid'
             result[table] = [
                 dict(row)
                 for row in conn.execute(
-                    f'SELECT * FROM "{table}" WHERE data BETWEEN ? AND ? ORDER BY data, rowid',
+                    f'SELECT * FROM "{table}" WHERE data BETWEEN ? AND ? ORDER BY {order}',
                     (start, end),
                 )
             ]

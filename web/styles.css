@@ -1326,6 +1326,34 @@ pre#document-raw {
   }
 }
 #catalog-label { max-width: 100%; }
+.chart-tooltip { display: block; min-height: 22px; margin-top: 6px; font-size: 12px; color: var(--ink); }
+.chart-point { cursor: pointer; }
+.chart-point:focus-visible { outline: 2px solid var(--green); }
+.chart-actions { display: flex; gap: 5px; flex: none; }
+.icon-button.unavailable { opacity: .55; cursor: help; font-size: 12px; gap: 1px; }
+
+/* Small glyphs with usable keyboard/touch targets. */
+.icon-button { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; min-width: 36px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: inherit; cursor: pointer; text-decoration: none; }
+.icon-button svg { width: 18px; height: 18px; flex: none; }
+.icon-button:hover { background: var(--line); }
+.icon-button:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.meal-row .meal-actions { margin: 0; gap: 4px; flex-wrap: nowrap; }
+.catalog-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.catalog-description { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.catalog-description h3 { margin: 0 0 4px; font-size: 15px; }
+.catalog-description p { margin: 3px 0; font-size: 12px; color: var(--muted); }
+.catalog-actions { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+#catalog-editor:not([hidden]) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+#catalog-editor > .panel-heading, #catalog-editor > p { grid-column: 1 / -1; margin: 0; }
+#catalog-editor label { display: grid; gap: 5px; }
+#catalog-editor input, #catalog-editor select { width: 100%; min-width: 0; }
+@media (max-width: 600px) {
+  #catalog-editor:not([hidden]) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .catalog-row { align-items: flex-start; }
+  .catalog-actions { max-width: 76px; }
+  .icon-button { width: 40px; height: 40px; min-width: 40px; }
+}
+
 
 #meal-editor { max-width: 640px; width: calc(100% - 32px); max-height: 90vh; overflow: auto; border: 1px solid var(--line, #777); border-radius: 12px; padding: 24px; background: var(--paper); color: var(--ink); }
 #meal-editor::backdrop { background: #0008; }

@@ -87,7 +87,7 @@ def test_daily_meals_default_to_application_date_and_include_all_meals(web_clien
     assert data["date"] == data["today"] == "2026-10-23"
     assert data["previous_date"] == "2026-10-22"
     assert data["next_date"] is None
-    assert [row["czas"] for row in data["meals"]] == ["07:00", "10:00", "13:00", "16:00", "20:00", "22:00"]
+    assert [row["czas"] for row in data["meals"]] == ["22:00", "20:00", "16:00", "13:00", "10:00", "07:00"]
     assert data["totals"] == {"kalorie": 600, "bialko_g": 30, "weglowodany_g": 60, "tluszcze_g": 24}
     assert all(count == 0 for count in data["missing_values"].values())
 
@@ -208,7 +208,7 @@ def test_daily_totals_distinguish_missing_values_from_real_zero(web_client):
     data = web_client.get("/api/meals?date=2026-10-22").json()
     assert data["totals"] == {"kalorie": 500, "bialko_g": 20, "weglowodany_g": None, "tluszcze_g": 10}
     assert data["missing_values"] == {"kalorie": 1, "bialko_g": 1, "weglowodany_g": 3, "tluszcze_g": 1}
-    assert data["meals"][2]["kalorie"] == 0
+    assert data["meals"][0]["kalorie"] == 0  # stable newest-id tie break
 
 
 @pytest.mark.parametrize("day", ["2026-02-30", "not-a-date", "2026-10-23' OR 1=1--"])

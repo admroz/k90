@@ -22,6 +22,7 @@ async function app(mealsHandler) {
   function element(selector) {
     if (!elements.has(selector)) elements.set(selector, {
       value: "", textContent: "", innerHTML: "", hidden: false, disabled: false,
+      addEventListener() {},
       setAttribute(name, value) { this[name] = value; },
       replaceChildren() {}, checkValidity() { return true; }
     });
