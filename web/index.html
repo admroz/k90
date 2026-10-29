@@ -26,6 +26,7 @@
         <button data-view="chat" class="nav-button"><span>◌</span> Rozmowa</button>
         <button data-view="catalog" class="nav-button"><span>▤</span> Katalog</button>
         <button data-view="data" class="nav-button"><span>▤</span> Dane</button>
+        <button data-view="timings" class="nav-button"><span>◷</span> Diagnostyka / Czasy</button>
         <button data-view="documents" class="nav-button"><span>▧</span> Dokumenty</button>
       </nav>
       <div class="sidebar-bottom"><div class="connection"><i></i><span id="transport-status">Przestrzeń prywatna</span></div><button id="logout" class="text-button">Wyloguj się ↗</button></div>
@@ -92,6 +93,7 @@
         <div id="catalog-list"></div>
         <section class="panel"><h2>Zapasowo: Open Food Facts</h2><p>Najpierw dokładny kod lokalny. Dane zewnętrzne są niepotwierdzone i nie nadpisują własnych produktów.</p><label>Kod kreskowy<input id="catalog-barcode" inputmode="numeric" maxlength="14"></label><button id="catalog-lookup" class="secondary">Sprawdź kod</button><p id="catalog-external"></p></section>
       </section>
+      <section id="timings-view" class="view" hidden><h1>Diagnostyka / Czasy</h1><div id="timings-content"></div></section>
       <section id="data-view" class="view" hidden>
         <div class="page-heading"><div><span class="eyebrow">BLIŻEJ ŹRÓDŁA</span><h1>Twoje dane<span class="accent">.</span></h1><p>Surowe rekordy z bazy. Podgląd bez edycji.</p></div></div>
         <form id="table-form" class="data-controls"><label>Tabela<select id="table-select"></select></label><label class="search-label">Szukaj w tabeli<input id="table-search" placeholder="Data, opis, wartość…" maxlength="200"></label><button class="secondary" type="submit">Szukaj</button></form>

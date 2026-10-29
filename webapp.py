@@ -257,6 +257,11 @@ def create_app(*, start_worker=True, processor=None):
             sessions.pop(token, None)
             raise HTTPException(401, "Zaloguj się, aby uzyskać dostęp.")
 
+    @app.get("/api/diagnostics/timings", dependencies=[Depends(authenticated)])
+    def profiling_report():
+        from profile_report import read_report
+        return read_report()
+
     def internal(request: Request):
         expected = os.getenv("K90_INTERNAL_TOKEN", "")
         actual = request.headers.get("authorization", "")

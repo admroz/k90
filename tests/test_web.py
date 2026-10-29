@@ -550,3 +550,14 @@ def test_joint_photos_body_above_old_single_image_limit(web_client):
     photo='data:image/png;base64,'+base64.b64encode(b'\x89PNG\r\n\x1a\n'+b'x'*(3_000_000-8)).decode()
     response=web_client.post('/api/messages',json={'request_id':'web:large-batch','images':[photo,photo]},headers={'X-K90-Request':'1'})
     assert response.status_code==202
+
+
+def test_profiling_report_auth_fixed_path_and_origin(web_client, monkeypatch, tmp_path):
+    monkeypatch.setenv('DATA_DIR',str(tmp_path))
+    assert web_client.get('/api/diagnostics/timings').status_code==401
+    assert web_client.post('/api/login',json={'password':'test-password-long'},headers={'X-K90-Request':'1','Origin':'http://evil.test'}).status_code==403
+    login(web_client)
+    response=web_client.get('/api/diagnostics/timings?path=/private&limit=999999')
+    assert response.status_code==200 and response.json()['requests']==[]
+    assert response.headers['cache-control']=='no-store'
+    assert web_client.post('/api/diagnostics/timings').status_code==403
