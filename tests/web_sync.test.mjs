@@ -17,7 +17,7 @@ async function app({post, status}) {
   };
   let ids = 0;
   const context = vm.createContext({
-    ...render, createRequestId: () => `web:sync-${++ids}`,
+    ...render, trackSelectionGesture: () => () => false, createRequestId: () => `web:sync-${++ids}`,
     document: {querySelector: element, querySelectorAll: () => []},
     window: {addEventListener() {}}, location: {hash: ""}, setInterval() {},
     async fetch(path, options = {}) {

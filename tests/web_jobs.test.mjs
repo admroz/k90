@@ -1,3 +1,5 @@
+import * as chat from '../web/chat.mjs';
+import {chatBox} from './helpers/chat_dom.mjs';
 import test from "node:test";
 import assert from "node:assert/strict";
 test("app polls persistent timeline through state changes and reload without retries", async () => {
@@ -13,11 +15,11 @@ test("app polls persistent timeline through state changes and reload without ret
     {id:3,role:"user",channel:"telegram",content:{text:"later"}},
     ...Array.from({length:61}, (_, i) => ({id:i+4, role:'assistant', state:'done', content:{text:'archive-'+i}}))];
   const element = selector => {
-    if (!elements.has(selector)) elements.set(selector, {value: "", innerHTML: "", children: [], scrollTo() {}, setAttribute() {}, replaceChildren() {}});
+    if (!elements.has(selector)) elements.set(selector, selector === "#messages" ? chatBox() : {value: "", innerHTML: "", children: [], scrollTo() {}, setAttribute() {}, replaceChildren() {}});
     return elements.get(selector);
   };
   const context = vm.createContext({
-    ...render, createRequestId: () => "web:unused",
+    ...render, ...chat, createRequestId: () => "web:unused",
     document: {querySelector: element, querySelectorAll: () => []},
     window: {addEventListener() {}, get localStorage() {throw Error("must not read localStorage");}}, location: {hash: ""}, setInterval() {},
     fetch: async (path, options = {}) => {

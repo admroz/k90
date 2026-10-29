@@ -47,7 +47,7 @@ test("Chat sends over HTTP and retries the same message with the same ID", async
   const submissions = [];
   let generated = 0;
   vm.runInNewContext(source, {
-    ...render,
+    ...render, trackSelectionGesture: () => () => false,
     createRequestId() { generated++; return createRequestId(httpCrypto); },
     crypto: httpCrypto,
     isSecureContext: false,
