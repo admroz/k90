@@ -3,6 +3,7 @@
 import json
 from contextlib import closing
 from datetime import date, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 
 from tools.db import get_conn, get_data_dir
 from tools.patient import ALLOWED_FILES
@@ -125,6 +126,14 @@ def meals_for_day(day: date | None = None):
             (day.isoformat(),),
         )]
         energy = conn.execute("SELECT * FROM kalorie_dzienne WHERE data = ?", (day.isoformat(),)).fetchone()
+        resting_estimate = None
+        if day == today:
+            average = conn.execute(
+                "SELECT AVG(spoczynkowe_kcal) FROM kalorie_dzienne WHERE data >= ? AND data < ?",
+                ((today - timedelta(days=7)).isoformat(), today.isoformat()),
+            ).fetchone()[0]
+            if average is not None:
+                resting_estimate = int((Decimal(str(average)) / 100).quantize(Decimal('1'), rounding=ROUND_HALF_UP)) * 100
     totals, missing = {}, {}
     for field in ("kalorie", "bialko_g", "weglowodany_g", "tluszcze_g"):
         values = [row[field] for row in rows if row[field] is not None]
@@ -132,6 +141,8 @@ def meals_for_day(day: date | None = None):
         missing[field] = len(rows) - len(values)
     energy = dict(energy) if energy else {}
     resting, active = energy.get("spoczynkowe_kcal"), energy.get("aktywne_kcal")
+    if day == today:
+        resting = resting_estimate
     burned = resting + active if resting is not None and active is not None else None
     # A missing meal or expenditure value cannot turn into a reliable balance.
     balance = totals["kalorie"] - burned if rows and burned is not None and not missing["kalorie"] else None
@@ -140,6 +151,7 @@ def meals_for_day(day: date | None = None):
         "totals": totals, "missing_values": missing,
         "energy": {
             "resting_kcal": resting, "active_kcal": active, "burned_kcal": burned,
+            "resting_estimated": day == today and resting is not None,
             "balance_kcal": balance, "fetched_at": energy.get("pobrano_at"),
             "day_in_progress": day == today,
         },
