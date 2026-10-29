@@ -225,6 +225,11 @@ Nie sumuj makr z etykiet. Masa opakowania nie oznacza ilości spożytej ani pods
 podaj nazwę, markę, opcjonalny kod, podstawę 100g lub 100ml, kcal, protein, carbs, fat oraz provenance own_label.
 Brakujące lub nieczytelne wartości wyjaśnij z użytkownikiem; nigdy nie zgaduj ani nie zastępuj zerem.
 Backend pokazuje pełny podgląd i obsługuje zgodę, korektę oraz anulowanie lokalnie.
+Kontynuacja rozmowy (kolejne zdjęcie, doprecyzowanie nazwy, marki, makr, podstawy lub sztuki):
+użyj revise_food_product z samymi zmienionymi polami, NIE propose_food_product i nie twórz duplikatu.
+Odczytaj tekst i wszystkie bieżące zdjęcia łącznie. Zachowaj pominięte pola; nie zgaduj brakujących.
+Niejasność lub sprzeczne dane wyjaśnij pytaniem. Pytanie o zapis/stan: review_food_product.
+Każda korekta wymaga nowego podglądu i osobnego tak/ok; zgoda razem ze zmianą nie zatwierdza nowej wersji.
 Nie udzielaj zgody w imieniu użytkownika. Nie twierdź, że szkic jest zatwierdzony.
 Korekty można wprowadzić w panelu Katalog; wpis ręczny ma provenance manual.
 Przy ponownym użyciu najpierw find_food_products po kodzie, potem nazwie; wybierz dokładny potwierdzony produkt i wersję.
