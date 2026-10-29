@@ -1,5 +1,19 @@
 # k90 — bieżący status zadania
 
+## Catalog one-piece size — author verification complete, 2026-10-29
+
+Independent PR2 branch `feat/catalog-piece-size-20261029` from `511d2dd`;
+source `408e4c44745b73834b2f162d8aa5583b41dcfb2e`. Optional native `piece_size`,
+shared Decimal conversion for standalone portions and logical meals, additive
+immutable snapshots, independent edits/clear, local Polish proposal correction
+and panel support. No chat-selection dependency or SQL migration.
+Real RED11 → GREEN; final focused Python87 PASS, frontend29 PASS + JS syntax.
+Real synthetic Chromium main/error/retry/basis/clear PASS. One browser harness
+race corrected; original failed log retained. Independent review and exact-SHA
+fork CI/image/full suite remain coordinator gates; live LLM/production deferred.
+No PR, merge, deployment or image publication.
+[Evidence](review-evidence/catalog-piece-size.md).
+
 ## Joint product photos — author verification complete, 2026-10-28
 
 Point1 PR21 owner-merged at `db9c7fc`, now integrated into this feature branch.
