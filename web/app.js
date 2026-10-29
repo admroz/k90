@@ -22,6 +22,7 @@ const labels = {
   chat: "Rozmowa",
   data: "Dane",
   documents: "Dokumenty",
+  timings: "Diagnostyka / Czasy",
   catalog: "Katalog"
 };
 let currentView = "dashboard",
@@ -124,6 +125,10 @@ async function navigate(view) {
   if (view === "data") await loadTable();
   if (view === "documents") await loadDocument(currentDocument?.name || "pacjent.md");
   if (view === "catalog") await loadCatalog();
+  if (view === "timings") {
+    const { loadProfiling } = await import("./profiling.mjs");
+    await loadProfiling(api, $("#timings-content"));
+  }
 }
 async function loadDashboard() {
   const request = ++dashboardRequest;

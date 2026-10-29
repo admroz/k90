@@ -294,3 +294,20 @@ Migracja przy inicjalizacji dodaje quantity/unit oraz meal_changes; revision
 pochodzi z PR19. Audyt, tombstone i wyniki operacji wymagają zachowania całej bazy
 w backupie. Starszy writer po downgrade nie zapewni CAS/audytu: rollback wymaga
 zatrzymania writerów i zgodnego zestawu kodu/backup, bez ręcznego kasowania audytu.
+
+## Diagnostyka / Czasy
+
+Po zalogowaniu panel pokazuje ostatnie 50 żądań/zadań znalezionych w ograniczonym
+skanie `DATA_DIR/logs/profiling.jsonl` i rotacji `.1`–`.3`: UTC i czas lokalny
+przeglądarki, kolejkę, przetwarzanie, wywołania modelu, próby dostawy i tabelę etapów.
+Profilowanie włącza `K90_PROFILING_ENABLED=true`. Wyłączenie nie usuwa starszych
+pomiarów; stan wyłączenia/braku danych jest jawny. GET `/api/diagnostics/timings`
+wymaga tej samej sesji co pozostały panel i nie przyjmuje ścieżki pliku.
+
+Czasy inclusive nakładają się. Exclusive wymaga kompletnych, zgodnych przedziałów
+dzieci i odejmuje ich unię. Brak pomiaru jest pustą wartością, nie zerem.
+Niepełny/ograniczony odczyt ma ostrzeżenie. Dostawa nie oznacza odbioru odpowiedzi.
+Całość kolejka + przetwarzanie wymaga rozłącznych przedziałów tego samego zegara;
+obecne granice scope mogą uniemożliwić taki pomiar. Szczegóły ograniczeń i tani,
+opcjonalny adapter plików operatora `K90_PROFILE_LEGACY_FILES` opisuje
+[raport weryfikacji](docs/review-evidence/owner-profiling-report.md).

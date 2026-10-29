@@ -542,3 +542,14 @@ def test_jobs_contract_keeps_terminal_failures_and_active_work_without_mutation(
         assert [j['request_id'] for j in jobs] == [f'web:contract-{i}' for i in range(4)]
     with closing(get_conn()) as conn:
         assert [r[0] for r in conn.execute('SELECT state FROM chat_jobs ORDER BY seq')] == states
+
+
+def test_profiling_report_auth_fixed_path_and_origin(web_client, monkeypatch, tmp_path):
+    monkeypatch.setenv('DATA_DIR',str(tmp_path))
+    assert web_client.get('/api/diagnostics/timings').status_code==401
+    assert web_client.post('/api/login',json={'password':'test-password-long'},headers={'X-K90-Request':'1','Origin':'http://evil.test'}).status_code==403
+    login(web_client)
+    response=web_client.get('/api/diagnostics/timings?path=/private&limit=999999')
+    assert response.status_code==200 and response.json()['requests']==[]
+    assert response.headers['cache-control']=='no-store'
+    assert web_client.post('/api/diagnostics/timings').status_code==403
