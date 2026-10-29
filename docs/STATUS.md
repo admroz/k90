@@ -1,5 +1,24 @@
 # k90 — bieżący status zadania
 
+## Owner UI follow-up — implementation ready for independent review, 2026-10-29
+
+Branch `fix/dashboard-catalog-polish-20261029`, base `69c3443`, tested source
+`b2bb0fccc9744909e7c22933623b96e1a3290acd` (energy milestone `21770ef`).
+Previous-calendar-week resting estimate, newest-first meals, small accessible
+meal/catalog actions, closable catalog editor, explicit version/owner preview
+for legacy NULL-owner records, connected actual SVG points with real spacing and
+hover/keyboard/touch values, compact AI and verified weight/dynamic-sleep links.
+No new runtime library, schema migration or diagnostic/data-cleanup implementation.
+Final relevant Python146 PASS; frontend37 PASS + syntax; genuine FastAPI/SQLite
+Chromium desktop/touch acceptance PASS. Full suite first841 PASS/1 existing skip;
+exact-source repeat840 PASS/1 timing flake/1 skip in an unchanged profiling test.
+Read-only baseline-identical parser replay localizes that flake to its existing
+1ms UTC/monotonic queue tolerance; focused profiling17 PASS. No unrelated fix.
+Parent independent review/PR and CI/container/live checks remain pending.
+No PR, merge, image publication or deployment.
+[Evidence and limits](review-evidence/dashboard-catalog-polish.md).
+[Owner scope and deferred backlog](OWNER_UI_FOLLOWUP.md).
+
 ## Catalog one-piece size — author verification complete, 2026-10-29
 
 Independent PR2 branch `feat/catalog-piece-size-20261029` from `511d2dd`;

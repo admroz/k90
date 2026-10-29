@@ -12,6 +12,7 @@ Dopuszczalne osobne commity w jednym PR. Bez automatycznego merge lub wdrożenia
 - Wykresy: bez dodawania biblioteki. Łączyć dostępne punkty przez luki, zachować rzeczywisty odstęp czasu, nie dopisywać pomiarów. Wartość/data/jednostka po najechaniu; obsługa dotyku.
 - Omów: kompaktowa akcja AI. Obok link Garmin Connect do odpowiedniej kategorii/rekordu, jeśli istnieje. Zweryfikować URL; właściciel może je podać.
 - Katalog: zbadać i naprawić `owner or version mismatch; preview required` przy edycji rozmiaru sztuki bez obchodzenia kontroli wersji/właściciela. Formularz zamykalny również po błędzie. Zwarta lista i małe ikony akcji.
+- Potwierdzone przez właściciela adresy Garmin: `https://connect.garmin.com/app/weight` i `https://connect.garmin.com/app/sleep/2026-10-29`; dzień snu ma być dynamiczny, według pokazywanych danych. Pozostałe kategorie tylko po weryfikacji w źródłach pierwotnych lub istniejącym kodzie; nie zgadywać nieudokumentowanych ścieżek. Brak zweryfikowanego linku pokazać jawnie.
 
 ## Osobny temat / PR: diagnostyka — niski priorytet
 
