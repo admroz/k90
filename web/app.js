@@ -1,7 +1,6 @@
 "use strict";
 import {
   escapeHTML,
-  renderTimeline,
   number,
   markdown,
   chart,
@@ -12,6 +11,7 @@ import {
   energyBalance,
   activityList
 } from "./render.mjs";
+import { reconcileMessages, trackSelectionGesture, hasMessageSelection } from "./chat.mjs";
 import { createRequestId } from "./request.mjs";
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -345,6 +345,7 @@ mealForm.onsubmit = async event => {
     focus?.focus();
   } finally { mealSaveBusy = false; buttons.forEach(button => button.disabled = false); }
 };
+const selectingMessages = trackSelectionGesture($("#messages"));
 async function loadChat(before = null) {
   const messages = await api(`/api/messages${before?`?before=${before}`:""}`);
   if (!session) return;
@@ -367,13 +368,11 @@ async function loadChat(before = null) {
   const anchorTop = anchor?.getBoundingClientRect().top;
   messages.forEach(m => history.set(m.id, m));
   const sorted = [...history.values()].sort((a, b) => a.id - b.id);
-  const html = renderTimeline(sorted, session.timezone);
-  if (box.innerHTML !== html) {
-    const oldHeight = box.scrollHeight;
-    box.innerHTML = html;
+  const oldHeight = box.scrollHeight;
+  const preserveSelection = selectingMessages() || hasMessageSelection(box);
+  if (reconcileMessages(box, sorted, session.timezone) && !preserveSelection) {
     const restoredAnchor = anchorId && [...box.children].find(node => node.dataset.messageId === anchorId);
-    // Replacing the list can reset/clamp its scroll offset. Restore within this
-    // layout turn: CSS smooth scrolling would paint the wrong history first.
+    // Restore the reading anchor or follow the bottom within this layout turn.
     const top = !before && atBottom ? box.scrollHeight : restoredAnchor
       ? box.scrollTop + restoredAnchor.getBoundingClientRect().top - anchorTop
       : before ? oldTop + box.scrollHeight - oldHeight : oldTop;

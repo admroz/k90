@@ -28,7 +28,7 @@ async function app(mealsHandler) {
     return elements.get(selector);
   }
   const context = vm.createContext({
-    ...render,
+    ...render, trackSelectionGesture: () => () => false,
     document: {querySelector: element, querySelectorAll: () => []},
     window: {addEventListener() {}}, location: {hash: ""}, setInterval() {},
     async fetch(path) {

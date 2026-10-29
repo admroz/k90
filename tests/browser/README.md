@@ -23,3 +23,22 @@ reading-anchor tolerance accommodates browser scroll rounding.
 JSON frame measurements and screenshots go to `K90_SCROLL_EVIDENCE` when set.
 Exit failure is a test failure; missing browser/dependency is never a skip.
 No application backend, model, authentication store or production data is used.
+
+Selection regression
+
+`chat_selection.cjs` serves the shipped frontend over loopback HTTP with synthetic
+API responses and drives an existing Chromium installation using Playwright Core.
+It does not install browsers or packages, use the application database, or call a model.
+
+Set `PLAYWRIGHT_CORE` to the installed package's absolute path, `CHROMIUM_PATH`
+to the existing browser executable, and `BROWSER_EVIDENCE` to an external evidence
+directory. Run `node tests/browser/chat_selection.cjs` from the repository root
+inside your normal offline test guard with a synthetic HOME and short scratch TMPDIR.
+The harness blocks external page requests and limits browser DNS to loopback;
+use the enclosing network guard for the Node process too.
+
+The regression uses native mouse selection and normal application polling. It
+asserts selected text and text-node identity across unchanged polls, append and
+unrelated status/error updates, then checks active-gesture scrolling, idle bottom
+follow, reading position, reload, history prepend and old-page status refresh.
+Screenshots and observations are written outside the repository.
