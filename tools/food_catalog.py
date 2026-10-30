@@ -207,6 +207,12 @@ def propose_from_chat(product):
             raise ValueError('own_label requires current submitted photo')
     import hashlib
     key = ('event:' + str(event_id) + ':' + hashlib.sha256(json.dumps(_validated(product), sort_keys=True).encode()).hexdigest()[:32]) if event_id else None
+    from .product_review import _context_products, _closed_context
+    with get_conn() as conn:
+        replay = conn.execute('SELECT 1 FROM food_draft_requests WHERE request_id=?', (key,)).fetchone()
+        if turn and not replay and any(p['status'] == 'draft' and not _closed_context(conn, turn, p['id'])
+                                      for p in _context_products(conn, turn)):
+            raise ValueError('Istnieje bieżący szkic: użyj revise_food_product z samymi zmienionymi polami lub wyjaśnij cel.')
     draft = propose(product, source_event_id=event_id, request_id=key, owner=turn.get('owner'))
     from .product_review import queue_preview
     queue_preview(draft)
@@ -225,6 +231,11 @@ Nie sumuj makr z etykiet. Masa opakowania nie oznacza ilości spożytej ani pods
 podaj nazwę, markę, opcjonalny kod, podstawę 100g lub 100ml, kcal, protein, carbs, fat oraz provenance own_label.
 Brakujące lub nieczytelne wartości wyjaśnij z użytkownikiem; nigdy nie zgaduj ani nie zastępuj zerem.
 Backend pokazuje pełny podgląd i obsługuje zgodę, korektę oraz anulowanie lokalnie.
+Kontynuacja rozmowy (kolejne zdjęcie, doprecyzowanie nazwy, marki, makr, podstawy lub sztuki):
+użyj revise_food_product z samymi zmienionymi polami, NIE propose_food_product i nie twórz duplikatu.
+Odczytaj tekst i wszystkie bieżące zdjęcia łącznie. Zachowaj pominięte pola; nie zgaduj brakujących.
+Niejasność lub sprzeczne dane wyjaśnij pytaniem. Pytanie o zapis/stan: review_food_product.
+Każda korekta wymaga nowego podglądu i osobnego tak/ok; zgoda razem ze zmianą nie zatwierdza nowej wersji.
 Nie udzielaj zgody w imieniu użytkownika. Nie twierdź, że szkic jest zatwierdzony.
 Korekty można wprowadzić w panelu Katalog; wpis ręczny ma provenance manual.
 Przy ponownym użyciu najpierw find_food_products po kodzie, potem nazwie; wybierz dokładny potwierdzony produkt i wersję.
@@ -284,6 +295,27 @@ def search(query="", barcode=None):
             # instr is literal: wildcard characters never broaden a query.
             rows = conn.execute("SELECT * FROM food_products WHERE instr(catalog_fold(json_extract(payload,'$.name') || ' ' || json_extract(payload,'$.brand')),catalog_fold(?))>0 ORDER BY id DESC LIMIT 30", (query,)).fetchall()
         return [_record(row) for row in rows]
+
+
+def panel_preview(product_id, version, *, owner=None):
+    """Explicit current-version preview, including legacy unowned panel products.
+
+    Like /produkt pokaz, only the configured owner may bind an unowned record.
+    Listing/getting, revising and confirming never implicitly claim ownership.
+    """
+    from .product_review import owner as configured_owner
+    owner = configured_owner() if owner is None else owner
+    _version(version)
+    with get_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        row = conn.execute('SELECT * FROM food_products WHERE id=?', (product_id,)).fetchone()
+        if (owner != configured_owner() or row is None or row['version'] != version
+                or row['owner'] not in (None, owner)):
+            raise ValueError('owner or version mismatch; preview required')
+        if row['owner'] is None:
+            conn.execute('UPDATE food_products SET owner=? WHERE id=? AND version=? AND owner IS NULL',
+                         (owner, product_id, version))
+        return _record(row)
 
 
 def _revise(conn, old, version, data, owner):

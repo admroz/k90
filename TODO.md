@@ -57,12 +57,24 @@ Ten plik jest jedyną utrzymywaną listą zadań projektu: priorytety, backlog, 
 - [x] Podstawowe logowanie hasłem, sesje, kontrola źródła żądań, limity i nagłówki
   bezpieczeństwa są zaimplementowane; panel jest przeznaczony do dostępu prywatnego.
   Nie jest to deklaracja pełnego audytu bezpieczeństwa ani konfiguracji serwera.
-- [ ] Dodać formularze edycji posiłków i dokumentów (obecnie podgląd; zapis przez agenta).
+- [x] Formularz edycji/usuwania posiłków bez LLM, z kontrolą rewizji; poprawki
+  ikon/sortowania w gałęzi `fix/dashboard-catalog-polish-20261029`, przed przeglądem/PR.
+- [ ] Dodać formularze edycji dokumentów (obecnie podgląd; zapis przez agenta).
 - [ ] Dodać podgląd pamięci ze źródłami, korektami i możliwością usunięcia.
 - [ ] Rozważyć dodatkowe narzędzie administracyjne bazy tylko jeśli istniejący
   odczyt tabel w WWW i komendy nie wystarczą; bez domyślnego dostępu do dowolnego SQL.
 
 ## Later
+
+- [ ] Diagnostyka konkretnego requestu — niski priorytet, osobny temat/PR.
+  Czas/waterfall etapów oraz tokeny wejście/wyjście/cache, jeśli dostawca je
+  raportuje; brak pomiaru nie może udawać zera. Opcjonalne dyskretne rozwijane
+  szczegóły przy odpowiedzi w rozmowie. Bez rozbudowy frameworka.
+  Uzgodnienia: [OWNER_UI_FOLLOWUP.md](docs/OWNER_UI_FOLLOWUP.md).
+- [ ] Porządki w `data` — osobny temat po inwentaryzacji zależności i weryfikacji
+  produkcyjnej migracji SQLite. Bez hurtowego usuwania plików; źródłem prawdy
+  dokumentów i rewizji jest SQLite, `system_prompt.md` nadal override plikowy.
+  Archiwizacja po weryfikacji, eksport bieżących dokumentów z SQLite.
 
 - [ ] Dodać bezpieczny wgląd w bazę na produkcji.
   Minimum: `bash` i `sqlite3` w kontenerze lub równoważna ścieżka diagnostyczna.

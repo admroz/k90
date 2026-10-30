@@ -93,7 +93,7 @@ def begin_turn(owner,user_content):
     with closing(get_conn()) as conn,conn:
         initialize(conn)
         event_id=_event(conn,owner,request_id,'user','incoming',user_content,index=True)
-    return {'owner':owner,'request_id':request_id,'user_event_id':event_id,'source_id':'event:'+str(event_id)}
+    return {'channel':context.get('channel') or '', 'owner':owner,'request_id':request_id,'user_event_id':event_id,'source_id':'event:'+str(event_id)}
 
 
 def record_pair(conn,owner,user_content,assistant_content,*,user_conversation_id=None,assistant_conversation_id=None):

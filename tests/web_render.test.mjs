@@ -62,7 +62,7 @@ test("One point and constant measurements have finite coordinates", () => {
   }
 });
 
-test("Long gaps split the line instead of interpolating absent days", () => {
+test("Long gaps connect only actual points without adding absent days", () => {
   const rendered = chart([{
     data: "2026-09-20",
     value: 80
@@ -71,8 +71,8 @@ test("Long gaps split the line instead of interpolating absent days", () => {
     value: 82
   }], "value");
   const path = rendered.match(/<path d="([^"]+)"/)[1];
-  assert.equal((path.match(/M/g) || []).length, 2);
-  assert.ok(!path.includes("L"));
+  assert.equal((path.match(/M/g) || []).length, 1);
+  assert.equal((path.match(/L/g) || []).length, 1);
 });
 
 test("SQLite UTC timestamps and explicit timezone offsets display consistently", () => {

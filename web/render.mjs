@@ -25,15 +25,29 @@ export function energyBalance(data) {
   if (energy.burned_kcal == null) note = "Brak kompletnych danych Garmin o spalaniu dla tego dnia.";
   else if (!data.meals.length) note = "Zapisz posiłki, aby obliczyć bilans dnia.";
   else if (data.missing_values.kalorie) note = "Bilans niedostępny: część posiłków nie ma podanych kalorii.";
-  return `<dl class="energy-breakdown"><div><dt>Zapisane kalorie</dt><dd>${number(data.totals?.kalorie, 0)}${data.missing_values.kalorie ? " *" : ""} kcal</dd></div><div><dt>Spoczynkowe</dt><dd>${number(energy.resting_kcal, 0)} kcal</dd></div><div><dt>Aktywne</dt><dd>${number(energy.active_kcal, 0)} kcal</dd></div><div><dt>Spalone łącznie</dt><dd>${number(energy.burned_kcal, 0)} kcal</dd></div></dl><div class="energy-result"><span>Bilans dnia</span><strong>${signed} <small>kcal</small></strong></div><p class="subtle">${note}</p><p class="subtle">Spalanie jest estymacją Garmin.${energy.day_in_progress ? " Dzień jeszcze trwa; wartości mogą się zmienić." : ""}${energy.fetched_at ? ` Odczyt: ${escapeHTML(formatTimestamp(energy.fetched_at))}.` : ""}</p>`;
+  return `<dl class="energy-breakdown"><div><dt>Zapisane kalorie</dt><dd>${number(data.totals?.kalorie, 0)}${data.missing_values.kalorie ? " *" : ""} kcal</dd></div><div><dt>Spoczynkowe</dt><dd>${energy.resting_estimated && energy.resting_kcal != null ? '~' : ''}${number(energy.resting_kcal, 0)} kcal</dd></div><div><dt>Aktywne</dt><dd>${number(energy.active_kcal, 0)} kcal</dd></div><div><dt>Spalone łącznie</dt><dd>${number(energy.burned_kcal, 0)} kcal</dd></div></dl><div class="energy-result"><span>Bilans dnia</span><strong>${signed} <small>kcal</small></strong></div><p class="subtle">${note}</p><p class="subtle">Spalanie jest estymacją Garmin.${energy.day_in_progress ? " Dzień jeszcze trwa; wartości mogą się zmienić." : ""}${energy.fetched_at ? ` Odczyt: ${escapeHTML(formatTimestamp(energy.fetched_at))}.` : ""}</p>`;
 }
 
 export function activityList(rows) {
   return rows.slice(-20).reverse().map(row => `<div class="meal-row"><div class="meal-description"><strong>${escapeHTML(row.nazwa || row.typ || "Aktywność")}</strong><small>${escapeHTML(row.data)} · ${escapeHTML(row.czas || "")}</small><p class="meal-macros">${number(row.czas_trwania_min, 0)} min · ${number(row.dystans_km, 1)} km</p></div><span>${number(row.kalorie, 0)} kcal</span></div>`).join("") || '<div class="empty">Brak aktywności w wybranym okresie.</div>';
 }
 
+export function icon(name) {
+  const paths = {
+    edit: '<path d="m15 4 5 5M4 20l4-1L20 7a2 2 0 0 0-5-3L3 16l-1 5z"/>',
+    delete: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
+    ai: '<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/>',
+    external: '<path d="M14 3h7v7M21 3 10 14M10 3H3v18h18v-7"/>',
+    close: '<path d="m6 6 12 12M18 6 6 18"/>',
+    confirm: '<path d="m4 12 5 5L20 6"/>',
+    portion: '<path d="M4 12h16M12 4v16"/>',
+    label: '<path d="M5 3h14v18H5zM8 7h8M8 11h8M8 15h5"/>'
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ''}</svg>`;
+}
+
 export function mealList(meals) {
-  return meals.map(meal => `<div class="meal-row"><div class="meal-description"><strong>${escapeHTML(meal.opis || "Posiłek")}</strong><small>${escapeHTML(meal.czas || "Godzina niepodana")}${meal.quantity == null ? "" : ` · ${number(meal.quantity, 2)} ${escapeHTML(meal.unit)}`}</small><p class="meal-macros">Białko ${number(meal.bialko_g, 1)} g · Węglowodany ${number(meal.weglowodany_g, 1)} g · Tłuszcz ${number(meal.tluszcze_g, 1)} g</p></div><span>${number(meal.kalorie, 1)} kcal</span><div class="meal-actions"><button type="button" data-meal-edit="${Number(meal.id)}">Edytuj</button><button type="button" data-meal-delete="${Number(meal.id)}">Usuń</button></div></div>`).join("") || '<div class="empty">Brak zapisanych posiłków w tym dniu.</div>';
+  return meals.map(meal => `<div class="meal-row"><div class="meal-description"><strong>${escapeHTML(meal.opis || "Posiłek")}</strong><small>${escapeHTML(meal.czas || "Godzina niepodana")}${meal.quantity == null ? "" : ` · ${number(meal.quantity, 2)} ${escapeHTML(meal.unit)}`}</small><p class="meal-macros">Białko ${number(meal.bialko_g, 1)} g · Węglowodany ${number(meal.weglowodany_g, 1)} g · Tłuszcz ${number(meal.tluszcze_g, 1)} g</p></div><span>${number(meal.kalorie, 1)} kcal</span><div class="meal-actions"><button type="button" class="icon-button" data-meal-edit="${Number(meal.id)}" aria-label="Edytuj posiłek: ${escapeHTML(meal.opis || 'Posiłek')}" title="Edytuj">${icon('edit')}</button><button type="button" class="icon-button" data-meal-delete="${Number(meal.id)}" aria-label="Usuń posiłek: ${escapeHTML(meal.opis || 'Posiłek')}" title="Usuń">${icon('delete')}</button></div></div>`).join("") || '<div class="empty">Brak zapisanych posiłków w tym dniu.</div>';
 }
 
 export function mealDayLabel(day, today) {
@@ -118,10 +132,20 @@ export function formatTimestamp(value, timezone = "Europe/Warsaw") {
   });
 }
 
-export function chart(rows, key, color = "#9fc7a3", maxGapHours = 48) {
+export function chartActions(title, key, day) {
+  const discuss = `Omów z AI: ${title}`;
+  // Only owner-confirmed category paths. Never guess Garmin's private SPA routes.
+  let url = key === 'waga_kg' ? 'https://connect.garmin.com/app/weight' : null;
+  if (key === 'hours' && /^\d{4}-\d{2}-\d{2}$/.test(day || '')) url = `https://connect.garmin.com/app/sleep/${day}`;
+  const garmin = `Garmin Connect: ${title}`;
+  const unavailable = `Brak zweryfikowanego linku Garmin Connect: ${title}`;
+  return `<div class="chart-actions"><button type="button" class="icon-button discuss" data-topic="${escapeHTML(title)}" aria-label="${escapeHTML(discuss)}" title="${escapeHTML(discuss)}">${icon('ai')}</button>${url ? `<a class="icon-button" href="${url}" target="_blank" rel="noopener noreferrer" aria-label="${escapeHTML(garmin)}" title="${escapeHTML(garmin)}">${icon('external')}</a>` : ['glukoza','skurczowe','rozkurczowe'].includes(key) ? '' : `<span class="icon-button unavailable" tabindex="0" role="img" aria-label="${escapeHTML(unavailable)}" title="${escapeHTML(unavailable)}">G<span aria-hidden="true">—</span></span>`}</div>`;
+}
+
+export function chart(rows, key, color = "#9fc7a3", unit = "") {
   const points = rows.filter(r => r[key] != null && r[key] !== "" && Number.isFinite(Number(r[key])))
     .map(r => ({
-      x: Date.parse(r.data.length === 10 ? r.data + "T12:00:00" : r.data),
+      x: Date.parse(r.data.length === 10 ? r.data + "T12:00:00Z" : /Z$|[+-]\d{2}:?\d{2}$/.test(r.data) ? r.data : r.data + 'Z'),
       y: Number(r[key]),
       date: r.data
     }))
@@ -141,8 +165,7 @@ export function chart(rows, key, color = "#9fc7a3", maxGapHours = 48) {
   const ypos = p => 12 + (high - p.y) / (high - low) * (h - 38);
   let path = "";
   points.forEach((p, i) => {
-    const gap = i && p.x - points[i - 1].x > maxGapHours * 3600000;
-    path += `${i && !gap ? "L" : "M"}${xpos(p).toFixed(1)},${ypos(p).toFixed(1)} `;
+    path += `${i ? "L" : "M"}${xpos(p).toFixed(1)},${ypos(p).toFixed(1)} `;
   });
   const safeColor = /^#[0-9a-f]{6}$/i.test(color) ? color : "#9fc7a3";
   const grid = [low, (low + high) / 2, high].map(y => {
@@ -151,8 +174,11 @@ export function chart(rows, key, color = "#9fc7a3", maxGapHours = 48) {
     });
     return `<line x1="${pad}" y1="${py}" x2="${w-10}" y2="${py}" stroke="var(--line)"/><text x="0" y="${py+3}">${number(y,1)}</text>`;
   }).join("");
-  const dots = points.length < 100 ? points.map(p => `<circle cx="${xpos(p)}" cy="${ypos(p)}" r="2.8" fill="${safeColor}"><title>${escapeHTML(p.date)}: ${number(p.y,1)}</title></circle>`).join("") : "";
-  return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Wykres: ${points.length} pomiarów, od ${number(min,1)} do ${number(max,1)}">${grid}<path d="${path}" fill="none" stroke="${safeColor}" stroke-width="2.5" stroke-linejoin="round"/>${dots}<text x="${pad}" y="${h-1}">${escapeHTML(points[0].date.slice(5,10))}</text><text x="${w-10}" y="${h-1}" text-anchor="end">${escapeHTML(points.at(-1).date.slice(5,10))}</text></svg><p class="chart-summary">${points.length} pomiarów · zakres ${number(min,1)}–${number(max,1)}</p>`;
+  const dots = points.map(p => {
+    const label = escapeHTML(`${p.date}: ${number(p.y,1)}${unit ? ' ' + unit : ''}`);
+    return `<g class="chart-point" tabindex="0" role="button" aria-label="${label}" data-chart-label="${label}"><circle cx="${xpos(p)}" cy="${ypos(p)}" r="8" fill="transparent"/><circle cx="${xpos(p)}" cy="${ypos(p)}" r="2.8" fill="${safeColor}"/><title>${label}</title></g>`;
+  }).join('');
+  return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="group" aria-label="Wykres: ${points.length} pomiarów, od ${number(min,1)} do ${number(max,1)}">${grid}<path d="${path}" fill="none" stroke="${safeColor}" stroke-width="2.5" stroke-linejoin="round"/>${dots}<text x="${pad}" y="${h-1}">${escapeHTML(points[0].date.slice(5,10))}</text><text x="${w-10}" y="${h-1}" text-anchor="end">${escapeHTML(points.at(-1).date.slice(5,10))}</text></svg><output class="chart-tooltip" aria-live="polite"></output><p class="chart-summary">${points.length} pomiarów · zakres ${number(min,1)}–${number(max,1)}</p>`;
 }
 
 export function renderTimeline(rows, timezone) {

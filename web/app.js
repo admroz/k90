@@ -4,6 +4,7 @@ import {
   number,
   markdown,
   chart,
+  chartActions,
   formatTimestamp,
   mealSummary,
   mealList,
@@ -151,7 +152,7 @@ async function loadDashboard() {
   const configsCharts = [
     ["Masa ciała", "kg", d.waga, "waga_kg", "#9fc7a3"],
     ["Ciśnienie skurczowe", "mmHg", d.cisnienie, "skurczowe", "#d7a48b"],
-    ["Glukoza", "mg/dL · średnie godzinowe", d.glukoza, "glukoza", "#d3b974", 2]
+    ["Glukoza", "mg/dL · średnie godzinowe", d.glukoza, "glukoza", "#d3b974"]
   ];
   renderCharts("#charts", configsCharts, d);
   $("#sync-status").innerHTML = d.sync.map(r => {
@@ -161,7 +162,33 @@ async function loadDashboard() {
   }).join("") || '<div class="empty">Brak historii synchronizacji.</div>';
 }
 function renderCharts(target, configs, d) {
-  $(target).innerHTML = configs.map(([title, unit, rows, key, color, gap]) => `<section class="chart-card"><div class="chart-heading"><div><h2>${title}</h2><p>${unit}</p></div><button class="text-button discuss" data-topic="${title}">Omów ↗</button></div>${chart(rows,key,color,gap)}</section>`).join("");
+  $(target).innerHTML = configs.map(([title, unit, rows, key, color]) => `<section class="chart-card"><div class="chart-heading"><div><h2>${title}</h2><p>${unit}</p></div>${chartActions(title,key,rows.at(-1)?.data?.slice(0,10) || d.to)}</div>${chart(rows,key,color,unit)}</section>`).join("");
+  const showPoint = event => {
+    const point = event.target.closest('[data-chart-label]');
+    if (!point) return;
+    point.closest('.chart-card').querySelector('.chart-tooltip').textContent = point.dataset.chartLabel;
+  };
+  const hidePoint = event => {
+    if (event.pointerType === 'touch') return;
+    const point = event.target.closest('[data-chart-label]');
+    if (!point || point.contains(event.relatedTarget)) return;
+    point.closest('.chart-card').querySelector('.chart-tooltip').textContent = '';
+  };
+  $(target).onpointerover = showPoint;
+  $(target).onpointerdown = showPoint;
+  $(target).onpointerout = hidePoint;
+  if (!$(target).chartFocusBound) {
+    // focusin/out have no native onfocusin/out IDL properties in Chromium.
+    // Delegate once; render refreshes replace pointer handlers, not listeners.
+    $(target).addEventListener('focusin', event => $(target).onpointerover(event));
+    $(target).addEventListener('focusout', event => $(target).onpointerout(event));
+    $(target).chartFocusBound = true;
+  }
+  $(target).onkeydown = event => {
+    if (!event.target.closest('[data-chart-label]')) return;
+    if (event.key === 'Escape') hidePoint(event);
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); showPoint(event); }
+  };
   $$(`${target} .discuss`).forEach(b => b.onclick = async () => {
     try {
       await navigate("chat");

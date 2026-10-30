@@ -115,11 +115,17 @@ Docker sam nie restartuje kontenera tylko dlatego, że healthcheck jest unhealth
   synchronizacji. Posiłki domyślnie pokazują dzisiaj, z wyborem daty, przechodzeniem
   do poprzednich dni i sumami kalorii, białka, węglowodanów oraz tłuszczu.
   Wybór dnia jest niezależny od okresu wykresów; braki wartości odżywczych są oznaczone.
-  Przycisk „Omów” przygotowuje pytanie dla agenta.
+  Kompaktowa ikona AI („Omów”) przygotowuje pytanie dla agenta, bez wysyłania.
+  Posiłki są od najnowszych: data i godzina malejąco, bez godziny na końcu dnia,
+  remisy według id malejąco.
 - Bilans dnia: zapisane kalorie minus suma dziennych kalorii spoczynkowych i aktywnych
   Garmin (`bmrKilocalories` + `activeKilocalories`). To estymacja Garmin, bez stałej
   wartości BMR i bez ponownego dodawania kalorii treningów. Brak wartości nie jest
   zerem; bilans wymaga danych Garmin i kompletnych kalorii zapisanych posiłków.
+  Dla dzisiaj kalorie spoczynkowe w bilansie to średnia dostępnych pomiarów z 7
+  poprzednich dni kalendarzowych (bez dzisiaj), zaokrąglona do 100 kcal z prefiksem
+  `~`. Bez pomiarów pozostaje brak danych. Dni zakończone używają faktycznego
+  odczytu Garmin; nie zmieniamy surowych pomiarów ani nie dopisujemy punktów wykresu.
 - Regeneracja: sen, HRV, Body Battery, tętno spoczynkowe, stres i oddech.
 - Aktywność: treningi, dystans oraz dzienne kalorie aktywne i całkowite spalanie.
   Przycisk „Omów” przygotowuje pytanie; agent odczytuje dzienne spalanie przez
@@ -129,10 +135,15 @@ Docker sam nie restartuje kontenera tylko dlatego, że healthcheck jest unhealth
 - Dane: dozwolone tabele, wyszukiwanie, sortowanie i stronicowanie. Odczyt bez
   wykonywania dowolnego SQL; długie komórki są ograniczone do 4000 znaków.
 - Dokumenty: pięć dokumentów pacjenta i `patient_summary`, podgląd oraz źródło.
-  Edycja dokumentów i formularze edycji posiłków są poza v1.
+  Edycja dokumentów pozostaje poza v1. Ręczne korekty posiłków opisano niżej.
 
 Wykresy powstają bez LLM. Glukoza jest agregowana godzinowo, z preferowaniem
-odczytu `latest` przy duplikacie czasu. Brak pomiaru nie jest zerem. Widok czyta
+odczytu `latest` przy duplikacie czasu. SVG łączy dostępne punkty przez luki,
+zachowując rzeczywisty odstęp czasu, bez dodawania pomiarów. Najechanie, fokus
+klawiaturą lub dotyk pokazują datę, wartość i jednostkę. Linki Garmin są tylko
+dla potwierdzonych przez właściciela kategorii wagi i snu (dzień ostatniego
+pokazanego rekordu); `G—` oznacza brak zweryfikowanego linku innej kategorii.
+Brak pomiaru nie jest zerem. Widok czyta
 aktualną bazę po wejściu/odświeżeniu; synchronizacja źródeł jest osobną operacją
 (`/update` lub przycisk). Przycisk „Pobierz Garmin” korzysta z osobnego zadania
 w tej samej kolejce: nie wywołuje agenta, Libre ani podsumowania LLM. Stan pobierania
@@ -281,6 +292,12 @@ W aktywnym podglądzie propozycji można napisać „zmień masę sztuki na 90 g
 Korekta wymaga potem osobnego zatwierdzenia. Zmiana makr zachowuje rozmiar,
 a zmiana rozmiaru zachowuje makra. Przy zmianie podstawy trzeba jawnie podać
 nowy rozmiar lub wyczyścić pole. Błąd zapisu zachowuje wpisane wartości.
+Panel pokazuje zwartą listę z opisanymi ikonami. Edycja pobiera jawny podgląd
+konkretnej bieżącej wersji (`POST /api/catalog/{id}/preview`); tylko skonfigurowany
+właściciel może w ten sposób przypisać historyczny wpis bez właściciela.
+Samo listowanie, zapis i zatwierdzenie tego nie robią. Konflikt nadal wymaga
+odczytu aktualnej wersji. Formularz można zamknąć ikoną lub Escape również po
+błędzie; fokus wraca do akcji otwierającej.
 
 API produktu przechowuje opcjonalne `piece_size` w istniejącym JSON; przy PUT
 pominięcie pola zachowuje poprzednią wartość, a `null` ją usuwa. Nie ma migracji
@@ -293,7 +310,8 @@ historii ani starszych snapshotów.
 
 ### Ręczna korekta posiłków
 
-W widoku posiłków przyciski Edytuj/Usuń korygują cały wpis bez LLM.
+W widoku posiłków małe ikony Edytuj/Usuń (z dostępnymi etykietami) korygują cały
+wpis bez LLM. Usunięcie wymaga potwierdzenia.
 Ilość i jednostka g/ml/szt są opcjonalne i podawane razem; starsze dane pozostają
 null, bez zgadywania z opisu. Ilość nie przelicza makr. Puste makra oznaczają brak
 danych, zero pozostaje zerem. Formularz dopuszcza pojedynczy przecinek dziesiętny.

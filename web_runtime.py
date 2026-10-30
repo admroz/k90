@@ -252,7 +252,8 @@ def process_message(content):
         # run_agent captures the original and executes only the exact local
         # approval command, before sync/summary or any model work.
         return run_agent(content, user_id=user_id)[0]
-    interrupt(user_id)
+    if text.startswith('/'):
+        interrupt(user_id)
     if (
         text.strip().lower().split()[:1] == ["/update"]
         and os.getenv("K90_SYNC_ENABLED", "true") == "false"

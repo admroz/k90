@@ -1,15 +1,16 @@
-import { escapeHTML as e } from './render.mjs';
+import { escapeHTML as e, icon } from './render.mjs';
 import { createRequestId } from './request.mjs';
 
 export function catalogCard(p) {
   const verified = p.status === 'confirmed';
-  return `<article class="panel"><h3>${e(p.name)} · ${e(p.brand || '')}</h3>
+  const action = (name, label, glyph) => `<button type="button" class="icon-button" data-${name}="${p.id}" aria-label="${e(label)}" title="${e(label)}">${icon(glyph)}</button>`;
+  return `<article class="catalog-row"><div class="catalog-description"><h3>${e(p.name)}${p.brand ? ` · ${e(p.brand)}` : ''}</h3>
     <p>${e(p.basis)}: ${e(p.kcal)} kcal / B ${e(p.protein)} g / W ${e(p.carbs)} g / T ${e(p.fat)} g</p>
     <p>${p.piece_size != null ? `Jedna sztuka: ${e(p.piece_size)} ${p.basis === '100g' ? 'g' : 'ml'}` : 'Rozmiar sztuki: brak'}</p>
     <p>${e(p.barcode || 'Bez kodu')} · ${e(p.provenance)} · ${verified ? 'Potwierdzony' : 'Szkic do sprawdzenia'} · wersja ${e(p.version)}</p>
-    <button class="secondary" data-edit="${p.id}">Popraw</button>
-    ${p.source_event_id ? `<button class="secondary" data-label="${p.id}">Pokaż etykietę</button>` : ''}
-    ${verified ? `<button class="primary" data-portion="${p.id}">Zapisz porcję</button>` : `<button class="primary" data-confirm="${p.id}">Sprawdziłem wartości — zatwierdź wersję ${e(p.version)}</button>`}</article>`;
+    </div><div class="catalog-actions">${action('edit', `Edytuj produkt: ${p.name}`, 'edit')}
+    ${p.source_event_id ? action('label', `Pokaż etykietę: ${p.name}`, 'label') : ''}
+    ${verified ? action('portion', `Zapisz porcję: ${p.name}`, 'portion') : action('confirm', `Sprawdziłem wartości — zatwierdź wersję ${p.version}`, 'confirm')}</div></article>`;
 }
 
 export function setupCatalog(api, root, report) {
@@ -18,12 +19,22 @@ export function setupCatalog(api, root, report) {
   const editor = root.querySelector('#catalog-editor');
   const portion = root.querySelector('#catalog-portion');
   const field = name => editor.elements.namedItem(name);
+  let editTrigger = null;
+  function closeEditor() {
+    editor.hidden = true;
+    report(new Error(''));
+    (editTrigger?.isConnected ? editTrigger : root.querySelector('#catalog-new')).focus();
+  }
+  root.querySelector('#catalog-cancel').onclick = closeEditor;
+  editor.onkeydown = event => { if (event.key === 'Escape') { event.preventDefault(); closeEditor(); } };
   async function load() {
     const rows = await api(`/api/catalog?query=${encodeURIComponent(root.querySelector('#catalog-search').value)}`);
     products = new Map(rows.map(p => [String(p.id), p]));
     list.innerHTML = rows.map(catalogCard).join('') || '<p>Brak produktów. Dodaj własną etykietę w rozmowie lub wpisz wartości ręcznie.</p>';
   }
-  function edit(p = null) {
+  function edit(p = null, trigger = document.activeElement) {
+    editTrigger = trigger;
+    report(new Error(''));
     selected = p; sizeTouched = false;
     draftRequest = null;
     editor.reset();
@@ -61,7 +72,12 @@ export function setupCatalog(api, root, report) {
         method:selected ? 'PUT':'POST', body:JSON.stringify(selected ? {version:selected.version,product}:product)});
       editor.hidden = true;
       await load();
-    } catch (err) { report(err); } finally { button.disabled = false; }
+    } catch (err) { report(err); } finally {
+      button.disabled = false;
+      // Disabling a clicked submit moves focus to body in Chromium. Restore
+      // editor context after errors so Escape and keyboard correction still work.
+      if (!editor.hidden && document.activeElement === document.body) button.focus();
+    }
   };
   list.onclick = async event => {
     const button = event.target.closest('button');
@@ -71,7 +87,10 @@ export function setupCatalog(api, root, report) {
     if (!p) return;
     button.disabled = true;
     try {
-      if (action === 'edit') edit(p);
+      if (action === 'edit') {
+        const preview = await api(`/api/catalog/${p.id}/preview`, {method:'POST',body:JSON.stringify({version:p.version})});
+        edit(preview, button);
+      }
       if (action === 'confirm') {
         await api(`/api/catalog/${p.id}/confirm`, {method:'POST',body:JSON.stringify({version:p.version})});
         await load();

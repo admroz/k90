@@ -12,6 +12,7 @@ from .libre import sync_libre_data
 from .patient import read_patient_file, update_patient_file
 from .food_catalog import propose_from_chat, search as find_food_products
 from .food_off import lookup as lookup_food_barcode
+from .product_review import revise_from_chat, review_from_chat
 
 
 def _refresh_patient_summary() -> dict:
@@ -22,6 +23,8 @@ def _refresh_patient_summary() -> dict:
 
 # Mapa nazwa → funkcja
 _REGISTRY = {
+    "revise_food_product": revise_from_chat,
+    "review_food_product": review_from_chat,
     "lookup_food_barcode": lookup_food_barcode,
     "propose_food_product": propose_from_chat,
     "find_food_products": find_food_products,
@@ -310,6 +313,13 @@ TOOLS = [
 
 
 for _name, _description, _properties, _required in [
+    ('review_food_product', 'Odczytaj rzeczywisty stan bieżącego produktu i pokaż aktualny szkic do kontroli. Nigdy nie zatwierdza.', {}, []),
+    ('revise_food_product', 'Uzupełnij lub popraw TEN SAM bieżący szkic. Podaj tylko zmieniane pola z tekstu i wszystkich zdjęć; pominięte zachowaj. Nie zatwierdza.',
+     {'changes': {'type':'object', 'properties': {
+         **{k:{'type':'string'} for k in ('name','brand','basis')},
+         'barcode':{'type':['string','null']},
+         **{k:{'type':'number'} for k in ('kcal','protein','carbs','fat')},
+         'piece_size':{'type':['number','null']}}, 'additionalProperties':False}}, ['changes']),
     ('lookup_food_barcode', 'Lokalnie najpierw, OFF zapasowo. Zewnętrzny wynik zawsze niepotwierdzony; nie importuj jako etykiety.',
      {'barcode':{'type':'string'}}, ['barcode']),
     ('propose_food_product', 'Zapisz wyłącznie szkic etykiety do jawnej kontroli użytkownika.',
