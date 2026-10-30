@@ -67,7 +67,16 @@ def test_wrong_owner_multiple_stale_and_topic(temp_db, monkeypatch):
     agent.run_agent('Jak spałem?','owner')
     assert 'zatwierdzony' not in agent.run_agent('tak','owner')[0]
     data = label(); data['barcode'] = None
-    preview(data=data)
+    # Independent panel-created draft supplies a genuinely ambiguous context.
+    turn = memory_runtime.begin_turn('owner', 'Synthetic second panel draft')
+    token = memory_runtime.TURN_CONTEXT.set(turn)
+    try:
+        second = catalog.propose(data)
+        from tools.product_review import queue_preview
+        queue_preview(second)
+        agent.save_history('owner', 'Synthetic second panel draft', 'preview')
+    finally:
+        memory_runtime.TURN_CONTEXT.reset(token)
     assert 'zatwierdzony' not in agent.run_agent('zatwierdzam','owner')[0]
     assert catalog.get(p['id'])['status'] == 'draft'
 
@@ -218,7 +227,11 @@ def test_text_correction_needs_new_consent(temp_db):
 
 def test_committed_approval_survives_failed_response_and_recovery(temp_db, monkeypatch):
     from tools.db import MESSAGE_CONTEXT
-    p = preview()
+    context = MESSAGE_CONTEXT.set({'channel':'web'})
+    try:
+        p = preview()
+    finally:
+        MESSAGE_CONTEXT.reset(context)
     web_runtime.init_runtime()
     web_runtime.enqueue('synthetic-committed', 'zatwierdzam')
     original = agent.save_history
@@ -235,7 +248,7 @@ def test_committed_approval_survives_failed_response_and_recovery(temp_db, monke
     with get_conn() as c:
         assert 'zatwierdzony' in c.execute("SELECT response FROM chat_jobs WHERE request_id='synthetic-committed'").fetchone()[0]
     monkeypatch.setattr(agent,'save_history',original)
-    token = MESSAGE_CONTEXT.set({'request_id':'synthetic-committed','user_id':'owner'})
+    token = MESSAGE_CONTEXT.set({'request_id':'synthetic-committed','user_id':'owner','channel':'web'})
     try: assert 'zatwierdzony' in agent.run_agent('zatwierdzam','owner')[0]
     finally: MESSAGE_CONTEXT.reset(token)
     assert catalog.get(p['id'])['version'] == 2

@@ -169,7 +169,7 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
     finally:
         from tools.product_review import intent, interrupt
         if not turn.get('catalog_handled') and intent(user_message) is None:
-            interrupt(user_id)
+            interrupt(user_id, turn.get('channel',''))
         memory_runtime.TURN_CONTEXT.reset(token)
 
 

@@ -115,3 +115,120 @@ def test_postwrite_provider_failure_is_catalog_specific_and_recoverable(conversa
     with get_conn() as c:
         assert c.execute('SELECT count(*) FROM food_products').fetchone()[0]==1
         assert c.execute('SELECT count(*) FROM food_product_versions').fetchone()[0]==(3 if revision else 2)
+
+@pytest.mark.parametrize('channel',['web','telegram'])
+def test_clarification_keeps_revision_target(conversation,channel):
+    send,pending,_=conversation
+    pending.extend([('propose_food_product',{'product':dict(label(),barcode=None,piece_size=125)}),'draft'])
+    send('Zachowaj etykietę',channel=channel)
+    pending.append('Czy chodzi o masę jednej sztuki?')
+    send('Chcę doprecyzować rozmiar',channel=channel)
+    assert 'zatwierdzony' not in send('tak',channel=channel)['response']
+    pending.extend([('revise_food_product',{'changes':{'piece_size':150}}),'updated'])
+    assert 'Czy zatwierdzasz' in send('Jedna sztuka waży 150 g',channel=channel)['response']
+    assert catalog.get(1)['piece_size']==150 and catalog.get(1)['version']==2
+    assert 'zatwierdzony' in send('ok',channel=channel)['response']
+
+
+def test_accidental_proposal_cannot_duplicate_current_draft(conversation):
+    send,pending,_=conversation
+    data=dict(label(),barcode=None)
+    pending.extend([('propose_food_product',{'product':data}),'draft'])
+    send('Zachowaj etykietę')
+    pending.extend([('propose_food_product',{'product':dict(data,protein=19)}),'clarify'])
+    send('Doprecyzuję białko: 19')
+    with get_conn() as c:
+        assert c.execute('SELECT count(*) FROM food_products').fetchone()[0]==1
+    assert catalog.get(1)['protein']==float(data['protein'])
+
+
+def test_other_transport_cannot_select_or_confirm_draft(conversation):
+    send,pending,_=conversation
+    pending.extend([('propose_food_product',{'product':dict(label(),barcode=None)}),'draft'])
+    send('Zachowaj etykietę',channel='web')
+    assert 'Czy zatwierdzasz' not in send('Zapisałeś?',channel='telegram')['response']
+    assert 'zatwierdzony' not in send('tak',channel='telegram')['response']
+    assert catalog.get(1)['status']=='draft'
+    assert 'zatwierdzony' in send('ok',channel='web')['response']
+
+
+@pytest.mark.parametrize('revision',[False,True])
+def test_recovered_old_write_reports_current_confirmed_state(conversation,revision):
+    import web_runtime
+    send,pending,_=conversation
+    pending.extend([('propose_food_product',{'product':dict(label(),barcode=None)}),
+                    'draft' if revision else RuntimeError('synthetic failure')])
+    failed=send('Zachowaj etykietę')
+    if revision:
+        pending.extend([('revise_food_product',{'changes':{'protein':19}}),RuntimeError('synthetic failure')])
+        failed=send('Doprecyzuję białko')
+    send('Zapisałeś?')
+    assert 'zatwierdzony' in send('ok')['response']
+    with get_conn() as c:
+        c.execute("UPDATE chat_jobs SET state='running',response=NULL WHERE request_id=?",(failed['request_id'],))
+    web_runtime.recover_interrupted()
+    with get_conn() as c:
+        response=c.execute('SELECT response FROM chat_jobs WHERE request_id=?',(failed['request_id'],)).fetchone()[0]
+        assert 'zatwierdzony' in response and 'nie jest zatwierdzony' not in response
+
+@pytest.mark.parametrize('guard',['owner','version','expired','ambiguous','transport'])
+def test_model_revision_cannot_bypass_context_guards(conversation,guard):
+    send,pending,_=conversation
+    pending.extend([('propose_food_product',{'product':dict(label(),barcode=None)}),'draft'])
+    send('Zachowaj etykietę')
+    with get_conn() as c:
+        if guard=='owner': c.execute("UPDATE food_products SET owner='other'")
+        elif guard=='version': c.execute('UPDATE food_products SET version=version+1')
+        elif guard=='expired': c.execute("UPDATE food_product_reviews SET created_at=datetime('now','-31 minutes')")
+        elif guard=='ambiguous':
+            other=catalog.propose(dict(label(),barcode=None))
+            c.execute("INSERT INTO food_product_reviews(owner,product_id,version,review_event_id,channel) VALUES ('owner',?,1,999,'web')",(other['id'],))
+    before=catalog.get(1)
+    pending.extend([('revise_food_product',{'changes':{'protein':19}}),'clarification needed'])
+    send('Doprecyzuję białko',channel='telegram' if guard=='transport' else 'web')
+    assert catalog.get(1)==before
+    with get_conn() as c:
+        assert c.execute('SELECT count(*) FROM food_product_approvals').fetchone()[0]==0
+
+
+def test_local_correction_after_clarification_preserves_target(conversation):
+    send,pending,_=conversation
+    pending.extend([('propose_food_product',{'product':dict(label(),barcode=None)}),'draft'])
+    send('Zachowaj etykietę')
+    pending.append('Które pole poprawić?')
+    send('Chcę poprawić dane')
+    assert 'Czy zatwierdzasz' in send('popraw białko na 19')['response']
+    assert catalog.get(1)['protein']==19 and catalog.get(1)['status']=='draft'
+
+
+@pytest.mark.parametrize('text',['zmień masę sztuki na 90','zmień masę sztuki na NaN g'])
+def test_unclear_piece_correction_asks_without_losing_draft(conversation,text):
+    send,pending,_=conversation
+    pending.extend([('propose_food_product',{'product':dict(label(),barcode=None,piece_size=50)}),'draft'])
+    send('Zachowaj etykietę')
+    pending.append('Podaj dodatnią masę jednej sztuki w gramach.')
+    send(text)
+    assert catalog.get(1)['piece_size']==50 and catalog.get(1)['version']==1
+    assert 'Czy zatwierdzasz' in send('Zapisałeś?')['response']
+
+
+def test_cancelled_draft_allows_next_product(conversation):
+    send,pending,_=conversation
+    data=dict(label(),barcode=None)
+    pending.extend([('propose_food_product',{'product':data}),'draft'])
+    send('Zachowaj etykietę')
+    send('anuluj')
+    pending.extend([('propose_food_product',{'product':dict(data,name='Synthetic second product')}),'new draft'])
+    answer=send('Zachowaj nowy produkt')['response']
+    assert 'Czy zatwierdzasz' in answer and catalog.get(2)['name']=='Synthetic second product'
+
+
+def test_unpublished_failed_proposal_cannot_be_duplicated(conversation):
+    send,pending,_=conversation
+    data=dict(label(),barcode=None)
+    pending.extend([('propose_food_product',{'product':data}),RuntimeError('synthetic failure')])
+    assert send('Zachowaj etykietę')['state']=='failed'
+    pending.extend([('propose_food_product',{'product':dict(data,protein=19)}),'ask for status'])
+    send('Doprecyzuję białko')
+    with get_conn() as c:
+        assert c.execute('SELECT count(*) FROM food_products').fetchone()[0]==1

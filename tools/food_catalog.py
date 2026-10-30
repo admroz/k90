@@ -207,6 +207,12 @@ def propose_from_chat(product):
             raise ValueError('own_label requires current submitted photo')
     import hashlib
     key = ('event:' + str(event_id) + ':' + hashlib.sha256(json.dumps(_validated(product), sort_keys=True).encode()).hexdigest()[:32]) if event_id else None
+    from .product_review import _context_products, _closed_context
+    with get_conn() as conn:
+        replay = conn.execute('SELECT 1 FROM food_draft_requests WHERE request_id=?', (key,)).fetchone()
+        if turn and not replay and any(p['status'] == 'draft' and not _closed_context(conn, turn, p['id'])
+                                      for p in _context_products(conn, turn)):
+            raise ValueError('Istnieje bieżący szkic: użyj revise_food_product z samymi zmienionymi polami lub wyjaśnij cel.')
     draft = propose(product, source_event_id=event_id, request_id=key, owner=turn.get('owner'))
     from .product_review import queue_preview
     queue_preview(draft)

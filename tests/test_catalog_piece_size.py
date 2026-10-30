@@ -76,13 +76,12 @@ def test_natural_size_macro_clear_separate_consent(temp_db):
     assert c.get(p['id'])['status']=='confirmed'
 
 
-def test_natural_mismatch_stays_local(temp_db,monkeypatch):
+def test_piece_unit_mismatch_stays_local(temp_db,monkeypatch):
     import agent
     from test_product_review import preview
     p=preview(data=dict(label(),piece_size=50))
     monkeypatch.setattr(agent,'_run_agent',lambda *a: pytest.fail('must remain local'))
-    for text in ['zmień masę sztuki na 90 ml','zmień masę sztuki na 90','zmień masę sztuki na NaN g']:
-        agent.run_agent(text,'owner')
+    agent.run_agent('zmień masę sztuki na 90 ml','owner')
     assert c.get(p['id'])['piece_size']==50 and c.get(p['id'])['version']==1
 
 

@@ -35,6 +35,9 @@ def initialize(conn):
         );
     ''')
 
+    if 'channel' not in {r[1] for r in conn.execute('PRAGMA table_info(food_product_reviews)')}:
+        conn.execute("ALTER TABLE food_product_reviews ADD COLUMN channel TEXT NOT NULL DEFAULT ''")
+
 
 def intent(message):
     if not isinstance(message, str):
@@ -51,8 +54,6 @@ def intent(message):
         return ('piece_correct', m.groups())
     if text in ('usuń rozmiar sztuki', 'usuń masę sztuki', 'usuń objętość sztuki', 'wyczyść rozmiar sztuki'):
         return ('piece_clear', None)
-    if re.search(r'(?:sztuki|sztukę)', text) and re.search(r'zmień|popraw|usuń|wyczyść', text):
-        return ('unclear', None)
     m = re.fullmatch(r'(?:zmień|popraw) (białko|bialko|węglowodany|weglowodany|tłuszcz|tluszcz|kcal) na (\d+(?:[.,]\d+)?)(?: i zatwierdź)?', text)
     if m:
         return ('correct', m.groups())
@@ -71,11 +72,14 @@ def intent(message):
     return None
 
 
-def interrupt(owner_id):
+def interrupt(owner_id, channel=None):
     with get_conn() as conn:
         if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='food_product_reviews'").fetchone():
             return
-        conn.execute('UPDATE food_product_reviews SET direct=0 WHERE owner=? AND status=\'pending\'', (owner_id,))
+        if channel is None:
+            conn.execute("UPDATE food_product_reviews SET direct=0 WHERE owner=? AND status='pending'", (owner_id,))
+        else:
+            conn.execute("UPDATE food_product_reviews SET direct=0 WHERE owner=? AND channel=? AND status='pending'", (owner_id,channel))
 
 
 def queue_preview(product):
@@ -108,21 +112,23 @@ def publish(conn, turn, answer):
         if row is None:
             texts.append(CLARIFY)
             continue
-        conn.execute('INSERT OR IGNORE INTO food_product_reviews(owner,product_id,version,review_event_id) VALUES (?,?,?,?)',
-                     (turn['owner'],pid,version,turn['user_event_id']))
+        conn.execute('INSERT OR IGNORE INTO food_product_reviews(owner,product_id,version,review_event_id,channel) VALUES (?,?,?,?,?)',
+                     (turn['owner'],pid,version,turn['user_event_id'],turn.get('channel','')))
         texts.append(preview_text(_record(row)))
     return '\n\n'.join(texts)
 
 
-def _pending(conn, owner_id):
+def _pending(conn, owner_id, *, channel=None, require_direct=True):
     rows = conn.execute("SELECT * FROM food_product_reviews WHERE owner=? AND status='pending' ORDER BY id DESC", (owner_id,)).fetchall()
+    if channel is not None:
+        rows = [r for r in rows if r['channel'] == channel]
     # Repeated showing of the same version is one proposal, multiple products are ambiguous.
     unique = {(r['product_id'],r['version']):r for r in reversed(rows)}
     if len(unique) != 1:
         raise ValueError('ambiguous review')
     r = next(iter(unique.values()))
     fresh = conn.execute("SELECT ? >= datetime('now','-30 minutes')", (r['created_at'],)).fetchone()[0]
-    if not r['direct'] or not fresh:
+    if (require_direct and not r['direct']) or not fresh:
         raise ValueError('review context expired')
     p = conn.execute('SELECT * FROM food_products WHERE id=? AND version=? AND owner=? AND status=\'draft\'',
                      (r['product_id'],r['version'],owner_id)).fetchone()
@@ -131,20 +137,41 @@ def _pending(conn, owner_id):
     return r, p
 
 
+def _context_products(conn, turn):
+    # Select only products evidenced in this transport's conversation, including
+    # committed proposals whose response failed before publishing a preview.
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='chat_jobs'").fetchone():
+        return conn.execute("SELECT DISTINCT p.* FROM food_products p JOIN food_product_reviews r ON r.product_id=p.id WHERE p.owner=? AND r.owner=? AND r.channel=? AND p.updated_at >= datetime('now','-30 minutes')",
+                            (turn['owner'],turn['owner'],turn.get('channel',''))).fetchall()
+    return conn.execute("""SELECT DISTINCT p.* FROM food_products p
+        WHERE p.owner=? AND p.id IN (
+          SELECT r.product_id FROM food_product_reviews r WHERE r.owner=? AND r.channel=?
+          UNION SELECT p2.id FROM food_products p2 JOIN agent_events e
+            ON json_extract(p2.payload,'$.source_event_id')=e.id
+            JOIN chat_jobs j ON j.request_id=e.request_id AND j.user_id=e.owner
+            WHERE e.owner=? AND j.channel=?)
+        AND p.updated_at >= datetime('now','-30 minutes')""",
+        (turn['owner'],turn['owner'],turn.get('channel',''),turn['owner'],turn.get('channel',''))).fetchall()
+
+
+def _closed_context(conn, turn, product_id):
+    row = conn.execute("SELECT reason FROM food_product_reviews WHERE owner=? AND channel=? AND product_id=? ORDER BY id DESC LIMIT 1",
+                       (turn['owner'],turn.get('channel',''),product_id)).fetchone()
+    return row is not None and row['reason'] in ('owner_cancel','selected_preview')
+
+
 def _status(conn, turn):
     from .food_catalog import _record
-    rows = conn.execute("SELECT * FROM food_products WHERE owner=? AND updated_at >= datetime('now','-30 minutes') AND status='draft'", (turn['owner'],)).fetchall()
-    if not rows:
-        row = conn.execute("SELECT p.* FROM food_products p JOIN food_product_reviews r ON r.product_id=p.id WHERE r.owner=? AND p.owner=? ORDER BY r.id DESC LIMIT 1", (turn['owner'],turn['owner'])).fetchone()
-        if row is None:
-            raise ValueError('no catalog context')
-        if row['status'] == 'confirmed':
-            p = _record(row)
-            return f"Produkt {p['id']} zatwierdzony: {p['name']}, wersja {p['version']}."
-        raise ValueError('no current draft')
+    rows = _context_products(conn, turn)
+    drafts = [r for r in rows if r['status'] == 'draft' and not _closed_context(conn, turn, r['id'])]
+    if drafts:
+        rows = drafts
     if len(rows) != 1:
-        raise ValueError('ambiguous catalog context')
+        raise ValueError('ambiguous or missing catalog context')
     row = rows[0]
+    if row['status'] == 'confirmed':
+        p = _record(row)
+        return f"Produkt {p['id']} zatwierdzony: {p['name']}, wersja {p['version']}."
     cancelled = conn.execute("SELECT reason FROM food_product_reviews WHERE owner=? AND product_id=? ORDER BY id DESC LIMIT 1", (turn['owner'],row['id'])).fetchone()
     if cancelled and cancelled['reason'] == 'owner_cancel':
         return 'Propozycja produktu jest anulowana; nie jest zatwierdzona.'
@@ -186,7 +213,7 @@ def revise_from_chat(changes):
                     raise ValueError('stale correction replay')
                 queue_preview(catalog._record(row))
             return {'status':previous['answer']}
-        review, row = _pending(conn, turn['owner'])
+        review, row = _pending(conn, turn['owner'], channel=turn.get('channel',''), require_direct=False)
         revised = catalog._revise(conn, row, review['version'], changes, turn['owner'])
         queue_preview(revised)
         answer = preview_text(revised)
@@ -222,7 +249,7 @@ def resolve(message, turn):
                     raise ValueError('owner or version mismatch')
                 if kind == 'show':
                     conn.execute('UPDATE food_products SET owner=? WHERE id=?',(owner_id,pid))
-                    conn.execute("UPDATE food_product_reviews SET status='cancelled',reason='selected_preview' WHERE owner=? AND status='pending'",(owner_id,))
+                    conn.execute("UPDATE food_product_reviews SET status='cancelled',reason='selected_preview' WHERE owner=? AND channel=? AND status='pending'",(owner_id,turn.get('channel','')))
                     queue_preview(catalog._record(row))
                     answer = preview_text(catalog._record(row))
                 else:
@@ -233,7 +260,7 @@ def resolve(message, turn):
             elif kind == 'unclear':
                 raise ValueError('unclear consent')
             else:
-                review, row = _pending(conn,owner_id)
+                review, row = _pending(conn,owner_id, channel=turn.get('channel',''), require_direct=kind in ('confirm','cancel'))
                 if kind == 'cancel':
                     conn.execute("UPDATE food_product_reviews SET status='cancelled',reason='owner_cancel',consent_event_id=? WHERE owner=? AND product_id=? AND status='pending'",(turn['user_event_id'],owner_id,row['id']))
                     answer = 'Anulowano propozycję produktu.'
@@ -260,7 +287,7 @@ def resolve(message, turn):
         except ValueError:
             conn.execute('ROLLBACK TO review_action')
             turn.pop('catalog_previews', None)
-            conn.execute("UPDATE food_product_reviews SET direct=0 WHERE owner=? AND status='pending'",(owner_id,))
+            conn.execute("UPDATE food_product_reviews SET direct=0 WHERE owner=? AND channel=? AND status='pending'",(owner_id,turn.get('channel','')))
             answer = CLARIFY
         conn.execute('RELEASE review_action')
         conn.execute('INSERT INTO food_review_actions VALUES (?,?,?,?,?)',(owner_id,turn['request_id'],message,answer,json.dumps(turn.get('catalog_previews', {}))))
@@ -288,7 +315,13 @@ def known_outcome(owner_id, request_id, *, conn):
         products = conn.execute("SELECT p.id,p.status FROM food_products p JOIN agent_events e ON json_extract(p.payload,'$.source_event_id')=e.id WHERE p.owner=? AND e.owner=? AND e.request_id=? AND e.role='user'", (owner_id,owner_id,request_id)).fetchall()
         if not products:
             return None
+        if all(p['status'] == 'confirmed' for p in products):
+            return 'Produkt zatwierdzony w katalogu. Odczytano aktualny zapis; nie ponawiaj dodawania etykiety.'
         return 'Odpowiedź została przerwana. Zapisano szkic produktu w katalogu; nie jest to zatwierdzenie. Zapytaj o stan produktu, aby zobaczyć aktualne dane. Nie ponawiaj dodawania etykiety.'
-    if json.loads(row['previews']):
+    previews = json.loads(row['previews'])
+    if previews:
+        products = [conn.execute('SELECT status FROM food_products WHERE id=? AND owner=?', (int(pid),owner_id)).fetchone() for pid in previews]
+        if all(p is not None and p['status'] == 'confirmed' for p in products):
+            return 'Produkt zatwierdzony w katalogu. Odczytano aktualny zapis; nie ponawiaj korekty.'
         return 'Szkic nie jest zatwierdzony. ' + CLARIFY
     return row['answer']
