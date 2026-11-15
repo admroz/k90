@@ -1,5 +1,17 @@
 # k90 — bieżący status zadania
 
+## Catalog source/session — bounded WIP, 2026-11-15
+
+Branch `fix/catalog-source-session-20261030`, base `74ca891`.
+Server/cookie session default 7 days, RAM restart logout preserved. HTTP expiry,
+logout/cookie and existing conversation checks: 24 PASS. New actual Telegram
+album/queue/agent/tool/SQLite/delivery reproductions: delayed creation is RED in
+both web and Telegram; prewrite failure reporting is a separate RED. Fresh album
+creation and postwrite-failure reporting PASS with scripted provider; production
+exception cause remains UNKNOWN. Natural-language tool design recorded, catalog
+implementation incomplete. No review, CI, PR or deployment acceptance.
+[Phase evidence and next design](CATALOG_SOURCE_SESSION_PHASE.md).
+
 ## Owner UI follow-up — implementation ready for independent review, 2026-10-29
 
 Branch `fix/dashboard-catalog-polish-20261029`, base `69c3443`, tested source

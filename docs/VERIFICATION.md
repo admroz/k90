@@ -1125,3 +1125,32 @@ Local integrated-tree verification: isolated env-i offline Python661 PASS /
 1 existing skip194.50s; Node25 PASS; app.js/catalog.mjs syntax PASS; diff check
 PASS. Parent-file preservation and exact upstream loadChat checks PASS.
 These are integration-writer checks, not fresh independent review or CI.
+
+# Catalog source/session — writer phase 2026-11-15
+
+Branch `fix/catalog-source-session-20261030`, base `74ca8913406738443297cde7e1f902bf9e39561e`.
+WIP: session default changed to 604800 seconds in server and cookie. Existing
+RAM sessions and authentication safeguards retained. New tests cover real
+Telegram album/caption aggregation, queue, agent/tool calls, SQLite and delivery
+with synthetic provider only; delayed creation and prewrite-reporting remain RED.
+
+Existing sanitized `run_batch.py`, interpreter `/opt/data/projects/k90/.venv/bin/python`:
+
+- `catalog-source-red-20261115 -m pytest -q tests/test_catalog_source_session.py`:
+  4 failed / 2 passed (13.21s), including session RED at 43200 seconds.
+- `catalog-source-session-green-20261115 -m pytest -q tests/test_catalog_source_session.py::test_seven_day_cookie_and_server_expiry_boundary tests/test_web.py::test_login_logout_and_session_cookie tests/test_web.py::test_default_cookie_requires_https tests/test_catalog_conversation.py`:
+  24 passed (36.60s).
+- `catalog-source-phase-final-20261115 -m pytest -q tests/test_catalog_source_session.py tests/test_web.py::test_login_logout_and_session_cookie tests/test_web.py::test_default_cookie_requires_https tests/test_catalog_conversation.py`:
+  3 failed / 26 passed (42.63s); only the three documented catalog REDs remain.
+
+Command metadata confirms synthetic HOME/data/auth/scratch and correct checkout
+PYTHONPATH. The shared guard's hard-coded branch label still names the previous
+task; it is not branch evidence. Actual branch/base read directly using Git.
+Native shell ancestry includes guardian PID 476; inherited WORKSHOP paths match
+the admitted run. Task-home writer admission/checkpoint/report hold private
+execution details. No new runner or infrastructure. Quota 20:57:01Z: session 12%,
+weekly 17%; permanent stop at >=80% ANY or unknown.
+
+Detailed design and outstanding privacy/owner/version/idempotency gates:
+[phase checkpoint](CATALOG_SOURCE_SESSION_PHASE.md). Broad regression, final-SHA
+independent review, CI/container, PR and live-provider/deployment checks pending.

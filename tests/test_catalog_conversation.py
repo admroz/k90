@@ -14,7 +14,7 @@ from webapp import create_app
 from web_runtime import ConversationWorker
 from test_food_catalog import label
 
-PNG = 'data:image/png;base64,iVBORw0KGgo='
+PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='
 
 @pytest.fixture
 def conversation(temp_db, monkeypatch):
@@ -44,19 +44,38 @@ def conversation(temp_db, monkeypatch):
                 r.raise_for_status(); return r.json()
         api=Mock(); api.download_file.return_value=(base64.b64decode(PNG.split(',')[1]),'image/png')
         worker=ConversationWorker(); serial=iter(range(1,100))
-        def send(text,photo=False,channel='web'):
+        def send(text,photo=False,channel='web',album=False):
             n=next(serial)
             if channel=='telegram':
                 from telegram_adapter import accept_update
                 message={'message_id':n,'from':{'id':123},'chat':{'id':123,'type':'private'}}
                 message.update({'caption':text,'photo':[{'file_id':'fake'}]} if photo else {'text':text})
-                accept_update(api,Backend(),{'update_id':n,'message':message})
+                if album:
+                    from web_runtime import flush_albums
+                    import time
+                    for index in (2,0,1,1):
+                        item=deepcopy(message)
+                        item.update(message_id=n*10+index,media_group_id='synthetic-album-'+str(n))
+                        item['caption']=text if index==0 else ''
+                        accept_update(api,Backend(),{'update_id':n*10+index,'message':item})
+                    flush_albums(now=time.time()+3)
+                else:
+                    accept_update(api,Backend(),{'update_id':n,'message':message})
             else:
                 body={'request_id':'web:conversation-'+str(n),'text':text}
                 if photo: body['image']=PNG
                 assert client.post('/api/messages',json=body,headers={'X-K90-Request':'1'}).status_code==202
             assert worker.run_once()
-            with get_conn() as c: return dict(c.execute('SELECT * FROM chat_jobs ORDER BY seq DESC LIMIT 1').fetchone())
+            with get_conn() as c:
+                job=dict(c.execute('SELECT * FROM chat_jobs ORDER BY seq DESC LIMIT 1').fetchone())
+            if channel=='telegram':
+                from telegram_adapter import deliver_pending
+                api.send_text.reset_mock()
+                deliver_pending(api,Backend())
+                assert api.send_text.called
+                assert ''.join(call.args[1] for call in api.send_text.call_args_list)==job['response']
+                assert Backend().call('GET','/internal/deliveries')==[]
+            return job
         yield send,pending,sent
 
 @pytest.mark.parametrize('channel',['web','telegram'])
