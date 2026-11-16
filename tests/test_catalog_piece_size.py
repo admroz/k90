@@ -61,28 +61,35 @@ def test_invalid_portions_both_routes(temp_db,quantity,unit):
         assert conn.execute('SELECT count(*) FROM posilki').fetchone()[0]==0
 
 
-def test_natural_size_macro_clear_separate_consent(temp_db):
-    import agent
-    from test_product_review import preview
-    p=preview(data=dict(label(),piece_size=50))
-    answer,_=agent.run_agent('zmień masę sztuki na90g i zatwierdź','owner')
+from test_catalog_conversation import conversation
+
+
+def test_natural_size_macro_clear_separate_consent(conversation):
+    send,pending,_=conversation
+    pending.extend([('propose_food_product',{'product':dict(label(),piece_size=50)}),'Preview'])
+    send('Zachowaj produkt')
+    pending.extend([('revise_food_product',{'changes':{'piece_size':90}}),'Updated'])
+    answer=send('zmień masę sztuki na90g i zatwierdź')['response']
     assert 'Jedna sztuka: 90.0 g' in answer and 'Czy zatwierdzasz' in answer
-    p=c.get(p['id']); assert p['status']=='draft' and p['protein']==12
-    agent.run_agent('zmień białko na 15','owner')
-    p=c.get(p['id']); assert p['piece_size']==90 and p['protein']==15
-    agent.run_agent('usuń rozmiar sztuki','owner')
-    p=c.get(p['id']); assert p['piece_size'] is None and p['protein']==15 and p['status']=='draft'
-    agent.run_agent('zatwierdzam','owner')
-    assert c.get(p['id'])['status']=='confirmed'
+    p=c.get(1); assert p['status']=='draft' and p['protein']==12
+    pending.extend([('revise_food_product',{'changes':{'protein':15}}),'Updated'])
+    send('zmień białko na 15')
+    p=c.get(1); assert p['piece_size']==90 and p['protein']==15
+    pending.extend([('revise_food_product',{'changes':{'piece_size':None}}),'Updated'])
+    send('usuń rozmiar sztuki')
+    p=c.get(1); assert p['piece_size'] is None and p['protein']==15 and p['status']=='draft'
+    pending.extend([('confirm_food_product',{'product_id':1,'version':4}),'Confirmed'])
+    send('zatwierdzam')
+    assert c.get(1)['status']=='confirmed'
 
 
-def test_piece_unit_mismatch_stays_local(temp_db,monkeypatch):
-    import agent
-    from test_product_review import preview
-    p=preview(data=dict(label(),piece_size=50))
-    monkeypatch.setattr(agent,'_run_agent',lambda *a: pytest.fail('must remain local'))
-    agent.run_agent('zmień masę sztuki na 90 ml','owner')
-    assert c.get(p['id'])['piece_size']==50 and c.get(p['id'])['version']==1
+def test_piece_unit_mismatch_asks_for_clarification(conversation):
+    send,pending,_=conversation
+    pending.extend([('propose_food_product',{'product':dict(label(),piece_size=50)}),'Preview'])
+    send('Zachowaj produkt')
+    pending.append('Podstawa to 100g. Podaj masę jednej sztuki w gramach.')
+    send('zmień masę sztuki na 90 ml')
+    assert c.get(1)['piece_size']==50 and c.get(1)['version']==1
 
 
 def test_missing_converter_requests_native_amount_without_write(temp_db):

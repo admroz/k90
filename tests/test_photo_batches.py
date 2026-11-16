@@ -198,7 +198,11 @@ def test_http_three_photos_one_turn_draft_consent_preview(temp_db,monkeypatch):
     monkeypatch.setattr(agent,'_build_system_message',lambda:('synthetic system',{}))
     product=dict(label(),provenance='own_label')
     pending=[{'role':'assistant','content':None,'tool_calls':[{'id':'call1','type':'function','function':{'name':'propose_food_product','arguments':json.dumps({'product':product})}}]},
-             {'role':'assistant','content':'Sprawdź wspólną propozycję.'}, {'role':'assistant','content':'Dalszy tekst.'}]
+             {'role':'assistant','content':'Sprawdź wspólną propozycję.'},
+             {'role':'assistant','content':None,'tool_calls':[{'id':'consent','type':'function',
+              'function':{'name':'confirm_food_product','arguments':json.dumps({'product_id':1,'version':1})}}]},
+             {'role':'assistant','content':'Zapisano produkt.'},
+             {'role':'assistant','content':'Dalszy tekst.'}]
     sent=[]
     def completion(**kwargs):
         sent.append(deepcopy(kwargs['messages']))
@@ -222,7 +226,7 @@ def test_http_three_photos_one_turn_draft_consent_preview(temp_db,monkeypatch):
         with get_conn() as conn:
             assert conn.execute('SELECT status FROM food_products').fetchone()[0]=='confirmed'
             assert conn.execute('SELECT COUNT(*) FROM food_products').fetchone()[0]==1
-        assert len(sent)==2  # Consent is local, no inference.
+        assert len(sent)==4  # Natural consent uses the actual model/tool path.
         agent.run_agent('Dalszy tekst','owner')
         assert 'data:image/' not in json.dumps(sent[-1])
 

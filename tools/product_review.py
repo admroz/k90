@@ -1,4 +1,4 @@
-"""Deterministic, owner-bound product review. Never exposed as model authority."""
+"""Owner/version-bound review: model tools and legacy explicit commands."""
 import json
 import os
 import re
@@ -28,6 +28,10 @@ def initialize(conn):
             source TEXT NOT NULL, source_event_id INTEGER,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY(product_id,version)
+        );
+        CREATE TABLE IF NOT EXISTS catalog_creations (
+            owner TEXT NOT NULL, request_id TEXT NOT NULL, product_id INTEGER NOT NULL,
+            PRIMARY KEY(owner,request_id)
         );
         CREATE TABLE IF NOT EXISTS food_review_actions (
             owner TEXT NOT NULL, request_id TEXT NOT NULL, message TEXT NOT NULL,
@@ -96,7 +100,7 @@ def preview_text(p):
             f"B {p['protein']} / W {p['carbs']} / T {p['fat']}.\n"
             + (f"Jedna sztuka: {p['piece_size']} {'g' if p['basis'] == '100g' else 'ml'}.\n"
                if p.get('piece_size') is not None else 'Rozmiar sztuki: brak.\n') +
-            'Czy zatwierdzasz zapis tego produktu w tej wersji? Możesz odpowiedzieć „tak”, „ok” albo „anuluj”.')
+            'Czy zatwierdzasz zapis tego produktu w tej wersji? Możesz potwierdzić, poprawić dane albo zrezygnować własnymi słowami.')
 
 
 def publish(conn, turn, answer):
@@ -146,12 +150,15 @@ def _context_products(conn, turn):
     return conn.execute("""SELECT DISTINCT p.* FROM food_products p
         WHERE p.owner=? AND p.id IN (
           SELECT r.product_id FROM food_product_reviews r WHERE r.owner=? AND r.channel=?
+          UNION SELECT cc.product_id FROM catalog_creations cc JOIN chat_jobs cj
+            ON cj.request_id=cc.request_id AND cj.user_id=cc.owner
+            WHERE cc.owner=? AND cj.channel=?
           UNION SELECT p2.id FROM food_products p2 JOIN agent_events e
             ON json_extract(p2.payload,'$.source_event_id')=e.id
             JOIN chat_jobs j ON j.request_id=e.request_id AND j.user_id=e.owner
             WHERE e.owner=? AND j.channel=?)
         AND p.updated_at >= datetime('now','-30 minutes')""",
-        (turn['owner'],turn['owner'],turn.get('channel',''),turn['owner'],turn.get('channel',''))).fetchall()
+        (turn['owner'],turn['owner'],turn.get('channel',''),turn['owner'],turn.get('channel',''),turn['owner'],turn.get('channel',''))).fetchall()
 
 
 def _closed_context(conn, turn, product_id):
@@ -183,8 +190,8 @@ def review_from_chat():
     """Model may ask for facts, never assert consent or choose a foreign target."""
     from memory_runtime import TURN_CONTEXT
     turn = TURN_CONTEXT.get()
-    if not turn:
-        raise ValueError('conversation required')
+    if not turn or turn['owner'] != owner():
+        raise ValueError('authenticated owner conversation required')
     with get_conn() as conn:
         return {'status': _status(conn, turn)}
 
@@ -194,7 +201,7 @@ def revise_from_chat(changes):
     from memory_runtime import TURN_CONTEXT
     from . import food_catalog as catalog
     turn = TURN_CONTEXT.get()
-    if not turn or not isinstance(changes, dict) or not changes:
+    if not turn or turn['owner'] != owner() or not isinstance(changes, dict) or not changes:
         raise ValueError('current review and changes required')
     allowed = {'name','brand','barcode','basis','kcal','protein','carbs','fat','piece_size'}
     if set(changes) - allowed:
@@ -253,9 +260,10 @@ def resolve(message, turn):
                     queue_preview(catalog._record(row))
                     answer = preview_text(catalog._record(row))
                 else:
-                    # Explicit command retains its target but must have a bound owner.
-                    if row['owner'] is None:
-                        raise ValueError('preview required')
+                    # Legacy commands retain explicit targets, never unseen authority.
+                    review, shown = _pending(conn,owner_id,channel=turn.get('channel',''),require_direct=False)
+                    if (shown['id'],shown['version']) != (pid,version) or review['review_event_id'] == turn['user_event_id']:
+                        raise ValueError('current preview required')
                     answer = _confirm(conn, row, version, owner_id, turn['user_event_id'])
             elif kind == 'unclear':
                 raise ValueError('unclear consent')
@@ -312,7 +320,7 @@ def known_outcome(owner_id, request_id, *, conn):
     row = conn.execute('SELECT answer,previews FROM food_review_actions WHERE owner=? AND request_id=?',
                        (owner_id,request_id)).fetchone()
     if row is None:
-        products = conn.execute("SELECT p.id,p.status FROM food_products p JOIN agent_events e ON json_extract(p.payload,'$.source_event_id')=e.id WHERE p.owner=? AND e.owner=? AND e.request_id=? AND e.role='user'", (owner_id,owner_id,request_id)).fetchall()
+        products = conn.execute("SELECT p.id,p.status FROM food_products p JOIN catalog_creations cc ON cc.product_id=p.id WHERE cc.owner=? AND p.owner=? AND cc.request_id=?", (owner_id,owner_id,request_id)).fetchall()
         if not products:
             return None
         if all(p['status'] == 'confirmed' for p in products):
@@ -325,3 +333,50 @@ def known_outcome(owner_id, request_id, *, conn):
             return 'Produkt zatwierdzony w katalogu. Odczytano aktualny zapis; nie ponawiaj korekty.'
         return 'Szkic nie jest zatwierdzony. ' + CLARIFY
     return row['answer']
+
+
+def decide_from_chat(product_id, version, action):
+    """Model interprets language; backend authorizes only a published current preview.
+
+    As with meal mutations, bind owner/request locally, fingerprint the arguments,
+    and commit the effect and replay result in the same SQLite transaction.
+    """
+    from memory_runtime import TURN_CONTEXT
+    from .food_catalog import _version
+    turn = TURN_CONTEXT.get()
+    if not turn or turn['owner'] != owner() or action not in ('confirm', 'cancel'):
+        raise ValueError('authenticated owner decision required')
+    _version(product_id); _version(version)
+    fingerprint = json.dumps([action, product_id, version])
+    with get_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        previous = conn.execute('SELECT * FROM food_review_actions WHERE owner=? AND request_id=?',
+                                (turn['owner'],turn['request_id'])).fetchone()
+        if previous:
+            if previous['message'] != fingerprint:
+                raise ValueError('one catalog action per request; clarify changes first')
+            turn['catalog_handled'] = True
+            return {'status':previous['answer'], 'replayed':True, 'historical':True}
+        if turn.get('catalog_handled'):
+            raise ValueError('separate user reply to published preview required')
+        review, row = _pending(conn, turn['owner'], channel=turn.get('channel',''))
+        if (row['id'], row['version']) != (product_id, version) or review['review_event_id'] == turn['user_event_id']:
+            raise ValueError('current shown owner version required')
+        if action == 'confirm':
+            answer = _confirm(conn, row, version, turn['owner'], turn['user_event_id'])
+        else:
+            conn.execute("UPDATE food_product_reviews SET status='cancelled',reason='owner_cancel',consent_event_id=? WHERE owner=? AND product_id=? AND status='pending'",
+                         (turn['user_event_id'],turn['owner'],product_id))
+            answer = 'Anulowano propozycję produktu.'
+        conn.execute('INSERT INTO food_review_actions VALUES (?,?,?,?,?)',
+                     (turn['owner'],turn['request_id'],fingerprint,answer,'{}'))
+        turn['catalog_handled'] = True
+        return {'status':answer, 'product_id':product_id, 'version':version, 'replayed':False}
+
+
+def confirm_from_chat(product_id, version):
+    return decide_from_chat(product_id, version, 'confirm')
+
+
+def cancel_from_chat(product_id, version):
+    return decide_from_chat(product_id, version, 'cancel')

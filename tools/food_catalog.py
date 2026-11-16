@@ -148,7 +148,7 @@ def get(product_id):
         return _record(row)
 
 
-def propose(data, *, source_event_id=None, request_id=None, owner=None):
+def propose(data, *, source_event_id=None, request_id=None, owner=None, mutation_request_id=None):
     from .product_review import owner as configured_owner
     owner = configured_owner() if owner is None else owner
     record = _validated(data)
@@ -162,25 +162,30 @@ def propose(data, *, source_event_id=None, request_id=None, owner=None):
     try:
         with get_conn() as conn:
             conn.execute('BEGIN IMMEDIATE')
+            def outcome(product):
+                if mutation_request_id:
+                    conn.execute('INSERT OR IGNORE INTO catalog_creations(owner,request_id,product_id) VALUES (?,?,?)',
+                                 (owner, mutation_request_id, product['id']))
+                return product
             if source_event_id is not None:
                 source = conn.execute("SELECT payload FROM agent_events WHERE id=? AND owner=? AND role='user'",
                                       (source_event_id, owner)).fetchone()
                 content = json.loads(source[0]) if source else []
                 photos = [p for p in content if isinstance(p, dict) and p.get('type') == 'image_url'] if isinstance(content, list) else []
-                if len(photos) > 1:
+                if photos:
                     prior = conn.execute("SELECT * FROM food_products WHERE owner=? AND json_extract(payload,'$.source_event_id')=? ORDER BY id LIMIT 1",
                                          (owner, source_event_id)).fetchone()
                     if prior:
                         if prior['payload'] != payload:
                             raise ValueError('Jedna paczka zdjęć może mieć tylko jedną propozycję. Sprzeczne produkty lub wartości wymagają wyjaśnienia; nie twórz kolejnego szkicu.')
-                        return _record(prior)
+                        return outcome(_record(prior))
             if request_id:
                 previous = conn.execute('SELECT * FROM food_draft_requests WHERE request_id=?', (request_id,)).fetchone()
                 if previous:
                     bound = conn.execute('SELECT owner FROM food_products WHERE id=?', (previous['product_id'],)).fetchone()
                     if previous['payload'] != payload or bound['owner'] != owner:
                         raise ValueError('request id conflict')
-                    return _record(conn.execute('SELECT * FROM food_products WHERE id=?', (previous['product_id'],)).fetchone())
+                    return outcome(_record(conn.execute('SELECT * FROM food_products WHERE id=?', (previous['product_id'],)).fetchone()))
             cur = conn.execute("INSERT INTO food_products(barcode,version,status,payload,owner) VALUES (?,1,'draft',?,?)",
                                (record["barcode"], payload, owner))
             product_id = cur.lastrowid
@@ -188,33 +193,85 @@ def propose(data, *, source_event_id=None, request_id=None, owner=None):
                          (product_id, payload))
             if request_id:
                 conn.execute('INSERT INTO food_draft_requests VALUES (?,?,?)', (request_id, payload, product_id))
-            result = _record(conn.execute('SELECT * FROM food_products WHERE id=?', (product_id,)).fetchone())
+            result = outcome(_record(conn.execute('SELECT * FROM food_products WHERE id=?', (product_id,)).fetchone()))
     except sqlite3.IntegrityError:
         raise ValueError("barcode already exists; select existing product") from None
     return result
 
 
+def _label_source(conn, turn, product):
+    """Resolve local evidence, never send historical image bytes to inference.
+
+    Delayed use is deliberately limited to one recent photo submission, the
+    immediately preceding owner turn, or explicitly identified by the owner,
+    with a matching already-persisted reading.
+    Transport is not identity: the authenticated owner is shared by WWW/Telegram.
+    """
+    from memory_runtime import _local_only, _text
+    import re
+    from k90_memory.privacy import validate_image_url
+    rows = conn.execute("SELECT * FROM agent_events WHERE owner=? AND role='user' AND id<=? ORDER BY id DESC LIMIT 40",
+                        (turn['owner'], turn['user_event_id'])).fetchall()
+    def photos(row):
+        content = json.loads(row['payload'])
+        parts = [p for p in content if isinstance(p, dict) and p.get('type') == 'image_url'] if isinstance(content, list) else []
+        if not parts:
+            return False
+        if _local_only(content):
+            raise ValueError('label source is local-only')
+        restricted = conn.execute("SELECT local_only,deleted FROM memory_sources WHERE owner=? AND source_id=?",
+                                  (turn['owner'], 'event:'+str(row['id']))).fetchone()
+        if restricted and (restricted['local_only'] or restricted['deleted']):
+            raise ValueError('label source is restricted')
+        for part in parts:
+            validate_image_url(part.get('image_url', {}).get('url'))
+        return True
+    if not rows or rows[0]['id'] != turn['user_event_id']:
+        raise ValueError('owner source required')
+    if photos(rows[0]):
+        return rows[0]['id']
+    recent = [r for r in rows[1:] if conn.execute("SELECT julianday(?) >= julianday('now','-30 minutes')", (r['occurred_at'],)).fetchone()[0]]
+    candidates = [r for r in recent if photos(r)]
+    identity = product.get('barcode') or product.get('name', '')
+    if not isinstance(identity, str) or len(identity.strip()) < 3:
+        raise ValueError('concrete product identity required')
+    def identifies(text):
+        return re.search(r'(?<!\w)' + re.escape(identity.strip()) + r'(?!\w)', text, re.IGNORECASE) is not None
+    explicit = identifies(_text(json.loads(rows[0]['payload'])))
+    if not explicit and (len(candidates) != 1 or len(rows) < 2 or candidates[0]['id'] != rows[1]['id']):
+        raise ValueError('clarify recent label source; ambiguous, stale or unrelated context')
+    matches = []
+    for source in candidates:
+        reading = conn.execute("SELECT id,payload FROM agent_events WHERE owner=? AND request_id=? AND role='assistant' AND kind='assistant'",
+                               (turn['owner'], source['request_id'])).fetchone()
+        text = json.loads(reading['payload']) if reading else None
+        restricted = conn.execute("SELECT local_only,deleted FROM memory_sources WHERE owner=? AND source_id=?",
+                                  (turn['owner'], 'event:'+str(reading['id']))).fetchone() if reading else None
+        if (isinstance(text, str) and not _local_only(text)
+                and not (restricted and (restricted['local_only'] or restricted['deleted']))
+                and identifies(text)):
+            matches.append(source)
+    if len(matches) != 1:
+        raise ValueError('product does not uniquely match previous label reading; clarify')
+    return matches[0]['id']
+
+
 def propose_from_chat(product):
     from memory_runtime import TURN_CONTEXT
-    turn = TURN_CONTEXT.get() or {}
-    event_id = turn.get('user_event_id')
-    if product.get('provenance') == 'own_label':
-        with get_conn() as conn:
-            row = conn.execute("SELECT payload FROM agent_events WHERE id=? AND owner=? AND role='user'",
-                               (event_id, turn.get('owner'))).fetchone()
-        content = json.loads(row['payload']) if row else None
-        if not isinstance(content, list) or not any(isinstance(p, dict) and p.get('type') == 'image_url' for p in content):
-            raise ValueError('own_label requires current submitted photo')
+    from .product_review import owner, _context_products, _closed_context, queue_preview
     import hashlib
-    key = ('event:' + str(event_id) + ':' + hashlib.sha256(json.dumps(_validated(product), sort_keys=True).encode()).hexdigest()[:32]) if event_id else None
-    from .product_review import _context_products, _closed_context
+    turn = TURN_CONTEXT.get() or {}
+    if not turn or turn['owner'] != owner():
+        raise ValueError('authenticated owner conversation required')
+    key = 'chat:' + hashlib.sha256(json.dumps([turn['owner'], turn['request_id']]).encode()).hexdigest()
     with get_conn() as conn:
+        event_id = (_label_source(conn, turn, product) if product.get('provenance') == 'own_label'
+                    else turn['user_event_id'])
         replay = conn.execute('SELECT 1 FROM food_draft_requests WHERE request_id=?', (key,)).fetchone()
-        if turn and not replay and any(p['status'] == 'draft' and not _closed_context(conn, turn, p['id'])
-                                      for p in _context_products(conn, turn)):
+        if not replay and any(p['status'] == 'draft' and not _closed_context(conn, turn, p['id'])
+                              for p in _context_products(conn, turn)):
             raise ValueError('Istnieje bieżący szkic: użyj revise_food_product z samymi zmienionymi polami lub wyjaśnij cel.')
-    draft = propose(product, source_event_id=event_id, request_id=key, owner=turn.get('owner'))
-    from .product_review import queue_preview
+    draft = propose(product, source_event_id=event_id, request_id=key, owner=turn['owner'], mutation_request_id=turn['request_id'])
     queue_preview(draft)
     draft['review_instruction'] = 'Backend pokaże pełny podgląd. Wymagana osobna zgoda użytkownika.'
     return draft
@@ -222,7 +279,17 @@ def propose_from_chat(product):
 
 
 CATALOG_PROMPT = """Katalog produktów: własna etykieta i korekty właściciela są źródłem prawdy.
-Zdjęcie posiłku nadal obsługuj jako posiłek; nie jest etykietą produktu.
+Etykieta, makra, kod kreskowy lub opakowanie zwykle wskazują katalog.
+Talerz lub porcja zwykle wskazują posiłek. To heurystyki, nie sztywne reguły.
+Jawny tekst użytkownika ma pierwszeństwo: zjedzone opakowanie może być posiłkiem,
+a zdjęcie talerza z prośbą o katalog wymaga wyjaśnienia produktu i brakujących pól.
+Opakowanie nie dowodzi spożycia. Przy niejasnej intencji zapytaj krótko.
+Rozpatruj wszystkie zdjęcia jednej wiadomości łącznie. Łącz intencję, pola i zgodę
+w jednym zrozumiałym podglądzie, gdy dane wystarczają; nie wymuszaj zbędnych rund.
+Przy późniejszej prośbie o katalog wykorzystaj zapisany wcześniej odczyt etykiety
+z najbliższej rozmowy właściciela, także między Telegramem i WWW. Nie żądaj ponownego
+wysyłania jednoznacznej świeżej etykiety. Historyczne zdjęcia pozostają lokalnie;
+nie odtwarzaj ani nie wysyłaj ich do modelu. Gdy źródło nie jest jednoznaczne, dopytaj.
 Gdy użytkownik chce zachować etykietę, odczytaj WSZYSTKIE bieżące zdjęcia łącznie jako jeden produkt i użyj propose_food_product najwyżej raz:
 Zdjęcia kodu, nazwy/logo i makr to wspólne dowody, nie osobne produkty.
 Przed szkicem zapytaj o wyjaśnienie, gdy zdjęcia przedstawiają różne produkty, sprzeczne kody/nazwy,
@@ -230,12 +297,17 @@ nieczytelne dane lub niejasną podstawę 100g vs 100ml, porcję vs opakowanie cz
 Nie sumuj makr z etykiet. Masa opakowania nie oznacza ilości spożytej ani podstawy makr.
 podaj nazwę, markę, opcjonalny kod, podstawę 100g lub 100ml, kcal, protein, carbs, fat oraz provenance own_label.
 Brakujące lub nieczytelne wartości wyjaśnij z użytkownikiem; nigdy nie zgaduj ani nie zastępuj zerem.
-Backend pokazuje pełny podgląd i obsługuje zgodę, korektę oraz anulowanie lokalnie.
+Backend pokazuje pełny podgląd. Interpretuj zwykły język użytkownika tak jak przy narzędziach posiłków;
+nie wymagaj komend, identyfikatorów ani określonych słów zgody.
+Po jednoznacznej zgodzie na poprzedni podgląd użyj confirm_food_product z dokładnym product_id i version;
+po rezygnacji cancel_food_product. Odpowiedź narzędzia, nie deklaracja modelu, potwierdza zapis.
+Nie zatwierdzaj w obrocie tworzenia, zmiany ani ponownego pokazywania podglądu.
+Podgląd musi być aktualny, właściciela i w tym samym kanale. Nie zatwierdzaj wersji niewidzianej.
 Kontynuacja rozmowy (kolejne zdjęcie, doprecyzowanie nazwy, marki, makr, podstawy lub sztuki):
 użyj revise_food_product z samymi zmienionymi polami, NIE propose_food_product i nie twórz duplikatu.
 Odczytaj tekst i wszystkie bieżące zdjęcia łącznie. Zachowaj pominięte pola; nie zgaduj brakujących.
 Niejasność lub sprzeczne dane wyjaśnij pytaniem. Pytanie o zapis/stan: review_food_product.
-Każda korekta wymaga nowego podglądu i osobnego tak/ok; zgoda razem ze zmianą nie zatwierdza nowej wersji.
+Każda korekta wymaga nowego podglądu i osobnej naturalnej zgody; zgoda razem ze zmianą nie zatwierdza nowej wersji.
 Nie udzielaj zgody w imieniu użytkownika. Nie twierdź, że szkic jest zatwierdzony.
 Korekty można wprowadzić w panelu Katalog; wpis ręczny ma provenance manual.
 Przy ponownym użyciu najpierw find_food_products po kodzie, potem nazwie; wybierz dokładny potwierdzony produkt i wersję.

@@ -39,6 +39,7 @@ from web_runtime import (
 )
 
 STATIC = Path(__file__).parent / "web"
+SESSION_SECONDS = 7 * 24 * 3600
 
 
 class BodyLimitMiddleware:
@@ -312,14 +313,14 @@ def create_app(*, start_worker=True, processor=None):
         if len(sessions) >= 20:
             sessions.pop(next(iter(sessions)))
         token = secrets.token_urlsafe(32)
-        sessions[token] = now + 12 * 3600
+        sessions[token] = now + SESSION_SECONDS
         response.set_cookie(
             "k90_session",
             token,
             httponly=True,
             samesite="strict",
             secure=os.getenv("WEB_COOKIE_SECURE", "true") != "false",
-            max_age=12 * 3600,
+            max_age=SESSION_SECONDS,
         )
         return {"ok": True}
 

@@ -151,7 +151,7 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
     token = memory_runtime.TURN_CONTEXT.set(turn)
     try:
         from tools.product_review import resolve
-        approval = resolve(user_message, turn)
+        approval = resolve(user_message, turn) if isinstance(user_message, str) and user_message.startswith(('/produkt ', '/produkty ')) else None
         if approval is not None:
             approval = save_history(user_id, user_message, approval)
             return approval, False
@@ -167,8 +167,8 @@ def run_agent(user_message: str | list, user_id: str = "cli") -> tuple[str, bool
             event('agent.failure_record.unavailable', component='agent', level=logging.WARNING)
         raise
     finally:
-        from tools.product_review import intent, interrupt
-        if not turn.get('catalog_handled') and intent(user_message) is None:
+        from tools.product_review import interrupt
+        if not turn.get('catalog_handled'):
             interrupt(user_id, turn.get('channel',''))
         memory_runtime.TURN_CONTEXT.reset(token)
 

@@ -6,6 +6,9 @@ Obraz `admroz/k90:latest` jest budowany dla `linux/amd64` (Lenovo M900).
 
 Frontend jest częścią `main`, a nie wyłącznie eksperymentalnym branchem.
 Ten dokument opisuje kod i procedury; nie potwierdza wersji działającej na serwerze.
+Sesja logowania i cookie wygasają po 7 dniach. Przez ten czas przejęty token
+sesji daje dostęp do panelu; wylogowanie unieważnia go wcześniej. Sesje są
+przechowywane w RAM, więc restart backendu nadal wymaga ponownego logowania.
 Plan rozszerzenia pamięci, jeszcze bez implementacji:
 [Pamięć k90](docs/MEMORY_ARCHITECTURE.md).
 
@@ -335,6 +338,30 @@ Migracja przy inicjalizacji dodaje quantity/unit oraz meal_changes; revision
 pochodzi z PR19. Audyt, tombstone i wyniki operacji wymagają zachowania całej bazy
 w backupie. Starszy writer po downgrade nie zapewni CAS/audytu: rollback wymaga
 zatrzymania writerów i zgodnego zestawu kodu/backup, bez ręcznego kasowania audytu.
+
+## Katalog w rozmowie
+
+Po odczytaniu etykiety można później poprosić o zapis do katalogu, także po
+przejściu z Telegrama do WWW. Backend wybiera jednoznaczny album właściciela
+z ostatnich 30 minut i sprawdza zgodność tożsamości produktu z zapisanym odczytem.
+Bez wskazania produktu musi to być bezpośrednio poprzednia wiadomość właściciela
+z jedyną świeżą paczką zdjęć. Przy wielu źródłach lub przerwanym kontekście można
+wskazać nazwę/kod; brak jednoznacznego dopasowania wymaga wyjaśnienia.
+Źródła obce, usunięte i local-only są odrzucane. Historyczne zdjęcia pozostają
+lokalnie i nie są ponownie wysyłane do modelu.
+
+Model interpretuje zwykłe prośby, korekty, zgodę i rezygnację przez narzędzia,
+podobnie jak przy posiłkach. Nie trzeba znać komend ani identyfikatorów.
+Tworzenie i korekta dają szkic oraz pełny podgląd. Zatwierdzenie wymaga osobnej
+odpowiedzi na aktualny podgląd w tym samym kanale; zmiana kanału nie uprawnia
+do zatwierdzenia niewidzianej wersji. Backend zapisuje zgodę, wersję i wynik
+w transakcji, a powtórzenie tego samego wywołania nie dubluje operacji.
+
+Po awarii odpowiedzi odczytywany jest utrwalony wynik żądania: zapisany szkic
+nie oznacza zatwierdzenia. Bez znanego wyniku aplikacja informuje o tej niepewności;
+nie ponawia automatycznie operacji. Opakowanie zwykle sugeruje katalog, talerz
+posiłek, lecz jawny tekst ma pierwszeństwo. Zdjęcie opakowania nie dowodzi spożycia.
+Syntetyczne testy nie potwierdzają rozpoznawania etykiet przez rzeczywisty model.
 
 ## Kilka zdjęć w jednej wiadomości
 

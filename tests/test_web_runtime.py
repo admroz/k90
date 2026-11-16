@@ -69,7 +69,7 @@ def test_failed_job_after_partial_persistence_still_projects_safe_error(runtime,
     ConversationWorker(processor).run_once()
     rows = timeline('owner')
     assert len(rows) == 2 and rows[-1]['state'] == 'failed'
-    assert '0 zatwierdzonych' in rows[-1]['content']
+    assert 'Brak potwierdzonego wyniku' in rows[-1]['content']
     assert [name for name, _ in events] == ['conversation.claim', 'conversation.failed', 'job.failed']
     assert events[1][1]['component'] == 'web_runtime'
     assert events[1][1]['level'] == web_runtime.logging.ERROR

@@ -22,6 +22,8 @@ def test_label_tool_binds_original_event_and_explicit_confirmation(temp_db, monk
     finally:
         memory_runtime.TURN_CONTEXT.reset(token)
     monkeypatch.setattr(agent, '_run_agent', lambda *a: (_ for _ in ()).throw(AssertionError('model forbidden for approval')))
+    assert 'zatwierdzony' not in agent.run_agent(f"/produkt zatwierdz {draft['id']} 1", 'owner')[0]
+    agent.run_agent(f"/produkt pokaz {draft['id']} 1", 'owner')
     answer, refresh = agent.run_agent(f"/produkt zatwierdz {draft['id']} 1", 'owner')
     assert 'zatwierdzony' in answer and not refresh
     found = execute_tool('find_food_products', {'query':'Synthetic'})
@@ -37,8 +39,13 @@ def test_own_label_requires_current_photo_and_no_model_confirmed_flag(temp_db):
     assert 'error' in execute_tool('propose_food_product', {'product':data})
     data['provenance'] = 'manual'
     data['status'] = 'confirmed'
-    result = execute_tool('propose_food_product', {'product':data})
-    assert result['status'] == 'draft'
+    turn=memory_runtime.begin_turn('owner','Synthetic manual product')
+    token=memory_runtime.TURN_CONTEXT.set(turn)
+    try:
+        result = execute_tool('propose_food_product', {'product':data})
+        assert result['status'] == 'draft'
+    finally:
+        memory_runtime.TURN_CONTEXT.reset(token)
 
 
 def test_synthetic_provider_http_photo_review_and_later_reuse(temp_db, monkeypatch):
@@ -140,6 +147,8 @@ def test_real_dispatch_approval_does_not_sync_or_call_models(temp_db, monkeypatc
     monkeypatch.setattr('tools.libre.should_auto_sync', lambda: calls.append('sync') or False)
     monkeypatch.setattr('summary.refresh_patient_summary', lambda **_: calls.append('summary'))
     monkeypatch.setattr(agent, '_run_agent', forbidden)
+    assert 'zatwierdzony' not in web_runtime.process_message(f"/produkt zatwierdz {p['id']} 1")
+    web_runtime.process_message(f"/produkt pokaz {p['id']} 1")
     assert 'zatwierdzony' in web_runtime.process_message(f"/produkt zatwierdz {p['id']} 1")
     assert calls == []
 

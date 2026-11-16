@@ -1,4 +1,6 @@
 """Synthetic authenticated catalog API acceptance."""
+import json
+import pytest
 from test_web import web_client, login
 from test_food_catalog import label
 
@@ -59,13 +61,17 @@ def test_invalid_product_structure_and_cross_owner_label_are_rejected(web_client
     token = memory_runtime.TURN_CONTEXT.set(turn)
     try:
         own = label(); own['provenance'] = 'own_label'
-        p = food_catalog.propose_from_chat(own)
+        with pytest.raises(ValueError, match='authenticated owner'):
+            food_catalog.propose_from_chat(own)
+        # Seed a foreign local record through the storage API to retain the
+        # independent authenticated HTTP read-denial probe.
+        p = food_catalog.propose(own, source_event_id=turn['user_event_id'], owner='other-owner')
     finally:
         memory_runtime.TURN_CONTEXT.reset(token)
     assert web_client.get(f"/api/catalog/{p['id']}/label").status_code == 409
 
 
-def test_panel_owner_is_backend_bound_and_edit_invalidates_chat(web_client):
+def test_panel_owner_is_backend_bound_and_edit_invalidates_chat(web_client, monkeypatch):
     import agent
     import memory_runtime
     from tools import food_catalog
@@ -84,7 +90,18 @@ def test_panel_owner_is_backend_bound_and_edit_invalidates_chat(web_client):
         memory_runtime.TURN_CONTEXT.reset(token)
     changed = label(); changed['protein'] = 15
     assert web_client.put(f"/api/catalog/{created['id']}", json={'version':1,'product':changed,'owner':'forged-owner'},headers=H).status_code == 200
+    from litellm import ModelResponse
+    pending = iter([
+        {'role':'assistant','content':None,'tool_calls':[{'id':'stale-confirm','type':'function',
+         'function':{'name':'confirm_food_product','arguments':json.dumps({'product_id':created['id'],'version':1})}}]},
+        {'role':'assistant','content':'Potrzebny jest aktualny podgląd.'},
+    ])
+    monkeypatch.setattr(agent, '_build_system_message', lambda: ('Synthetic system', {}))
+    monkeypatch.setattr(memory_runtime, 'start_worker', lambda: None)
+    monkeypatch.setattr(agent.litellm, 'completion', lambda **kw: ModelResponse(
+        choices=[{'index':0,'message':next(pending),'finish_reason':'stop'}]))
     assert 'zatwierdzony' not in agent.run_agent('tak','owner')[0]
+    assert food_catalog.get(created['id'])['status'] == 'draft'
     assert web_client.post(f"/api/catalog/{created['id']}/confirm",json={'version':1,'owner':'owner'},headers=H).status_code == 409
     assert web_client.post(f"/api/catalog/{created['id']}/confirm",json={'version':2,'owner':'forged-owner'},headers=H).status_code == 200
     assert food_catalog.get(created['id'])['version'] == 3

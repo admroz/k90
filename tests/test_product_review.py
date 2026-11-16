@@ -1,4 +1,4 @@
-"""Local product review acceptance on synthetic SQLite, without a provider."""
+"""Backend review invariants with a synthetic language interpreter; real provider path is covered separately."""
 import pytest
 import agent
 import memory_runtime
@@ -6,6 +6,42 @@ import web_runtime
 from tools import food_catalog as catalog
 from tools.db import get_conn
 from test_food_catalog import label
+
+
+@pytest.fixture(autouse=True)
+def synthetic_review_model(monkeypatch):
+    """Keep backend invariant probes offline after retiring keyword dispatch.
+
+    Interpretation is scripted here; the application receives structured tools.
+    The HTTP conversation suite separately drives the actual provider tool loop.
+    """
+    from tools.product_review import intent, _pending, review_from_chat, revise_from_chat, decide_from_chat, CLARIFY
+    def model(message, user_id='cli'):
+        action = intent(message)
+        answer = 'Synthetic unrelated reply'
+        try:
+            if action:
+                kind, arg = action
+                if kind == 'status': answer = review_from_chat()['status']
+                elif kind in ('confirm','cancel'):
+                    turn = memory_runtime.TURN_CONTEXT.get()
+                    with get_conn() as c:
+                        row = c.execute('SELECT product_id AS id,version FROM food_product_reviews WHERE owner=? AND channel=? ORDER BY id DESC LIMIT 1',
+                                        (user_id,turn.get('channel',''))).fetchone()
+                    answer = decide_from_chat(row['id'] if row else 1,row['version'] if row else 1,kind)['status']
+                else:
+                    fields={'białko':'protein','bialko':'protein','węglowodany':'carbs','weglowodany':'carbs','tłuszcz':'fat','tluszcz':'fat','kcal':'kcal','nazwę':'name','markę':'brand','podstawę':'basis'}
+                    changes=({'piece_size':None} if kind=='piece_clear' else {'piece_size':arg[0]} if kind=='piece_correct'
+                             else {fields[arg[0]]:arg[1]})
+                    revise_from_chat(changes)
+                    answer='Synthetic corrected preview'
+        except ValueError:
+            answer=CLARIFY
+        return agent.save_history(user_id,message,answer), False
+    monkeypatch.setattr(agent,'_run_agent',model)
+    monkeypatch.setattr(memory_runtime,'start_worker',lambda:None)
+    monkeypatch.setenv('K90_SYNC_ENABLED','false')
+    return model
 
 
 def preview(owner='owner', data=None):
@@ -20,13 +56,11 @@ def preview(owner='owner', data=None):
         memory_runtime.TURN_CONTEXT.reset(token)
 
 
-def test_preview_local_confirm_and_duplicate(temp_db, monkeypatch):
+def test_preview_model_confirm_and_duplicate(temp_db, monkeypatch, synthetic_review_model):
     p = preview()
     monkeypatch.setenv('K90_SYNC_ENABLED','true')
-    def forbidden(*a, **kw): raise AssertionError('must stay local')
-    monkeypatch.setattr(agent, '_run_agent', forbidden)
-    monkeypatch.setattr('tools.garmin.should_auto_sync_today', forbidden)
-    monkeypatch.setattr('tools.libre.should_auto_sync', forbidden)
+    monkeypatch.setattr('tools.garmin.should_auto_sync_today', lambda: False)
+    monkeypatch.setattr('tools.libre.should_auto_sync', lambda: False)
     token = web_runtime.MESSAGE_CONTEXT.set({'request_id':'synthetic-consent','user_id':'owner'})
     try:
         first = web_runtime.process_message('tak, zapisz ten produkt')
@@ -134,21 +168,15 @@ def test_expired_review_and_wrong_owner_api(temp_db):
     assert 'zatwierdzony' not in agent.run_agent('zatwierdzam','owner')[0]
 
 
-def test_natural_consent_dispatch_red(temp_db, monkeypatch):
-    # Works against the old API as well: this RED reaches the dispatcher, not a new helper.
-    turn = memory_runtime.begin_turn('owner','Synthetic proposal')
-    token = memory_runtime.TURN_CONTEXT.set(turn)
-    try:
-        catalog.propose_from_chat(label())
-        agent.save_history('owner','Synthetic proposal','Synthetic precise preview. Czy zatwierdzasz?')
-    finally:
-        memory_runtime.TURN_CONTEXT.reset(token)
-    def forbidden(*a, **kw): raise AssertionError('consent reached sync/model')
-    monkeypatch.setenv('K90_SYNC_ENABLED','true')
-    monkeypatch.setattr('tools.garmin.should_auto_sync_today',forbidden)
-    monkeypatch.setattr('tools.libre.should_auto_sync',forbidden)
-    monkeypatch.setattr(agent,'_run_agent',forbidden)
+def test_natural_consent_dispatch_uses_model(temp_db, monkeypatch, synthetic_review_model):
+    preview()
+    calls=[]
+    def model(*args, **kwargs):
+        calls.append(True)
+        return synthetic_review_model(*args, **kwargs)
+    monkeypatch.setattr(agent,'_run_agent',model)
     assert 'zatwierdzony' in web_runtime.process_message('zatwierdzam')
+    assert calls == [True]
 
 
 def test_restart_and_sqlite_backup_restore(temp_db, tmp_path):
@@ -162,7 +190,7 @@ def test_restart_and_sqlite_backup_restore(temp_db, tmp_path):
         source.backup(destination)
     env = dict(os.environ,DB_PATH=str(restored))
     completed = subprocess.run([sys.executable,'-c',
-        "from agent import run_agent; assert 'zatwierdzony' in run_agent('tak','owner')[0]"],
+        "from agent import run_agent; assert 'zatwierdzony' in run_agent('/produkt zatwierdz 1 1','owner')[0]"],
         env=env, text=True, capture_output=True, timeout=45)
     assert completed.returncode == 0, completed.stderr
     with sqlite3.connect(restored) as c:
@@ -256,10 +284,10 @@ def test_committed_approval_survives_failed_response_and_recovery(temp_db, monke
 
 
 def test_cli_topic_command_invalidates_direct_answer(temp_db, monkeypatch):
+    monkeypatch.setenv('CONVERSATION_USER_ID','cli')
     p = preview(owner='cli')
     inputs = iter(['/status','tak','exit'])
     monkeypatch.setattr('builtins.input',lambda prompt='':next(inputs))
     monkeypatch.setattr(agent,'handle_command',lambda text:'Synthetic status' if text == '/status' else None)
-    monkeypatch.setattr(agent,'_run_agent',lambda *a: (_ for _ in ()).throw(AssertionError('model forbidden')))
     agent.cli()
     assert catalog.get(p['id'])['status'] == 'draft'
