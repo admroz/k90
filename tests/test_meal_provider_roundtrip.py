@@ -139,7 +139,7 @@ def test_real_tool_second_request(temp_db, monkeypatch, adapter, mode, fail_seco
             assert 'synthetic boundary failure' not in job['response']
             if mode != 'read':
                 assert f"meal_id={meal['meal_id']}" in job['response'] and 'operation_id=' in job['response']
-            else: assert '0 zatwierdzonych' in job['response']
+            else: assert 'Brak potwierdzonego wyniku' in job['response']
     # Queue/request/delivery retries and restart recovery cannot replay writes.
     enqueue('web:synthetic-adapter', 'Synthetic correction request')
     recover_interrupted()

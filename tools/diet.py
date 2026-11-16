@@ -205,7 +205,7 @@ def failure_outcome(owner, request_id, *, conn=None):
     operations = committed_operations(owner, request_id, conn=conn)
     prefix = 'Nie udało się zakończyć odpowiedzi.'
     if not operations:
-        return prefix + ' Rejestr operacji posiłków: 0 zatwierdzonych. Inne operacje mogły zostać wykonane.'
+        return prefix + ' Brak potwierdzonego wyniku zapisu do katalogu. Inne operacje mogły zostać wykonane; sprawdź stan przed ponowieniem.'
     ids = '; '.join(f"{o['kind']}: meal_id={o['meal_id']}, operation_id={o['operation_id']}" for o in operations)
     return prefix + f' Zatwierdzone operacje posiłków ({len(operations)}): ' + ids + '. To wynik historyczny; bieżący stan może się różnić. Inne operacje mogły zostać wykonane.'
 

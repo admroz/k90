@@ -29,7 +29,28 @@ def conversation(temp_db, monkeypatch):
     pending=[]; sent=[]
     def provider(**kw):
         sent.append(deepcopy(kw['messages']))
-        item=pending.pop(0)
+        if pending:
+            item=pending.pop(0)
+        elif kw['messages'][-1]['role'] == 'tool':
+            result=json.loads(kw['messages'][-1]['content'])
+            item=result.get('status', 'Nie mam jednoznacznego aktualnego podglądu. Potrzebne wyjaśnienie.') if isinstance(result,dict) else str(result)
+        else:
+            # Script the old fixtures' ordinary language as provider tool calls.
+            # This test-only interpreter is not application routing or inference evidence.
+            from tools.product_review import intent
+            action=intent(kw['messages'][-1]['content'])
+            assert action is not None, 'fixture needs an explicit synthetic provider response'
+            kind,arg=action
+            if kind=='status': item=('review_food_product', {})
+            elif kind in ('confirm','cancel'):
+                with get_conn() as c:
+                    row=c.execute('SELECT id,version FROM food_products ORDER BY id LIMIT 1').fetchone()
+                item=(kind+'_food_product', {'product_id':row['id'] if row else 1,'version':row['version'] if row else 1})
+            else:
+                fields={'białko':'protein','bialko':'protein','węglowodany':'carbs','weglowodany':'carbs','tłuszcz':'fat','tluszcz':'fat','kcal':'kcal','nazwę':'name','markę':'brand','podstawę':'basis'}
+                changes=({'piece_size':None} if kind=='piece_clear' else {'piece_size':arg[0]} if kind=='piece_correct'
+                         else {fields[arg[0]]:arg[1]})
+                item=('revise_food_product',{'changes':changes})
         if isinstance(item,Exception): raise item
         msg={'role':'assistant','content':item} if isinstance(item,str) else {
             'role':'assistant','content':None,'tool_calls':[{'id':'call'+str(len(sent)),

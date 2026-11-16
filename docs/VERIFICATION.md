@@ -1,5 +1,56 @@
 # Weryfikacja — checkpoint 2026-10-25
 
+## 2026-11-16 — catalog source/session writer continuation
+
+Feature `fix/catalog-source-session-20261030`, checkout
+`/opt/data/projects/k90-ui-polish`, base `74ca891`, seven-day session commit
+`d3d7d0c`. One admitted writer beneath guardian46781, no delegation or tooling
+changes. Preserved pre-existing dirty implementation. Natural language goes to
+model tools; backend retains current owner/version/channel/published-preview
+checks, separate consent turn, atomic audit and replay. Recent source resolver
+binds delayed own-label creation locally; historical images stay out of outbound.
+Catalog creation ledger separates mutation request from photo source request.
+
+Existing sanitized offline harness:
+`/opt/data/projects/k90/.venv/bin/python /opt/data/jobs/k90-ui-polish-20261029/run_batch.py`.
+All commands use this checkout as cwd and synthetic data/auth/HOME; no production
+or real inference. The harness guard's old hardcoded branch label is historical;
+actual Git branch and command PYTHONPATH were checked, tooling unchanged.
+- Last pre-restart `catalog-source-clarification-green-20261115`: exit0,
+  10 passed/15 deselected,26.55s (not interrupted).
+- `catalog-complete-focused-20261115`: exit0,56 passed,64.02s.
+- `catalog-writer-final-python-20261116 -m pytest -q`: exit1,882 passed/5 failed/
+  1 skipped,497.24s. Three old fixtures corrected (foreign chat owner refusal,
+  HTTP foreign label denial retained; consent now scripted model tools).
+- Two remaining failures in unchanged profiling tests: original saved log replay
+  with base74ca891/current byte-identical parser produces identical incomplete
+  queue_wait (UTC/elapsed differs1.163ms/1.567ms against1ms tolerance). No unrelated
+  profiling fix or test weakening. Baseline replay batch exit0; phase doc has hash.
+- `catalog-writer-fixture-regression-20261116 -m pytest -q
+  tests/test_food_catalog_web.py tests/test_photo_batches.py tests/test_profile_report.py`:
+  exit0,42 passed,22.66s, including all profiling probes.
+- `catalog-writer-final-python-corrected-20261116 -m pytest -q`: exit1,
+  886 passed/1 failed/1 skipped,492.86s. Only failure: unchanged
+  `test_actual_emissions_missing_span_evidence[whole_child]`. Exact saved log
+  replay base/current equal: queue_wait only incomplete, UTC40.667ms vs
+  elapsed41.989919ms, delta1.322919ms vs1ms tolerance. Final baseline replay batch
+  exit0. Catalog/session tests passed; full suite is NOT claimed green.
+  No third full run to chase timing. App source unchanged between full runs;
+  code/test manifest144 files unchanged after final suite, no unrelated fix.
+- `catalog-writer-final-node-20261116 --exec /bin/sh -c 'node ...'`: exit127,
+  Node absent from sanitized PATH. Log retained.
+- Corrected command only, `catalog-writer-final-node-path-20261116 --exec /bin/sh
+  -c '/usr/local/bin/node --check web/app.js && /usr/local/bin/node --test
+  tests/web_*.test.mjs'`: exit0,37 passed, syntax PASS.
+
+Fresh quota before tests11%/24%, final pre-commit27%/26%; stop >=80% any window or
+unknown. No reset/fallback. Existing Git credential helper actor verified as
+hermesinski, origin fork/upstream push DISABLED. Workflow read: feature branch
+push has no trigger; publishing is guarded by main. Independent review,
+exact-head CI/build/container smoke, PR and deployment remain coordinator gates.
+Detailed behavior, evidence and bounded diagnostic request:
+[phase record](CATALOG_SOURCE_SESSION_PHASE.md).
+
 ## 2026-10-26 — reproduced SQLite upgrade CI blocker and profiling findings
 
 Base `bd73eb9ff29ebcd1e1f1e4f54b86f6646582306e`, feature checkout

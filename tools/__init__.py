@@ -12,7 +12,7 @@ from .libre import sync_libre_data
 from .patient import read_patient_file, update_patient_file
 from .food_catalog import propose_from_chat, search as find_food_products
 from .food_off import lookup as lookup_food_barcode
-from .product_review import revise_from_chat, review_from_chat
+from .product_review import revise_from_chat, review_from_chat, confirm_from_chat, cancel_from_chat
 
 
 def _refresh_patient_summary() -> dict:
@@ -23,6 +23,8 @@ def _refresh_patient_summary() -> dict:
 
 # Mapa nazwa → funkcja
 _REGISTRY = {
+    "confirm_food_product": confirm_from_chat,
+    "cancel_food_product": cancel_from_chat,
     "revise_food_product": revise_from_chat,
     "review_food_product": review_from_chat,
     "lookup_food_barcode": lookup_food_barcode,
@@ -313,6 +315,10 @@ TOOLS = [
 
 
 for _name, _description, _properties, _required in [
+    ('confirm_food_product', 'Po naturalnej zgodzie użytkownika zatwierdź dokładną wersję z poprzedniego podglądu w tym kanale. Nigdy w obrocie tworzenia, korekty lub pokazywania podglądu.',
+     {'product_id':{'type':'integer'}, 'version':{'type':'integer'}}, ['product_id','version']),
+    ('cancel_food_product', 'Anuluj bieżącą propozycję po rezygnacji użytkownika.',
+     {'product_id':{'type':'integer'}, 'version':{'type':'integer'}}, ['product_id','version']),
     ('review_food_product', 'Odczytaj rzeczywisty stan bieżącego produktu i pokaż aktualny szkic do kontroli. Nigdy nie zatwierdza.', {}, []),
     ('revise_food_product', 'Uzupełnij lub popraw TEN SAM bieżący szkic. Podaj tylko zmieniane pola z tekstu i wszystkich zdjęć; pominięte zachowaj. Nie zatwierdza.',
      {'changes': {'type':'object', 'properties': {

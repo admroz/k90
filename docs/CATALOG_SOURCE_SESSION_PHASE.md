@@ -1,3 +1,85 @@
+# Katalog i sesja — implementacja autora 2026-11-16
+
+Implementacja do niezależnego odbioru. Gałąź `fix/catalog-source-session-20261030`,
+baza `74ca891`, sesje 7 dni w poprzednim commicie `d3d7d0c`.
+Wyniki końcowe i pozostałe bramki są w sekcji poniżej; wcześniejszy checkpoint
+zachowano jako historię RED i projektu, a nie bieżący opis braków implementacji.
+
+## Zaimplementowane zachowanie
+
+- Lokalny resolver wiąże `own_label` z aktualnymi zdjęciami albo jednoznacznym
+  świeżym albumem właściciela i zapisanym odczytem nazwy/kodu, także Telegram→WWW.
+  Nie zmienia provenance na manual. Nie wysyła historycznych obrazów do modelu.
+  Stale/foreign/local-only/deleted/ambiguous/unrelated wymagają wyjaśnienia.
+- Naturalna zgoda, korekta i rezygnacja przechodzą przez model/narzędzia na wzór
+  `tools/diet.py`: backend wyprowadza owner/request z kontekstu i sprawdza aktualny
+  podgląd, kanał, osobny obrót, wersję oraz transakcyjny replay/audit. Stare jawne
+  komendy też wymagają pokazanego podglądu. Korekta nie zatwierdza nowej wersji.
+- `catalog_creations` wiąże request mutacji ze szkicem niezależnie od źródłowego
+  requestu zdjęć. Recovery odczytuje trwały wynik bez ponawiania narzędzi.
+  Błąd przed zapisem nie sugeruje już, że zero operacji posiłków dowodzi stanu katalogu.
+- Istniejący prompt otrzymał heurystyki opakowanie/etykieta vs talerz/porcja,
+  pierwszeństwo jawnego tekstu i wspólne traktowanie zdjęć. To nie klasyfikator.
+- Cookie i serwer mają wspólne 604800 s. Dłużej ważny token bearer zwiększa okres
+  możliwego użycia po przejęciu; RAM nadal oznacza wylogowanie po restarcie.
+  Login/logout, HttpOnly/SameSite/Secure i CSRF zachowane; bez trwałych sesji.
+
+## Rzeczywiste dowody kontynuacji
+
+Harness: `/opt/data/jobs/k90-ui-polish-20261029/run_batch.py`, interpreter
+`/opt/data/projects/k90/.venv/bin/python`, cwd `/opt/data/projects/k90-ui-polish`.
+Sanitized env, fikcyjne HOME/data/auth/SQLite, dotenv i sync wyłączone,
+local memory, audyt non-loopback/private-file. Ancestry writer i procesów testowych
+pod guardian 46781. `writer-admission.json` w bieżącym run zawiera dowód WORKSHOP,
+lock FREE i świeży quota 11%/24%. Hardcoded stara nazwa gałęzi w metadanych guard
+nie jest dowodem testowania starej gałęzi; cwd/PYTHONPATH i Git wskazują obecną.
+Tooling niezmieniony.
+
+Ostatni batch przed restartem nie był przerwany:
+`catalog-source-clarification-green-20261115`, exit0, 10 passed /15 deselected,
+26.55 s. Poprzedni `catalog-complete-focused-20261115`: exit0, 56 passed, 64.02 s.
+Nowe testy obejmują oba zgłoszenia przez rzeczywisty adapter/album/HTTP/kolejkę/
+agent/tool/SQLite/dostawę, naturalną zgodę i korektę, prywatność, source guards,
+replay oraz niepokazany/obcy/przeterminowany podgląd. Provider jest skryptowany.
+
+Pierwsza pełna regresja `catalog-writer-final-python-20261116`: exit1,
+882 passed/5 failed/1 skipped,497.24s. Trzy stare fixture w `food_catalog_web`
+i `photo_batches` nadal zakładały obcego właściciela lub lokalną zgodę bez modelu.
+Zachowano odmowę obcego chatu oraz osobny HTTP read-denial i zastąpiono zgodę
+syntetycznymi tool calls przez rzeczywistą pętlę agenta, bez zmian aplikacji.
+
+Dwa błędy niezmienionego `test_profile_report` wystąpiły przed modyfikacją logów
+w samych testach. Read-only replay zapisanych logów na parserze z bazy `74ca891`
+i bieżącym jest identyczny: queue_wait incomplete, pozostałe spany kompletne,
+model_calls2. Parser byte-identical, SHA256
+`a3c203e7657b4bd6ccdd40927f8a78846226e879523921725bbc16e49a4938d9`.
+UTC zakres kolejki różni się od elapsed o1.163ms/1.567ms przy tolerancji1ms.
+To ten sam udokumentowany problem czasowy bazy; nie naprawiano go w tym zadaniu.
+Batch `catalog-writer-profiling-baseline-replay-20261116`: exit0.
+
+`catalog-writer-fixture-regression-20261116 -m pytest -q
+ tests/test_food_catalog_web.py tests/test_photo_batches.py tests/test_profile_report.py`:
+exit0,42 passed,22.66s. `catalog-writer-final-node-path-20261116`: syntax PASS,
+37 PASS; pierwsza próba bez absolutnej ścieżki Node miała exit127 i zachowany log.
+Ostatni pełny `catalog-writer-final-python-corrected-20261116`: exit1,
+886 passed/1 failed/1 skipped,492.86s. Jedyny FAIL:
+`test_profile_report.py::test_actual_emissions_missing_span_evidence[whole_child]`.
+Także ten konkretny log odtworzono na identycznym parserze bazy i bieżącym:
+queue_wait incomplete, model_calls2, UTC40.667ms vs elapsed41.989919ms,
+różnica1.322919ms przy tolerancji1ms. Batch
+`catalog-writer-final-profiling-baseline-replay-20261116` exit0.
+Nie deklarujemy pełnej zielonej regresji. Testy katalogu/sesji przeszły; profilowanie
+pozostaje jawnym problemem czasowym istniejącej bazy do oceny koordynatora.
+Nie powtarzano całego suite aż do zielonego wyniku.
+Kod aplikacji nie zmienił się po pierwszej pełnej regresji. Manifest144 plików
+kodu/testów potwierdzony po ostatnim suite. `git diff --check` i przegląd kandydatów
+pod kątem sekretów bez wykrytych problemów. Quota końcowa przed commitem27%/26%.
+Niezależny review, CI/build/network-isolated container smoke i PR należą do
+koordynatora i nie zostały uruchomione przez writera. Produkcja, inference,
+wdrożenie i przyczyna produkcyjnego wyjątku pozostają niezweryfikowane.
+
+## Historyczny checkpoint z 2026-11-15
+
 # Katalog i sesja — etap implementatora 2026-11-15
 
 To częściowy checkpoint, nie odbiór ani opis wdrożenia. Sesja serwera i cookie

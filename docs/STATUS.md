@@ -1,16 +1,23 @@
 # k90 — bieżący status zadania
 
-## Catalog source/session — bounded WIP, 2026-11-15
+## Catalog source/session — author handoff, 2026-11-16
 
 Branch `fix/catalog-source-session-20261030`, base `74ca891`.
-Server/cookie session default 7 days, RAM restart logout preserved. HTTP expiry,
-logout/cookie and existing conversation checks: 24 PASS. New actual Telegram
-album/queue/agent/tool/SQLite/delivery reproductions: delayed creation is RED in
-both web and Telegram; prewrite failure reporting is a separate RED. Fresh album
-creation and postwrite-failure reporting PASS with scripted provider; production
-exception cause remains UNKNOWN. Natural-language tool design recorded, catalog
-implementation incomplete. No review, CI, PR or deployment acceptance.
-[Phase evidence and next design](CATALOG_SOURCE_SESSION_PHASE.md).
+Seven-day server/cookie sessions with RAM restart logout preserved (`d3d7d0c`).
+Catalog now uses model tools for ordinary consent/correction/cancellation,
+owner/version/channel-bound published previews and transactional replay/audit.
+Delayed creation resolves one recent local owner album with its stored reading,
+also Telegram→WWW, without resending historical images. Request-bound catalog
+outcomes distinguish a saved draft from response failure; no automatic retry.
+Latest pre-restart source clarification:10 PASS/15 deselected; prior focused56 PASS.
+Final offline Python886 PASS/1 baseline timing FAIL/1 existing skip,492.86s;
+focused corrected fixtures + profiling42 PASS; frontend37 PASS + syntax.
+The single unchanged profiling test fails at queue_wait UTC/elapsed tolerance;
+exact original log gives the same result with byte-identical base/current parser.
+Full regression is not green; no unrelated timing fix. Production fresh-album
+exception UNKNOWN.
+No independent review, CI/container, PR or deployment acceptance by this writer.
+[Evidence and remaining gates](CATALOG_SOURCE_SESSION_PHASE.md).
 
 ## Owner UI follow-up — implementation ready for independent review, 2026-10-29
 

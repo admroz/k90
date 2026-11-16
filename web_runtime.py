@@ -248,7 +248,7 @@ def process_message(content):
     user_id = MESSAGE_CONTEXT.get().get('user_id', os.getenv("CONVERSATION_USER_ID", "owner"))
     text = content if isinstance(content, str) else ""
     from tools.product_review import intent, interrupt
-    if intent(content) is not None:
+    if text.startswith(('/produkt ', '/produkty ')) and intent(content) is not None:
         # run_agent captures the original and executes only the exact local
         # approval command, before sync/summary or any model work.
         return run_agent(content, user_id=user_id)[0]
